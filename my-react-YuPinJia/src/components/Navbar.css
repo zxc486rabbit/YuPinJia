@@ -1,0 +1,55 @@
+.navbar {
+    background: #3D3938;
+    height: 11vh;
+    padding-inline: 50px;
+  }
+  /* 各個選項 */
+  .navbar-item {
+    cursor: pointer;
+    transition: background 0.3s;
+    width: 180px;
+    height: 55px;
+    border-radius: 50px;
+  }
+  
+  .navbar-item:hover {
+    background: #678CBF;
+  }
+  
+  .active {
+    background: #678CBF; /* 深藍色 */
+  }
+
+  .search-bar {
+    display: flex;
+    align-items: center;
+    background: white;  /* 橘紅色背景 */
+    border-radius: 25px;   /* 圓角 */
+    padding: 0px 15px;     /* 內距 */
+    width: 250px;          /* 設定固定寬度 */
+    height: 40px;
+  }
+  
+  /* 放大鏡 Icon */
+  .search-icon {
+    color: #678CBF;
+    font-size: 1.6rem; /* 調整大小 */
+    margin-right: 8px; /* 與輸入框的間距 */
+  }
+  
+  /* 搜尋輸入框 */
+  .search-bar input {
+    border: none;
+    /* background: none; */
+    outline: none;
+    color: black;
+    font-size: 1.4rem;
+    width: 100%; /* 讓輸入框佔滿剩餘空間 */
+    height: 40px;
+  }
+  
+  /* 讓 placeholder 變淡 */
+  .search-bar input::placeholder {
+    color: rgba(255, 255, 255, 0.7);
+  }
+  

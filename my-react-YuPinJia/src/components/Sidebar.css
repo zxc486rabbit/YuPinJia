@@ -1,0 +1,19 @@
+.sidebar {
+    width: 150px;
+    background: #678CBF;
+  }
+  .sidebar.home{
+    background: #275BA3;
+  }
+  .sidebar-item {
+    cursor: pointer;
+    transition: background 0.3s;
+  }
+  
+  .sidebar-item:hover {
+    background: #5379AE;
+  }
+  
+  .bg-dark {
+    background: #5379AE; /* 深藍色 */
+  }

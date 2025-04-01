@@ -1,0 +1,86 @@
+[
+    {
+        "id": 1,
+        "name": "御品家黑糖糕（全素）",
+        "image": "1.jpg",
+        "stock": 5,
+        "price": "$120"
+    },
+    {
+        "id": 2,
+        "name": "臭肉魚乾",
+        "image": "2.jpg",
+        "stock": 8,
+        "price": "$150"
+    },
+    {
+        "id": 3,
+        "name": "干貝(生)",
+        "image": "3.jpg",
+        "stock": 12,
+        "price": "$250"
+    },
+    {
+        "id": 4,
+        "name": "仙人掌酥條",
+        "image": "4.jpg",
+        "stock": 20,
+        "price": "$99"
+    },
+    {
+        "id": 5,
+        "name": "私廚統神嚴選火鍋",
+        "image": "5.jpg",
+        "stock": 3,
+        "price": "$599"
+    },
+    {
+        "id": 6,
+        "name": "花生酥不起",
+        "image": "6.jpg",
+        "stock": 15,
+        "price": "$110"
+    },
+    {
+        "id": 7,
+        "name": "黑糖冬瓜瓜(小)",
+        "image": "7.jpg",
+        "stock": 10,
+        "price": "$89"
+    },
+    {
+        "id": 8,
+        "name": "花生甚麼酥(大)",
+        "image": "8.jpg",
+        "stock": 7,
+        "price": "$130"
+    },
+    {
+        "id": 9,
+        "name": "黃金酥條",
+        "image": "9.jpg",
+        "stock": 18,
+        "price": "$95"
+    },
+    {
+        "id": 10,
+        "name": "冬瓜糕",
+        "image": "10.jpg",
+        "stock": 9,
+        "price": "$105"
+    },
+    {
+        "id": 11,
+        "name": "御品家首儲超值禮包",
+        "image": "11.jpg",
+        "stock": 2,
+        "price": "$799"
+    },
+    {
+        "id": 12,
+        "name": "王大陸當冰",
+        "image": "12.jpg",
+        "stock": 4,
+        "price": "$899"
+    }
+]

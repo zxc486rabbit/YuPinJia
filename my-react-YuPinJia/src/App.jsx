@@ -1,35 +1,43 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { useState, useEffect } from "react";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import Sidebar from "./components/sidebar";
+import Home from "./Home"; // 主頁
+import SalesIndex from "./SalesOrder/SalesIndex"; // 銷售訂單頁面
+import "./Cart.css";
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [products, setProducts] = useState([]);
+
+  useEffect(() => {
+    fetch("/product.json") // 從 public 目錄讀取 JSON
+      .then((response) => response.json())
+      .then((data) => setProducts(data))
+      .catch((error) => console.error("載入失敗:", error));
+  }, []);
 
   return (
-    <>
-      <div>
-        <a href="https://vitejs.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
+    <Router>
+      <div className="d-flex">
+        {/* Sidebar 區域 */}
+        <div className="sidebar-container">
+          <Sidebar />
+        </div>
+
+        {/* 主要內容區域 - 根據路由切換顯示不同內容 */}
+        <div className="w-100">
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/SalesOrder/SalesIndex" element={<SalesIndex />} />
+            <Route path="/inventory" element={<SalesIndex />} />
+            <Route path="/members" element={<SalesIndex />} />
+            <Route path="/shift-change" element={<SalesIndex />} />
+            <Route path="/complaints" element={<SalesIndex />} />
+            <Route path="/settings" element={<SalesIndex />} />
+          </Routes>
+        </div>
       </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.jsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+    </Router>
+  );
 }
 
-export default App
+export default App;

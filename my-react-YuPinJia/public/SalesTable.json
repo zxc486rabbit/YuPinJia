@@ -1,0 +1,68 @@
+[
+    {
+      "orderId": "A123456",
+      "store": "台北門市",
+      "member": "王小明",
+      "details": "御品家大禮包",
+      "totalAmount": 900,
+      "totalCount": 2,
+      "status": "已完成",
+      "taxId": "12345678",
+      "invoice": "電子發票",
+      "remarks": "無",
+      "actions": "查看"
+    },
+    {
+      "orderId": "A123457",
+      "store": "台中門市",
+      "member": "李美玲",
+      "details": "精選水果禮盒",
+      "totalAmount": 1200,
+      "totalCount": 3,
+      "status": "處理中",
+      "taxId": "87654321",
+      "invoice": "紙本發票",
+      "remarks": "急件",
+      "actions": "查看"
+    },
+    {
+      "orderId": "A123458",
+      "store": "高雄門市",
+      "member": "張大偉",
+      "details": "豪華年菜組",
+      "totalAmount": 2500,
+      "totalCount": 5,
+      "status": "已完成",
+      "taxId": "11223344",
+      "invoice": "電子發票",
+      "remarks": "送禮用",
+      "actions": "查看"
+    },
+    {
+      "orderId": "A123459",
+      "store": "台北門市",
+      "member": "林志明",
+      "details": "健康有機蔬果組",
+      "totalAmount": 1800,
+      "totalCount": 4,
+      "status": "已取消",
+      "taxId": "55667788",
+      "invoice": "無",
+      "remarks": "顧客取消",
+      "actions": "查看"
+    },
+    {
+      "orderId": "A123460",
+      "store": "新竹門市",
+      "member": "陳芳芳",
+      "details": "年節零食大包裝",
+      "totalAmount": 1500,
+      "totalCount": 3,
+      "status": "待出貨",
+      "taxId": "99887766",
+      "invoice": "電子發票",
+      "remarks": "無",
+      "actions": "查看"
+    }
+  ]
+  
