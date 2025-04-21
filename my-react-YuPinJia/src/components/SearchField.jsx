@@ -1,9 +1,9 @@
-export default function SearchField({ label, type, value, onChange, options }) {
+export default function SearchField({ label, type, value, onChange, options, placeholder }) {
     return (
       <div className="search-field">
         <label>{label}</label>
         {type === "select" ? (
-          <select value={value} onChange={onChange} className="form-select">
+          <select value={value} onChange={onChange}  className="form-select">
             {options.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
@@ -15,7 +15,7 @@ export default function SearchField({ label, type, value, onChange, options }) {
             type={type}
             value={value}
             onChange={onChange}
-            placeholder={`輸入${label}`}
+            placeholder={label? `輸入${label}` : placeholder}
             className="form-control"
           />
         )}

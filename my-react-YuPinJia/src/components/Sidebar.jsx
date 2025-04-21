@@ -20,11 +20,11 @@ export default function Sidebar() {
           <SidebarItem icon={<FaHome size={50} />} route="/"/>
         </div>
         <SidebarItem icon={<FaClipboardList />} text="銷售訂單" route="/SalesOrder/SalesIndex"/>
-        <SidebarItem icon={<FaBoxes />} text="庫存" />
-        <SidebarItem icon={<FaUsers />} text="會員" />
-        <SidebarItem icon={<FaExchangeAlt />} text="交接班" />
-        <SidebarItem icon={<FaHeadset />} text="客訴" />
-        <SidebarItem icon={<FaCog />} text="設定" />
+        <SidebarItem icon={<FaBoxes />} text="庫存" route="/Stock/StockIndex"/>
+        <SidebarItem icon={<FaUsers />} text="會員" route="/Member/MemberIndex"/>
+        <SidebarItem icon={<FaExchangeAlt />} text="交接班" route="/ShiftChange/ShiftChangeIndex"/>
+        <SidebarItem icon={<FaHeadset />} text="客訴" route="/CustomerComplain/CustomerComplainIndex"/>
+        <SidebarItem icon={<FaCog />} text="設定" route="/Setting/SettingIndex"/>
       </div>
 
       {/* 底部資訊 */}

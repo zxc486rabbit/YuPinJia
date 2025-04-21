@@ -1,0 +1,43 @@
+.card{
+    background: #fff;
+    border: 1px solid #A3A3A3;
+    margin:0 10px 15px;
+}
+.title{
+    background: #678CBF;
+    color: #fff;
+    font-weight: bold;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding:8px 20px;
+    font-size: 1.4rem;
+}
+.content{
+    padding: 0 30px;
+}
+.content .text{
+    display: flex;
+    justify-content: space-between;
+    font-size: 1.2rem;
+    font-weight: bold;
+    margin-block: 15px;
+}
+.redContainer{
+    height: 22vh !important;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin: 0 10px;
+
+}
+.redContent{
+    background: #EA4D4D;
+    color: white;
+    font-weight: bold;
+    font-size: 1.2rem;
+    margin: auto;
+    width: 100%;
+    padding: 15px 20px;
+    /* height: 20px; */
+}

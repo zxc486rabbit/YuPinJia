@@ -1,17 +1,8 @@
 import Navbar from "./Navbar";
-import { useState, useEffect } from "react";
+
 import { FaShoppingCart } from "react-icons/fa";
 
-export default function Card() {
-  const [products, setProducts] = useState([]);
-
-  useEffect(() => {
-    fetch("/product.json") // 從 public 目錄讀取 JSON
-      .then((response) => response.json())
-      .then((data) => setProducts(data))
-      .catch((error) => console.error("載入失敗:", error));
-  }, []);
-
+export default function Card({ products = [] }) {
   return (
     <>
       {/* 主要內容區域 */}
@@ -21,8 +12,8 @@ export default function Card() {
           className="pt-4 d-flex flex-wrap justify-content-center"
           style={{ gap: "1.5rem 3rem", height: "78%", overflow: "auto" }}
         >
-          {products.map((product) => {
-            return (
+          {products.length > 0 ? (
+            products.map((product) => (
               <div
                 key={product.id}
                 className="card m-2 shadow"
@@ -48,7 +39,7 @@ export default function Card() {
                     {/* 價錢與增減 */}
                     <div className="d-flex align-items-center">
                       <p
-                        className=" mb-0 fw-bold me-2"
+                        className="mb-0 fw-bold me-2"
                         style={{ color: "#D27B02" }}
                       >
                         本店 :{" "}
@@ -63,8 +54,10 @@ export default function Card() {
                   </div>
                 </div>
               </div>
-            );
-          })}
+            ))
+          ) : (
+            <p className="text-center fw-bold fs-5">沒有產品資料</p> // 當 products 為空時顯示
+          )}
         </div>
         <div className="d-flex mt-4 mx-auto">
           <button className="open-button me-3">開錢櫃</button>

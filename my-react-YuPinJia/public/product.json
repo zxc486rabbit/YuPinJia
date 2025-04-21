@@ -43,14 +43,14 @@
     },
     {
         "id": 7,
-        "name": "黑糖冬瓜瓜(小)",
+        "name": "張家檸檬綠茶",
         "image": "7.jpg",
         "stock": 10,
         "price": "$89"
     },
     {
         "id": 8,
-        "name": "花生甚麼酥(大)",
+        "name": "花惹發酥",
         "image": "8.jpg",
         "stock": 7,
         "price": "$130"
@@ -82,5 +82,75 @@
         "image": "12.jpg",
         "stock": 4,
         "price": "$899"
-    }
+    },
+    {
+        "id": 13,
+        "name": "川普的關稅餅",
+        "image": "13.jpg",
+        "stock": 6,
+        "price": "$350"
+      },
+      {
+        "id": 14,
+        "name": "拜登午安奶酪",
+        "image": "14.jpg",
+        "stock": 11,
+        "price": "$160"
+      },
+      {
+        "id": 15,
+        "name": "馬斯克火星鳳梨酥",
+        "image": "15.jpg",
+        "stock": 20,
+        "price": "$420"
+      },
+      {
+        "id": 16,
+        "name": "GPT餅乾 (只會越吃越聰明)",
+        "image": "16.jpg",
+        "stock": 30,
+        "price": "$199"
+      },
+      {
+        "id": 17,
+        "name": "黑人牙膏同款黑芝麻丸",
+        "image": "17.jpg",
+        "stock": 9,
+        "price": "$80"
+      },
+      {
+        "id": 18,
+        "name": "川普限量辣味爆米花（禁止中國進口）",
+        "image": "18.jpg",
+        "stock": 2,
+        "price": "$888"
+      },
+      {
+        "id": 19,
+        "name": "AI生成香腸（非人造肉）",
+        "image": "19.jpg",
+        "stock": 5,
+        "price": "$299"
+      },
+      {
+        "id": 20,
+        "name": "烏克蘭勇氣軟糖（戰地直送）",
+        "image": "20.jpg",
+        "stock": 3,
+        "price": "$666"
+      },
+      {
+        "id": 21,
+        "name": "健身教練都不敢吃的胖老爹炸雞桶",
+        "image": "21.jpg",
+        "stock": 12,
+        "price": "$150"
+      },
+      {
+        "id": 22,
+        "name": "孫悟空筋斗雲泡芙",
+        "image": "22.jpg",
+        "stock": 18,
+        "price": "$1314"
+      }
 ]

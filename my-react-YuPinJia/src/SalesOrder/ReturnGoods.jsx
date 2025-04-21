@@ -2,16 +2,14 @@ import { useState, useEffect } from "react";
 import "../components/Search.css"; // 引入 搜尋框 的 CSS 來調整樣式
 import SearchField from "../components/SearchField"; // 引入 搜尋框 模組
 
-export default function OrderSearch() {
+export default function ReturnGoods() {
   const [orderId, setOrderId] = useState("");
   const [pickupTime, setPickupTime] = useState("");
-  const [pickupMethod, setPickupMethod] = useState("all");
-  const [status, setStatus] = useState("all");
 
   const [tableData, setTableData] = useState([]); // 存放表格資料
 
   const handleSearch = () => {
-    console.log("搜尋條件：", { orderId, pickupTime, pickupMethod, status });
+    console.log("搜尋條件：", { orderId, pickupTime });
   };
 
   useEffect(() => {
@@ -31,33 +29,10 @@ export default function OrderSearch() {
           onChange={(e) => setOrderId(e.target.value)}
         />
         <SearchField
-          label="取貨時間"
+          label="退貨日期"
           type="date"
           value={pickupTime}
           onChange={(e) => setPickupTime(e.target.value)}
-        />
-        <SearchField
-          label="取貨方式"
-          type="select"
-          value={pickupMethod}
-          onChange={(e) => setPickupMethod(e.target.value)}
-          options={[
-            { value: "all", label: "全部" },
-            { value: "store", label: "門市取貨" },
-            { value: "delivery", label: "宅配" },
-          ]}
-        />
-        <SearchField
-          label="狀態"
-          type="select"
-          value={status}
-          onChange={(e) => setStatus(e.target.value)}
-          options={[
-            { value: "all", label: "全部" },
-            { value: "pending", label: "待處理" },
-            { value: "completed", label: "已完成" },
-            { value: "cancelled", label: "已取消" },
-          ]}
         />
 
         {/* 搜尋按鈕 */}
@@ -69,7 +44,7 @@ export default function OrderSearch() {
       <div
         className="table-container"
         style={{
-          maxHeight: "72vh", // 根據你想要的高度調整
+          maxHeight: "79vh", // 根據你想要的高度調整
           overflowY: "auto",
         }}
       >
@@ -85,20 +60,15 @@ export default function OrderSearch() {
             }}
           >
             <tr>
-              <th scope="col">
-                {" "}
-                <input type="checkbox" className="w-5 h-5 text-gray-600" />
-              </th>
               <th scope="col">訂單編號</th>
               <th scope="col">門市</th>
-              <th scope="col">會員</th>
-              <th scope="col">商品明細</th>
-              <th scope="col">商品總金額</th>
-              <th scope="col">商品總數</th>
-              <th scope="col">狀態</th>
-              <th scope="col">統一編號</th>
               <th scope="col">發票</th>
-              <th scope="col">備註</th>
+              <th scope="col">取貨時間</th>
+              <th scope="col">退貨時間</th>
+              <th scope="col">退貨方式</th>
+              <th scope="col">退款原因</th>
+              <th scope="col">退貨明細</th>
+              <th scope="col">處理流程</th>
               <th scope="col">操作</th>
             </tr>
           </thead>
@@ -106,22 +76,21 @@ export default function OrderSearch() {
             {tableData.length > 0 ? (
               tableData.map((item, index) => (
                 <tr key={index}>
-                  <td>
-                    {" "}
-                    <input type="checkbox" className="w-5 h-5 text-gray-600" />
-                  </td>
                   <td>{item.orderId}</td>
                   <td>{item.store}</td>
-                  <td>{item.member}</td>
+                  <td>{item.invoice}</td>
+                  <td>{item.startDate}</td>
+                  <td>{item.endDate}</td>
+                  <td>{item.pay}</td>
                   <td>
                     <button className="check-button">檢視</button>
                   </td>
-                  <td>{item.totalAmount}</td>
-                  <td>{item.totalCount}</td>
-                  <td>{item.status}</td>
-                  <td>{item.taxId}</td>
-                  <td>{item.invoice}</td>
-                  <td>{item.remarks}</td>
+                  <td>
+                    <button className="check-button">檢視</button>
+                  </td>
+                  <td>
+                    <button className="check-button">檢視</button>
+                  </td>
                   <td>
                     <button className="edit-button">修改</button>
                   </td>
@@ -134,12 +103,6 @@ export default function OrderSearch() {
             )}
           </tbody>
         </table>
-      </div>
-      <div className="d-flex align-items-center mt-2 ps-3">
-        <input type="checkbox" className="w-5 h-5 text-gray-600 me-2" />
-        <h5 className="fw-bold mb-0 me-3">全選</h5>
-        <button className="pink-button me-3">列印清單</button>
-        <button className="pink-button">列印明細</button>
       </div>
     </>
   );

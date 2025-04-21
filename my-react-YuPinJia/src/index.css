@@ -5,9 +5,21 @@
 button {
   border: none;
 }
-input[type="number"] {
-  width: 50px;
-  text-align: center;
+td{
+  vertical-align: middle;
+}
+label{
+  font-size: 1.2rem;
+}
+input{
+  font-size: 1.2rem !important;
+}
+textarea{
+  font-size: 1.2rem !important;
+}
+/* 修改bs5預設樣式 */
+.row>* {
+  padding: 0;
 }
 /* 隱藏數字輸入框右邊小箭頭 */
 input[type="number"]::-webkit-outer-spin-button,
@@ -43,4 +55,90 @@ input[type="number"]::-webkit-inner-spin-button {
 .content-container {
   background: #f0f0f0;
   height: 100vh;
+}
+
+/* 藍色查看按鈕 */
+.check-button{
+  background: #337DD1;
+  color: #fff;
+  padding: 5px 10px;
+  border-radius: 5px;
+  min-width: 80px;
+}
+/* 經銷會員按鈕 */
+.sales-button{
+  background: #2AC7A5;
+  color: #fff;
+  padding: 5px 10px;
+  border-radius: 5px;
+  min-width: 80px;
+}
+/* 黃色修改按鈕 */
+.edit-button{
+  background: #D68E08;
+  color: #fff;
+  padding: 5px 10px;
+  border-radius: 5px;
+  min-width: 80px;
+}
+/* 刪除按鈕 */
+.delete-button{
+  background: #CE0000;
+  color: #fff;
+  padding: 5px 10px;
+  border-radius: 5px;
+  min-width: 80px;
+}
+/* 粉色按鈕 */
+.pink-button{
+  background: #ED7171;
+  color: #fff;
+  padding: 5px 10px;
+  border-radius: 5px;
+  font-weight: bold;
+  font-size: 1.2rem;
+  min-width: 80px;
+}
+/* 清空按鈕 */
+.clear-button{
+  background: #9b9b9b;
+  color: #fff;
+  padding: 2px 5px;
+  border-radius: 5px;
+  font-weight: bold;
+  font-size: 1.1rem;
+  min-width: 60px;
+}
+/* 新增按鈕 */
+.add-button{
+  background: #54C24E;
+  color: #fff;
+  padding: 5px 10px;
+  border-radius: 10px;
+  font-weight: bold;
+  font-size: 1.2rem;
+  min-width: 130px;
+}
+/* 進貨、調貨等..按鈕 */
+.cargo-button{
+  background: #007B54;
+  color: #fff;
+  padding: 5px 10px;
+  border-radius: 10px;
+  font-weight: bold;
+  font-size: 1.3rem;
+  min-width: 130px;
+}
+.table-info {
+  --bs-table-bg: #678CBF !important;
+  --bs-table-color: #fff !important;
+}
+
+.no-safe-text{
+  background-color: #CE0000;
+  color: #fff;
+  font-weight: bold;
+  padding: 5px 10px;
+  width: 90%;
+  text-align: center;
 }
