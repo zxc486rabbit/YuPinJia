@@ -29,9 +29,9 @@ input[type="number"]::-webkit-inner-spin-button {
 .grayButton {
   background: #a5a5a5;
   color: #fff;
-  width: 220px;
-  height: 50px;
-  font-size: 1.3rem;
+  min-width: 300px;
+  height: 60px;
+  font-size: 1.4rem;
   font-weight: bold;
   border-radius: 8px;
   display: flex;
@@ -42,9 +42,9 @@ input[type="number"]::-webkit-inner-spin-button {
 .pinkButton {
   background: #d78282;
   color: #fff;
-  width: 220px;
-  height: 50px;
-  font-size: 1.3rem;
+  min-width: 300px;
+  height: 60px;
+  font-size: 1.4rem;
   font-weight: bold;
   border-radius: 8px;
   display: flex;

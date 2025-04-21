@@ -70,7 +70,7 @@ export default function CardTable({ products = [] }) {
           </table>
         </div>
 
-        <div className="d-flex mt-4 mx-auto">
+        <div className="d-flex mt-3 mb-2 mx-auto">
           <button className="open-button me-3">開錢櫃</button>
           <button className="checkout-button">結帳</button>
         </div>

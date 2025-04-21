@@ -2,7 +2,7 @@ import QuantityControl from "./QuantityControl";
 
 export default function CartTable() {
   return (
-    <table className="table my-2" style={{ fontSize: "1.2rem" }}>
+    <table className="table my-2" style={{ fontSize: "1.3rem" }}>
       <thead className="table-light" style={{ borderTop: "1px solid #c5c6c7" }}>
         <tr>
           <th scope="col">名稱</th>
