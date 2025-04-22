@@ -1,4 +1,4 @@
-export default function ShiftChangeCard({ title, paymentDetails }) {
+export default function ShiftChangeCard({ title, paymentDetails, onclick }) {
   // 將所有金額加總  sum是累加器 group是現在的元素 , 0是初始值
   const total = paymentDetails.methods
     .flat()
@@ -10,7 +10,7 @@ export default function ShiftChangeCard({ title, paymentDetails }) {
         <div>
           {title} : {total.toLocaleString()} 元
         </div>
-        <button className="add-button">檢視明細</button>
+        <button className="add-button" onClick={onclick}>檢視明細</button>
       </div>
       <div className="content">
         {paymentDetails.methods.map((v, i) => (

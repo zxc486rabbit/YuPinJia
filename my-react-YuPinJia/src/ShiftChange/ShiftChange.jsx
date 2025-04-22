@@ -1,7 +1,129 @@
+import { useState } from "react";
 import ShiftChangeCard from "../components/ShiftChangeCard";
 import "../components/ShiftChangeCard.css";
+import ShiftChangeTable from "../components/ShiftChangeTable";
 
 export default function ShiftChange() {
+  const [detailButton, setDetailButton] = useState("門市銷售總金額");
+  const rightTable = [
+    {
+      id: "113A1251",
+      date: "12:10:05",
+      total: "8",
+      totalMoney: "1,450",
+      payMethod: "現金",
+    },
+    {
+      id: "113A1252",
+      date: "12:15:10",
+      total: "5",
+      totalMoney: "980",
+      payMethod: "匯款",
+    },
+    {
+      id: "113A1253",
+      date: "12:20:00",
+      total: "3",
+      totalMoney: "600",
+      payMethod: "現金",
+    },
+    {
+      id: "113A1260",
+      date: "13:10:50",
+      total: "2",
+      totalMoney: "300",
+      payMethod: "現金",
+    },
+  ];
+  const rightTable1 = [
+    {
+      id: "113A1251",
+      date: "12:10:05",
+      total: "80",
+      totalMoney: "1,450",
+      payMethod: "匯款",
+    },
+    {
+      id: "113A1254",
+      date: "12:30:45",
+      total: "12",
+      totalMoney: "2,340",
+      payMethod: "信用卡",
+    },
+    {
+      id: "113A1255",
+      date: "12:32:20",
+      total: "7",
+      totalMoney: "1,500",
+      payMethod: "現金",
+    },
+  ];
+  const rightTable2 = [
+    {
+      id: "113A1256",
+      date: "12:40:30",
+      total: "10",
+      totalMoney: "1,980",
+      payMethod: "Line Pay",
+    },
+    {
+      id: "113A1257",
+      date: "12:45:10",
+      total: "6",
+      totalMoney: "1,250",
+      payMethod: "街口支付",
+    },
+    {
+      id: "113A1261",
+      date: "13:15:00",
+      total: "11",
+      totalMoney: "2,150",
+      payMethod: "匯款",
+    },
+  ];
+
+  const rightTable3 = [
+    {
+      id: "113A1258",
+      date: "13:00:00",
+      total: "4",
+      totalMoney: "720",
+      payMethod: "悠遊付",
+    },
+    {
+      id: "113A1259",
+      date: "13:05:15",
+      total: "9",
+      totalMoney: "1,680",
+      payMethod: "信用卡",
+    },
+  ];
+  const rightTable4 = [
+    {
+      id: "113A1261",
+      date: "13:15:00",
+      total: "11",
+      totalMoney: "2,150",
+      payMethod: "匯款",
+    },
+  ];
+
+  // 根據 detailButton 的值選擇資料
+  const getCurrentTableData = () => {
+    switch (detailButton) {
+      case "門市銷售總金額":
+        return rightTable;
+      case "POS退款總金額":
+        return rightTable1;
+      case "POS應有金額":
+        return rightTable2;
+      case "銷售訂單總金額":
+        return rightTable3;
+      case "經銷會員收款":
+        return rightTable4;
+    }
+  };
+
   // 門市銷售總金額
   const exampleData = {
     methods: [
@@ -147,14 +269,26 @@ export default function ShiftChange() {
             <ShiftChangeCard
               title="門市銷售總金額"
               paymentDetails={exampleData}
+              onclick={() => {
+                console.log(`點擊了：${detailButton}`);
+                setDetailButton("門市銷售總金額");
+              }}
             />
             <ShiftChangeCard
               title="POS退款總金額"
               paymentDetails={exampleData1}
+              onclick={() => {
+                console.log(`點擊了：${detailButton}`);
+                setDetailButton("POS退款總金額");
+              }}
             />
             <ShiftChangeCard
               title="POS應有金額"
               paymentDetails={exampleData2}
+              onclick={() => {
+                console.log(`點擊了：${detailButton}`);
+                setDetailButton("POS應有金額");
+              }}
             />
           </div>
 
@@ -162,10 +296,18 @@ export default function ShiftChange() {
             <ShiftChangeCard
               title="銷售訂單總金額"
               paymentDetails={exampleData3}
+              onclick={() => {
+                console.log(`點擊了：${detailButton}`);
+                setDetailButton("銷售訂單總金額");
+              }}
             />
             <ShiftChangeCard
               title="經銷會員收款"
               paymentDetails={exampleData4}
+              onclick={() => {
+                console.log(`點擊了：${detailButton}`);
+                setDetailButton("經銷會員收款");
+              }}
             />
             <div className="redContainer">
               <div className="redContent">POS作廢訂單數 : 6</div>
@@ -176,76 +318,7 @@ export default function ShiftChange() {
 
           {/* 右邊表格列表 */}
           <div className="col-4">
-            <div
-              className="ms-2 me-2"
-              style={{
-                height: "69vh", // ✅ 根據你的 layout 高度調整
-                border: "1px solid #c5c6c7",
-                display: "flex",
-                flexDirection: "column",
-                background: "white",
-              }}
-            >
-              <div style={{ overflowY: "auto", flex: 1 }}>
-                <table
-                  className="table mb-0"
-                  style={{
-                    fontSize: "1.2rem",
-                    fontWeight: "bold",
-                    tableLayout: "fixed",
-                    width: "100%",
-                  }}
-                >
-                  <thead
-                    className="table-light"
-                    style={{ position: "sticky", top: 0, zIndex: 1 }}
-                  >
-                    <tr>
-                      <th className="text-center">訂單編號</th>
-                      <th className="text-center">交易時間</th>
-                      <th className="text-center">總數</th>
-                      <th className="text-center">總金額</th>
-                      <th className="text-center">付款方式</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td className="text-center">113A1251</td>
-                      <td className="text-center">
-                        113-01-25
-                        <br />
-                        12:10:05
-                      </td>
-                      <td className="text-center">8</td>
-                      <td className="text-center">1,450</td>
-                      <td className="text-center">現金</td>
-                    </tr>
-                    <tr>
-                      <td className="text-center">113A1255</td>
-                      <td className="text-center">
-                        113-01-25
-                        <br />
-                        13:10:05
-                      </td>
-                      <td className="text-center">7</td>
-                      <td className="text-center">1,100</td>
-                      <td className="text-center">現金</td>
-                    </tr>
-                    <tr>
-                      <td className="text-center">113A1255</td>
-                      <td className="text-center">
-                        113-01-25
-                        <br />
-                        13:10:05
-                      </td>
-                      <td className="text-center">7</td>
-                      <td className="text-center">1,100</td>
-                      <td className="text-center">貨到付款</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
+            <ShiftChangeTable rightTable={getCurrentTableData()} />
           </div>
         </div>
         {/* 下方金額總計 */}

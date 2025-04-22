@@ -1,6 +1,6 @@
 import QuantityControl from "./QuantityControl";
 
-export default function CartTable() {
+export default function CartTable({ items, updateQuantity }) {
   return (
     <table className="table my-2" style={{ fontSize: "1.3rem" }}>
       <thead className="table-light" style={{ borderTop: "1px solid #c5c6c7" }}>
@@ -11,20 +11,18 @@ export default function CartTable() {
         </tr>
       </thead>
       <tbody>
-        <tr>
-          <td>御品家大禮包</td>
-          <td className="quantity-control">
-            <QuantityControl defaultValue={2} />
-          </td>
-          <td>900</td>
-        </tr>
-        <tr>
-          <td>花生酥不起(小)</td>
-          <td className="quantity-control">
-            <QuantityControl defaultValue={5} />
-          </td>
-          <td>600</td>
-        </tr>
+      {items.map((item) => (
+          <tr key={item.id}>
+            <td>{item.name}</td>
+            <td className="quantity-control">
+              <QuantityControl
+                defaultValue={item.quantity}
+                onChange={(value) => updateQuantity(item.id, value)}
+              />
+            </td>
+            <td> ${ (item.unitPrice * item.quantity).toLocaleString() }</td>
+          </tr>
+        ))}
       </tbody>
     </table>
   )

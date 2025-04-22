@@ -9,7 +9,15 @@ import {
   FaExchangeAlt,
 } from "react-icons/fa";
 
-export default function Home() {
+export default function Cart({ items, updateQuantity }) {
+  const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
+  const subtotal = items.reduce(
+    (sum, item) => sum + item.unitPrice * item.quantity,
+    0
+  );
+  const pointDiscount = 23; // 假設固定折抵 6 元
+  const finalTotal = subtotal - pointDiscount;
+
   return (
     <>
       {/* 購物車 區域 */}
@@ -46,7 +54,7 @@ export default function Home() {
               </p>
               <p className="d-flex align-items-center mb-0">
                 <FaTicketAlt className="me-1" style={{ color: "#2f2f2f" }} />{" "}
-                點數 : 6 點
+                點數 : 23 點
               </p>
               <div>
                 <button className="change-button ms-5 py-1">
@@ -56,7 +64,7 @@ export default function Home() {
             </div>
           </div>
 
-          <CartTable />
+          <CartTable items={items} updateQuantity={updateQuantity} />
         </div>
         <div
           className="w-100 mt-2"
@@ -68,15 +76,15 @@ export default function Home() {
         >
           <div className="d-flex justify-content-between mx-4">
             <span>商品總數</span>
-            <span>7</span>
+            <span>{totalQuantity}</span>
           </div>
           <div className="d-flex justify-content-between mx-4">
             <span>小計</span>
-            <span>$888</span>
+            <span>${subtotal.toLocaleString()}</span>
           </div>
           <div className="d-flex justify-content-between mx-4">
             <span>點數折抵</span>
-            <span style={{ color: "#C75D00" }}>-6</span>
+            <span style={{ color: "#C75D00" }}>-{pointDiscount}</span>
           </div>
           <hr />
           <div
@@ -84,7 +92,7 @@ export default function Home() {
             style={{ color: "#A40000" }}
           >
             <span>總價</span>
-            <span>$674</span>
+            <span>${finalTotal.toLocaleString()}</span>
           </div>
         </div>
       </div>
