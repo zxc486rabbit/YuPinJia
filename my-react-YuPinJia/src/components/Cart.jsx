@@ -22,10 +22,7 @@ export default function Cart({ items, updateQuantity }) {
     <>
       {/* 購物車 區域 */}
       <div className="cart py-3">
-        <div
-          className="w-100"
-          style={{ height: "80vh", borderBottom: "1px solid #E2E2E2" }}
-        >
+        <div className="w-100">
           <div className=" text-center mb-3 d-flex justify-content-around  align-items-center mt-2">
             <div className="d-flex">
               <button className="grayButton me-4">
@@ -64,7 +61,9 @@ export default function Cart({ items, updateQuantity }) {
             </div>
           </div>
 
-          <CartTable items={items} updateQuantity={updateQuantity} />
+          <div className="no-scrollbar mt-2" style={{height: "66vh"}}>
+            <CartTable items={items} updateQuantity={updateQuantity} />
+          </div>
         </div>
         <div
           className="w-100 mt-2"

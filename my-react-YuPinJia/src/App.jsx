@@ -9,6 +9,8 @@ import ShiftChangeIndex from "./ShiftChange/ShiftChangeIndex"; // 交接班頁�
 import CustomerComplainIndex from "./CustomerComplain/CustomerComplainIndex"; // 客訴頁面
 import SettingIndex from "./Setting/SettingIndex"; // 設定頁面
 import "./Cart.css";
+import Modal from "react-modal";
+Modal.setAppElement("#root");
 
 function App() {
   const [products, setProducts] = useState([]);

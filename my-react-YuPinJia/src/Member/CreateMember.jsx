@@ -35,9 +35,9 @@ export default function CreateMember() {
     <div className="container mt-5 ms-5">
       <div className="card shadow rounded-4" style={{maxWidth:"60%"}}>
         <div className="card-body p-4">
-          <h2 className="mb-4 fw-bold">
+          <h1 className="mb-4 fw-bold">
             新增會員
-          </h2>
+          </h1>
 
           <form onSubmit={handleSubmit}>
             <div className="row g-4 px-3">

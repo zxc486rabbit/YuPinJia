@@ -28,9 +28,9 @@ export default function Sidebar() {
       </div>
 
       {/* 底部資訊 */}
-      <div className="text-center small" style={{ color: "#fff" }}>
+      <div className="text-center mb-3" style={{ color: "#fff" }}>
         <div>機號碼: 002-P1</div>
-        <div>台灣高雄市林圈區</div>
+        <div>高雄市林圈門市</div>
         <div>2024-11-15 16:22:18</div>
       </div>
     </div>

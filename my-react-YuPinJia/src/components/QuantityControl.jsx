@@ -38,7 +38,7 @@ export default function QuantityControl({ defaultValue, onChange }) {
         value={quantity}
         onChange={handleInputChange}
         className="text-center border-0"
-        style={{ width: "50px" }}
+        style={{ width: "80px" ,height: "50px" }}
       />
       <button className="add quantity-btn" onClick={handleIncrease}>
         <FaPlus style={{ color: "#6f6f6f" }} />

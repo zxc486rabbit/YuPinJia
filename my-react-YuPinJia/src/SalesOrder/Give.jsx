@@ -62,7 +62,7 @@ export default function Give() {
       <div
         className="table-container"
         style={{
-          maxHeight: "79vh", // 根據你想要的高度調整
+          maxHeight: "82vh", // 根據你想要的高度調整
           overflowY: "auto",
         }}
       >

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import "../components/Search.css"; // 引入 搜尋框 的 CSS 來調整樣式
 import SearchField from "../components/SearchField"; // 引入 搜尋框 模組
+import { Modal, Button } from "react-bootstrap"; // 使用彈出框套件
 
 export default function OrderSearch() {
   const [orderId, setOrderId] = useState("");
@@ -9,9 +10,22 @@ export default function OrderSearch() {
   const [status, setStatus] = useState("all");
 
   const [tableData, setTableData] = useState([]); // 存放表格資料
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [showModal, setShowModal] = useState(false);
 
   const handleSearch = () => {
     console.log("搜尋條件：", { orderId, pickupTime, pickupMethod, status });
+  };
+
+  const handleView = (order) => {
+    setSelectedOrder(order);
+    setShowModal(true);
+    console.log(selectedOrder);
+  };
+
+  const closeModal = () => {
+    setShowModal(false);
+    setSelectedOrder(null);
   };
 
   useEffect(() => {
@@ -69,7 +83,7 @@ export default function OrderSearch() {
       <div
         className="table-container"
         style={{
-          maxHeight: "72vh", // 根據你想要的高度調整
+          maxHeight: "76vh", // 根據你想要的高度調整
           overflowY: "auto",
         }}
       >
@@ -114,7 +128,12 @@ export default function OrderSearch() {
                   <td>{item.store}</td>
                   <td>{item.member}</td>
                   <td>
-                    <button className="check-button">檢視</button>
+                    <button
+                      className="check-button"
+                      onClick={() => handleView(item)}
+                    >
+                      檢視
+                    </button>
                   </td>
                   <td>{item.totalAmount}</td>
                   <td>{item.totalCount}</td>
@@ -136,11 +155,112 @@ export default function OrderSearch() {
         </table>
       </div>
       <div className="d-flex align-items-center mt-2 ps-3">
-        <input type="checkbox" className="w-5 h-5 text-gray-600 me-2" />
-        <h5 className="fw-bold mb-0 me-3">全選</h5>
+        {/* <input type="checkbox" className="w-5 h-5 text-gray-600 me-2" /> */}
+        {/* <h5 className="fw-bold mb-0 me-3">全選</h5> */}
         <button className="pink-button me-3">列印清單</button>
         <button className="pink-button">列印明細</button>
       </div>
+
+      <Modal
+        show={showModal}
+        onHide={closeModal}
+        dialogClassName="w-auto-modal"
+        centered
+      >
+        <Modal.Header closeButton>
+          <Modal.Title>商品明細</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <table className="table text-center" style={{ fontSize: "1.2rem" }}>
+            <thead
+              className="table-light"
+              style={{
+                borderTop: "1px solid #c5c6c7",
+                position: "sticky",
+                top: 0,
+                background: "#d1ecf1",
+                zIndex: 1,
+              }}
+            >
+              <tr>
+                <th scope="col">商品名稱</th>
+                <th scope="col">數量</th>
+                <th scope="col">單價</th>
+                <th scope="col">金額</th>
+                <th scope="col">折扣後</th>
+              </tr>
+            </thead>
+            <tbody>
+              {selectedOrder ? (
+                <tr>
+                  <td>{selectedOrder.product}</td>
+                  <td>{selectedOrder.totalCount}</td>
+                  <td>{selectedOrder.totalAmount}</td>
+                  <td>
+                    {(() => {
+                      const count = Number(selectedOrder.totalCount);
+                      const amount = Number(
+                        selectedOrder.totalAmount.replace(/,/g, "")
+                      );
+                      const total = count * amount;
+                      return total.toLocaleString(); // 千分位格式
+                    })()}
+                  </td>
+                  <td>
+                    {(() => {
+                      const count = Number(selectedOrder.totalCount);
+                      const amount = Number(
+                        selectedOrder.totalAmount.replace(/,/g, "")
+                      );
+                      const discounted = Math.round(count * amount * 0.9); // 四捨五入
+    return discounted.toLocaleString();
+                    })()}
+                  </td>
+                </tr>
+              ) : (
+                <tr>
+                  <td colSpan="12">無資料</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+          {selectedOrder &&
+            (() => {
+              const count = Number(selectedOrder.totalCount);
+              const amount = Number(
+                selectedOrder.totalAmount.replace(/,/g, "")
+              );
+              const total = count * amount;
+              const discounted1 = Math.round(total * 0.1);
+              const discounted = Math.round(total * 0.9);
+
+              return (
+                <div
+                  className="mt-3 p-3 d-flex justify-content-end bg-light border rounded text-end"
+                  style={{ fontSize: "1.2rem" }}
+                >
+                  <div>
+                    共計商品：<strong>1</strong> 項
+                  </div>
+                  <div className="mx-4">
+                    總金額：<strong>{total.toLocaleString()}</strong> 元
+                  </div>
+                  <div className="me-4">
+                    折扣：<strong>{discounted1.toLocaleString()}</strong> 元
+                  </div>
+                  <div>
+                    總計：<strong>{discounted.toLocaleString()}</strong> 元
+                  </div>
+                </div>
+              );
+            })()}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button className="modalButton" variant="secondary" onClick={closeModal}>
+            關閉
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </>
   );
 }

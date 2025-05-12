@@ -8,12 +8,12 @@ export default function Check() {
   const [value, setValue] = useState(""); //紀錄表格填入的值(數量)
   const [currentPage, setCurrentPage] = useState(1); // ✅ 分頁狀態
 
-  const itemsPerPage = 20; // 每頁顯示的項目數量（左右表格各10筆）
+  const itemsPerPage = 24; // 每頁顯示的項目數量（左右表格各10筆）
   const leftTableStart = (currentPage - 1) * itemsPerPage; // 左側表格的起始索引（依據目前頁數計算）
-  const rightTableStart = leftTableStart + 10; // 右側表格的起始索引（左表格後再往後10筆）
+  const rightTableStart = leftTableStart + 12; // 右側表格的起始索引（左表格後再往後10筆）
 
-  const leftTableData = tableData.slice(leftTableStart, leftTableStart + 10); //leftTableData是為了讓左邊表格沒資料就不顯示表頭thead
-  const rightTableData = tableData.slice(rightTableStart, rightTableStart + 10); //rightTableData是為了讓右邊表格沒資料就不顯示表頭thead
+  const leftTableData = tableData.slice(leftTableStart, leftTableStart + 12); //leftTableData是為了讓左邊表格沒資料就不顯示表頭thead
+  const rightTableData = tableData.slice(rightTableStart, rightTableStart + 12); //rightTableData是為了讓右邊表格沒資料就不顯示表頭thead
 
   const handleSearch = () => {
     console.log("搜尋條件：", { orderId });
@@ -66,7 +66,7 @@ export default function Check() {
       <div className="d-flex mx-5">
         {/* 左邊表格 */}
         {leftTableData.length > 0 && (
-          <div className="col-6" style={{ height: "69vh", overflow: "hidden" }}>
+          <div className="col-6" style={{ height: "74vh", overflow: "hidden" }}>
             {/* 表格 */}
             <table
               className="table my-2 mx-auto text-center"
@@ -91,7 +91,7 @@ export default function Check() {
                 {tableData.length > 0 ? (
                   // 取出目前頁面中左側表格的資料（每次10筆）
                   tableData
-                    .slice(leftTableStart, leftTableStart + 10) // 從目前頁面左表格起始位置，取出 10 筆資料
+                    .slice(leftTableStart, leftTableStart + 12) // 從目前頁面左表格起始位置，取出 10 筆資料
                     .map((item, index) => (
                       <tr key={index}>
                         <td>{leftTableStart + index + 1}</td>
@@ -123,7 +123,7 @@ export default function Check() {
         )}
         {/* 右邊表格 */}
         {rightTableData.length > 0 && (
-          <div className="col-6" style={{ height: "69vh", overflow: "hidden" }}>
+          <div className="col-6" style={{ height: "74vh", overflow: "hidden" }}>
             {/* 表格 */}
             <table
               className="table my-2 mx-auto text-center"
@@ -147,7 +147,7 @@ export default function Check() {
               <tbody>
                 {tableData.length > 0 ? (
                   tableData
-                    .slice(rightTableStart, rightTableStart + 10)
+                    .slice(rightTableStart, rightTableStart + 12)
                     .map((item, index) => (
                       <tr key={index}>
                         <td>{rightTableStart + index + 1}</td>
@@ -183,22 +183,24 @@ export default function Check() {
         <button
           onClick={handlePrevPage}
           disabled={currentPage === 1}
-          className="btn btn-secondary mx-2"
+          className="btn btn-secondary mx-2 mb-2"
+          style={{fontSize:"1.3rem"}}
         >
           上一頁
         </button>
-        <span>
+        <span style={{fontSize:"1.3rem"}}>
           第 {currentPage} 頁 / 共 {totalPages} 頁
         </span>
         <button
           onClick={handleNextPage}
           disabled={currentPage === totalPages}
-          className="btn btn-secondary mx-2"
+          className="btn btn-secondary mx-2 mb-2"
+          style={{fontSize:"1.3rem"}}
         >
           下一頁
         </button>
       </div>
-<div className="d-flex justify-content-end gap-3 me-5">
+<div className="d-flex gap-3 me-5" style={{position:"absolute", bottom:"10px", right:"0"}}>
       <button className="cargo-button" style={{background:"#ED7171"}}>一鍵清空</button>
       <button className="cargo-button" style={{background:"#445A61"}}>暫存</button>
       <button className="cargo-button" style={{background:"#337DD1"}}>送出</button>

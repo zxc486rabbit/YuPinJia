@@ -322,7 +322,7 @@ export default function ShiftChange() {
           </div>
         </div>
         {/* 下方金額總計 */}
-        <div className="ms-1">
+        <div className="ms-1 mt-2">
           {["現金", "轉帳", "支票", "刷卡", "貨到付款", "超商代收", "賒帳"].map(
             (label) => (
               <span
@@ -346,7 +346,7 @@ export default function ShiftChange() {
       </div>
       {/* 最下方按鈕及總金額區塊 */}
       <div
-        className="py-2 px-4 w-100 d-flex align-items-center justify-content-center"
+        className="py-3 px-4 w-100 d-flex align-items-center justify-content-center"
         style={{
           background: "#E1E1E1",
           position: "absolute",
@@ -379,7 +379,7 @@ export default function ShiftChange() {
             width: "33%",
             textAlign: "right",
             fontWeight: "bold",
-            fontSize: "1.3rem",
+            fontSize: "1.5rem",
             color: "black",
           }}
         >

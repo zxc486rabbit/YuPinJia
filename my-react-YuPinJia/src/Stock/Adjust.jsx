@@ -75,7 +75,7 @@ export default function Adjust() {
               </button>
             </div>
             <div
-              className="d-flex justify-content-around align-items-center py-3"
+              className="d-flex justify-content-between align-items-center py-3 mx-4 "
               style={{
                 fontSize: "1.3rem",
                 fontWeight: "bold",
@@ -113,7 +113,7 @@ export default function Adjust() {
             </div>
 
             {/* 左邊 */}
-            <div style={{ height: "78vh", overflow: "auto" }}>
+            <div style={{ height: "76vh", overflow: "auto" }}>
               {/* 表格 */}
               <table
                 className="table mx-auto text-center"

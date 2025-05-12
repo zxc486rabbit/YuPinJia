@@ -6,7 +6,7 @@ export default function CardTable({ products = [], addToCart }) {
       {/* 主要內容區域 */}
       <div className="content-container w-100">
         {/* 右邊 */}
-        <div className="mt-3" style={{ height: "76vh", overflow: "auto" }}>
+        <div className="mt-3" style={{ height: "77vh", overflow: "auto" }}>
           {/* 表格 */}
           <table
             className="table mx-auto text-center"

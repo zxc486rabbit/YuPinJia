@@ -5,17 +5,28 @@
 button {
   border: none;
 }
+tr{
+  white-space: nowrap;
+}
 td{
   vertical-align: middle;
+  padding-block: 10px !important;
+  font-size: 1.3rem;
 }
 label{
-  font-size: 1.2rem;
+  font-size: 1.4rem;
 }
 input{
-  font-size: 1.2rem !important;
+  font-size: 1.4rem !important;
+}
+input[type="checkbox" i] {
+  font-size: 1.4rem !important;
 }
 textarea{
   font-size: 1.2rem !important;
+}
+.form-select {
+  font-size: 1.3rem !important;
 }
 /* 修改bs5預設樣式 */
 .row>* {
@@ -26,12 +37,35 @@ input[type="number"]::-webkit-outer-spin-button,
 input[type="number"]::-webkit-inner-spin-button {
   -webkit-appearance: none;
 }
+.cartTr{
+  border-style: none;  /* 先清除所有邊框 */
+  border-top-style: solid; /* 只保留上邊框 */
+}
+/* CSS file 或 style 標籤內加這段 */
+.no-scrollbar {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE 10+ */
+  touch-action: pan-y;
+  user-select: none;
+  border-bottom: 1px solid #E2E2E2;
+}
+
+.drag-scroll-wrapper {
+  cursor: grab;
+  user-select: none;
+}
+.drag-scroll-active {
+  cursor: grabbing;
+}
+
 .grayButton {
   background: #a5a5a5;
   color: #fff;
   min-width: 300px;
   height: 60px;
-  font-size: 1.4rem;
+  font-size: 1.5rem;
   font-weight: bold;
   border-radius: 8px;
   display: flex;
@@ -44,7 +78,7 @@ input[type="number"]::-webkit-inner-spin-button {
   color: #fff;
   min-width: 300px;
   height: 60px;
-  font-size: 1.4rem;
+  font-size: 1.5rem;
   font-weight: bold;
   border-radius: 8px;
   display: flex;
@@ -96,17 +130,17 @@ input[type="number"]::-webkit-inner-spin-button {
   padding: 5px 10px;
   border-radius: 5px;
   font-weight: bold;
-  font-size: 1.2rem;
+  font-size: 1.4rem;
   min-width: 80px;
 }
 /* 清空按鈕 */
 .clear-button{
   background: #9b9b9b;
   color: #fff;
-  padding: 2px 5px;
+  padding: 2px 10px;
   border-radius: 5px;
   font-weight: bold;
-  font-size: 1.1rem;
+  font-size: 1.3rem;
   min-width: 60px;
 }
 /* 新增按鈕 */
@@ -116,7 +150,7 @@ input[type="number"]::-webkit-inner-spin-button {
   padding: 5px 10px;
   border-radius: 10px;
   font-weight: bold;
-  font-size: 1.2rem;
+  font-size: 1.4rem;
   min-width: 130px;
 }
 /* 進貨、調貨等..按鈕 */
@@ -126,7 +160,7 @@ input[type="number"]::-webkit-inner-spin-button {
   padding: 5px 10px;
   border-radius: 10px;
   font-weight: bold;
-  font-size: 1.3rem;
+  font-size: 1.5rem;
   min-width: 130px;
 }
 .table-info {
@@ -141,4 +175,12 @@ input[type="number"]::-webkit-inner-spin-button {
   padding: 5px 10px;
   width: 90%;
   text-align: center;
+}
+
+/* 彈出框的寬度 */
+.w-auto-modal {
+  max-width: 60%;
+}
+.modalButton{
+  font-size: 1.3rem;
 }
