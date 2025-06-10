@@ -14,32 +14,45 @@ export default function ReturnGoods() {
   const [showModal, setShowModal] = useState(false);
   const [showImage, setShowImage] = useState(false); //顯示照片
   const [showFullImage, setShowFullImage] = useState(false); // 用來控制是否顯示放大圖片
-  
-// 測試圖片與備註
-const images = [
-  { src: "/low.png", remark: "內裡包裝破損" },
-  { src: "/low1.jpg", remark: "商品表面劃痕" },
-  { src: "/low2.jpg", remark: "包裝箱損壞" }
-];
- // 當前顯示的圖片索引
-const [currentIndex, setCurrentIndex] = useState(0);
+  const [showProcessModal, setShowProcessModal] = useState(false); // 處理流程彈出框
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editedOrder, setEditedOrder] = useState({});
 
-// 切換至下一張圖片
+  // 測試圖片與備註
+  const images = [
+    { src: "/low.png", remark: "內裡包裝破損" },
+    { src: "/low1.jpg", remark: "商品表面劃痕" },
+    { src: "/low2.jpg", remark: "包裝箱損壞" },
+  ];
+  // 當前顯示的圖片索引
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  // 切換至下一張圖片
   const handleNext = () => {
     setCurrentIndex((prev) => (prev + 1) % images.length);
   };
 
   const handlePrev = () => {
-    setCurrentIndex((prev) =>
-      prev === 0 ? images.length - 1 : prev - 1
-    );
+    setCurrentIndex((prev) => (prev === 0 ? images.length - 1 : prev - 1));
   };
+
+  //開啟處理流程視窗的函式
+  const handleProcessView = (order) => {
+    setSelectedOrder(order);
+    setShowProcessModal(true);
+  };
+
   const openFullScreen = () => {
     setShowFullImage(true); // 顯示放大圖片
   };
-  
+
   const closeFullScreen = () => {
     setShowFullImage(false); // 關閉放大圖片
+  };
+  //開啟修改視窗的函式
+  const handleEdit = (order) => {
+    setEditedOrder({ ...order }); // 建立一份可編輯的副本
+    setShowEditModal(true);
   };
   // const openFullScreen = (src) => {
   //   const newWindow = window.open(src, "_blank");
@@ -115,7 +128,6 @@ const [currentIndex, setCurrentIndex] = useState(0);
               <th scope="col">取貨時間</th>
               <th scope="col">退貨時間</th>
               <th scope="col">退貨方式</th>
-              <th scope="col">退款原因</th>
               <th scope="col">退貨明細</th>
               <th scope="col">處理流程</th>
               <th scope="col">操作</th>
@@ -132,9 +144,6 @@ const [currentIndex, setCurrentIndex] = useState(0);
                   <td>{item.endDate}</td>
                   <td>{item.pay}</td>
                   <td>
-                    <button className="check-button">檢視</button>
-                  </td>
-                  <td>
                     <button
                       className="check-button"
                       onClick={() => handleView(item)}
@@ -143,10 +152,20 @@ const [currentIndex, setCurrentIndex] = useState(0);
                     </button>
                   </td>
                   <td>
-                    <button className="check-button">檢視</button>
+                    <button
+                      className="check-button"
+                      onClick={() => handleProcessView(item)}
+                    >
+                      檢視
+                    </button>
                   </td>
                   <td>
-                    <button className="edit-button">修改</button>
+                    <button
+                      className="edit-button"
+                      onClick={() => handleEdit(item)}
+                    >
+                      修改
+                    </button>
                   </td>
                 </tr>
               ))
@@ -312,113 +331,250 @@ const [currentIndex, setCurrentIndex] = useState(0);
       </Modal>
 
       {/* 照片預覽 */}
-      <Modal show={showImage} onHide={() => setShowImage(false)} centered size="lg">
-  <Modal.Header closeButton>
-    <Modal.Title>圖片預覽</Modal.Title>
-  </Modal.Header>
-  <Modal.Body className="text-center position-relative">
-    {/* 左右切換按鈕 */}
-    <button
-      className="btn btn-light position-absolute top-50 start-0 translate-middle-y"
-      style={{
-        zIndex: 2,
-        width: "50px",
-        height: "50px",
-        borderRadius: "50%",
-        backgroundColor: "rgba(0,0,0,0.5)",
-        color: "white"
-      }}
-      onClick={handlePrev}
-    >
-      <FaChevronLeft size={24} />
-    </button>
-    <button
-      className="btn btn-light position-absolute top-50 end-0 translate-middle-y"
-      style={{
-        zIndex: 2,
-        width: "50px",
-        height: "50px",
-        borderRadius: "50%",
-        backgroundColor: "rgba(0,0,0,0.5)",
-        color: "white"
-      }}
-      onClick={handleNext}
-    >
-      <FaChevronRight size={24} />
-    </button>
-
-     {/* 固定大小的圖片 */}
-     <div style={{ width: "700px", height: "400px", overflow: "hidden", margin: "0 auto" }}>
-      <img
-        src={images[currentIndex].src}
-        alt="退貨商品圖片"
-        style={{
-          width: "100%",
-          height: "100%",
-          objectFit: "contain",  // 確保圖片按比例顯示，並在容器內居中
-          borderRadius: "8px",
-          cursor: "pointer"
-        }}
-        onClick={openFullScreen} // 點擊圖片放大
-      />
-    </div>
-    {/* 放大圖片顯示 */}
-    {showFullImage && (
-      <div
-        style={{
-          position: "fixed",
-          top: "0",
-          left: "0",
-          right: "0",
-          bottom: "0",
-          backgroundColor: "rgba(0,0,0,0.8)",
-          zIndex: "1000",
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center"
-        }}
-        onClick={closeFullScreen} // 點擊放大區域關閉
+      <Modal
+        show={showImage}
+        onHide={() => setShowImage(false)}
+        centered
+        size="lg"
       >
-        <img
-          src={images[currentIndex].src}
-          alt="放大圖片"
-          style={{
-            maxWidth: "90%",
-            maxHeight: "90%",
-            borderRadius: "8px",
-            cursor: "zoom-out"
-          }}
-        />
-      </div>
-    )}
-    {/* 備註 */}
-    <div className="mt-3 fs-5">
-      <strong>備註：</strong> {images[currentIndex].remark}
-    </div>
-      {/* 圓點指示器 */}
-    <div className="mt-3 d-flex justify-content-center">
-      {images.map((_, index) => (
-        <span
-          key={index}
-          style={{
-            width: "10px",
-            height: "10px",
-            margin: "0 5px",
-            borderRadius: "50%",
-            backgroundColor: currentIndex === index ? "#007bff" : "#ccc",
-            cursor: "pointer"
-          }}
-          onClick={() => setCurrentIndex(index)}
-        ></span>
-      ))}
-    </div>
-  </Modal.Body>
-  <Modal.Footer>
-    <Button variant="secondary" onClick={() => setShowImage(false)}>
-      關閉
-    </Button>
-  </Modal.Footer>
-</Modal>
+        <Modal.Header closeButton>
+          <Modal.Title>圖片預覽</Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="text-center position-relative">
+          {/* 左右切換按鈕 */}
+          <button
+            className="btn btn-light position-absolute top-50 start-0 translate-middle-y"
+            style={{
+              zIndex: 2,
+              width: "50px",
+              height: "50px",
+              borderRadius: "50%",
+              backgroundColor: "rgba(0,0,0,0.5)",
+              color: "white",
+            }}
+            onClick={handlePrev}
+          >
+            <FaChevronLeft size={24} />
+          </button>
+          <button
+            className="btn btn-light position-absolute top-50 end-0 translate-middle-y"
+            style={{
+              zIndex: 2,
+              width: "50px",
+              height: "50px",
+              borderRadius: "50%",
+              backgroundColor: "rgba(0,0,0,0.5)",
+              color: "white",
+            }}
+            onClick={handleNext}
+          >
+            <FaChevronRight size={24} />
+          </button>
+
+          {/* 固定大小的圖片 */}
+          <div
+            style={{
+              width: "700px",
+              height: "400px",
+              overflow: "hidden",
+              margin: "0 auto",
+            }}
+          >
+            <img
+              src={images[currentIndex].src}
+              alt="退貨商品圖片"
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "contain", // 確保圖片按比例顯示，並在容器內居中
+                borderRadius: "8px",
+                cursor: "pointer",
+              }}
+              onClick={openFullScreen} // 點擊圖片放大
+            />
+          </div>
+          {/* 放大圖片顯示 */}
+          {showFullImage && (
+            <div
+              style={{
+                position: "fixed",
+                top: "0",
+                left: "0",
+                right: "0",
+                bottom: "0",
+                backgroundColor: "rgba(0,0,0,0.8)",
+                zIndex: "1000",
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+              }}
+              onClick={closeFullScreen} // 點擊放大區域關閉
+            >
+              <img
+                src={images[currentIndex].src}
+                alt="放大圖片"
+                style={{
+                  maxWidth: "90%",
+                  maxHeight: "90%",
+                  borderRadius: "8px",
+                  cursor: "zoom-out",
+                }}
+              />
+            </div>
+          )}
+          {/* 備註 */}
+          <div className="mt-3 fs-5">
+            <strong>備註：</strong> {images[currentIndex].remark}
+          </div>
+          {/* 圓點指示器 */}
+          <div className="mt-3 d-flex justify-content-center">
+            {images.map((_, index) => (
+              <span
+                key={index}
+                style={{
+                  width: "10px",
+                  height: "10px",
+                  margin: "0 5px",
+                  borderRadius: "50%",
+                  backgroundColor: currentIndex === index ? "#007bff" : "#ccc",
+                  cursor: "pointer",
+                }}
+                onClick={() => setCurrentIndex(index)}
+              ></span>
+            ))}
+          </div>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowImage(false)}>
+            關閉
+          </Button>
+        </Modal.Footer>
+      </Modal>
+      {/* 處理流程彈出框 */}
+      <Modal
+        show={showProcessModal}
+        onHide={() => setShowProcessModal(false)}
+        centered
+      >
+        <Modal.Body className="text-center">
+          <div
+            style={{
+              display: "inline-block",
+              padding: "4px 12px",
+              backgroundColor: "#f7e9c7",
+              color: "#333",
+              borderRadius: "8px",
+              fontWeight: "bold",
+              fontSize: "1.1rem",
+              marginBottom: "1rem",
+            }}
+          >
+            處理中
+          </div>
+          <div className="fs-5" style={{ lineHeight: "2rem" }}>
+            <div>
+              申請人：<strong>{selectedOrder?.applicant || "王大陸"}</strong>
+            </div>
+            <div>
+              退款方式：<strong>{selectedOrder?.refundType || "匯款"}</strong>
+            </div>
+            <div>
+              退款人員：
+              <strong>
+                {selectedOrder?.handler || "台北市役男入營新訓中心"}
+              </strong>
+            </div>
+            <div>
+              退款狀態：
+              <strong>{selectedOrder?.refundStatus || "待匯款"}</strong>
+            </div>
+            <div>
+              發票寄出方式：
+              <strong>{selectedOrder?.invoiceType || "郵寄"}</strong>
+            </div>
+            <div>
+              郵寄人員：<strong>{selectedOrder?.postStaff || "柯震東"}</strong>
+            </div>
+            <div>
+              寄出狀態：
+              <strong style={{ color: "#CD0000" }}>
+                {selectedOrder?.postStatus || "未寄出"}
+              </strong>
+            </div>
+          </div>
+        </Modal.Body>
+      </Modal>
+      {/* 修改 */}
+      <Modal
+        show={showEditModal}
+        onHide={() => setShowEditModal(false)}
+        centered
+      >
+        <Modal.Header closeButton>
+          <Modal.Title>修改退貨資料</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <form className="fs-5">
+            <div className="mb-3">
+              <label className="form-label">退款方式：</label>
+              <select
+                className="form-select"
+                value={editedOrder.refundType || ""}
+                onChange={(e) =>
+                  setEditedOrder({ ...editedOrder, refundType: e.target.value })
+                }
+              >
+                <option value="匯款">匯款</option>
+                <option value="現金">現金</option>
+                <option value="原卡退刷">原卡退刷</option>
+              </select>
+            </div>
+            <div className="mb-3">
+              <label className="form-label">退款狀態：</label>
+              <select
+                className="form-select"
+                value={editedOrder.refundStatus || ""}
+                onChange={(e) =>
+                  setEditedOrder({
+                    ...editedOrder,
+                    refundStatus: e.target.value,
+                  })
+                }
+              >
+                <option value="待匯款">待匯款</option>
+                <option value="已匯款">已匯款</option>
+              </select>
+            </div>
+            <div className="mb-3">
+              <label className="form-label">寄出狀態：</label>
+              <select
+                className="form-select"
+                value={editedOrder.postStatus || ""}
+                onChange={(e) =>
+                  setEditedOrder({ ...editedOrder, postStatus: e.target.value })
+                }
+              >
+                <option value="未寄出">未寄出</option>
+                <option value="已寄出">已寄出</option>
+              </select>
+            </div>
+          </form>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowEditModal(false)}>
+            取消
+          </Button>
+          <Button
+            variant="primary"
+            onClick={() => {
+              console.log("已儲存：", editedOrder); // ✅ 實際上你可以呼叫 API 或更新 state
+              setShowEditModal(false);
+            }}
+          >
+            儲存
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </>
   );
 }

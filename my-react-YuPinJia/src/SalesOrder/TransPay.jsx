@@ -1,5 +1,8 @@
 import { useState, useEffect } from "react";
+import { Modal, Button, Form } from "react-bootstrap";
+import { BiUpload } from "react-icons/bi"; // ✅ 引入上傳 icon
 import "../components/Search.css"; // 引入 搜尋框 的 CSS 來調整樣式
+import "../components/Modal.css"; // 引入 彈出框 的 CSS 來調整樣式
 import SearchField from "../components/SearchField"; // 引入 搜尋框 模組
 
 export default function TransPay() {
@@ -7,6 +10,7 @@ export default function TransPay() {
   const [pickupTime, setPickupTime] = useState("");
 
   const [tableData, setTableData] = useState([]); // 存放表格資料
+  const [showModal, setShowModal] = useState(false); // 控制 Modal 彈窗開關
 
   const handleSearch = () => {
     console.log("搜尋條件：", { orderId, pickupTime });
@@ -22,7 +26,9 @@ export default function TransPay() {
   return (
     <>
       <div className="search-container d-flex flex-wrap gap-3 px-4 pt-4 pb-3 rounded">
-        <button className="add-button">添加匯款</button>
+        <button className="add-button" onClick={() => setShowModal(true)}>
+          添加匯款
+        </button>
         <SearchField
           label="會員姓名"
           type="text"
@@ -103,6 +109,69 @@ export default function TransPay() {
           </tbody>
         </table>
       </div>
+
+      {/* 匯款彈出框 */}
+      <Modal show={showModal} onHide={() => setShowModal(false)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title className="fw-bold text-dark">添加匯款紀錄</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <Form>
+            <Form.Group className="mb-3">
+              <Form.Label>姓名：</Form.Label>
+              <Form.Select>
+                <option value="">請選擇</option>
+                <option>會員 A</option>
+                <option>會員 B</option>
+              </Form.Select>
+            </Form.Group>
+
+            <Form.Group className="mb-3">
+              <Form.Label>匯款日期：</Form.Label>
+              <Form.Control type="date" />
+            </Form.Group>
+
+            <Form.Group className="mb-3">
+              <Form.Label>匯款類型：</Form.Label>
+              <Form.Select>
+                <option value="">請選擇</option>
+                <option>銀行轉帳</option>
+                <option>ATM</option>
+              </Form.Select>
+            </Form.Group>
+
+            <Form.Group className="mb-3">
+              <Form.Label>匯款金額：</Form.Label>
+              <Form.Control type="number" />
+            </Form.Group>
+
+            <Form.Group className="mb-3">
+              <Form.Label>匯款後5碼：</Form.Label>
+              <Form.Control type="text" maxLength={5} />
+            </Form.Group>
+
+            <Form.Group className="mb-3 d-flex align-items-center">
+              <Form.Label>上傳匯款紀錄：</Form.Label>
+              <div className="d-flex align-items-center gap-2">
+                <label
+                  htmlFor="upload-file"
+                  className="btn custom-upload-btn d-flex align-items-center gap-2 mb-0"
+                >
+                  <BiUpload size={18} />
+                  上傳文件
+                </label>
+                <input type="file" id="upload-file" className="d-none" />
+              </div>
+            </Form.Group>
+          </Form>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button className="check-button">確認</Button>
+          <Button className="cancel-button" onClick={() => setShowModal(false)}>
+            取消
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </>
   );
 }

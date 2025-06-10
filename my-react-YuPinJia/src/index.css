@@ -163,6 +163,19 @@ input[type="number"]::-webkit-inner-spin-button {
   font-size: 1.5rem;
   min-width: 130px;
 }
+/* 取消按鈕 */
+.cancel-button {
+  background-color: #6c757d !important; /* Bootstrap 的次要灰色 */
+  color: white !important;
+  border: none;
+  font-weight: 500;
+  padding: 0.45rem 1.2rem;
+  border-radius: 6px;
+}
+
+.cancel-button:hover {
+  background-color: #5a6268 !important;
+}
 .table-info {
   --bs-table-bg: #678CBF !important;
   --bs-table-color: #fff !important;

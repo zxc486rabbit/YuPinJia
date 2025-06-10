@@ -1,0 +1,17 @@
+/* 上傳文件按鈕 */
+.custom-upload-btn {
+  background-color: #D68E08 !important;
+  color: white !important;
+  border: none;
+  font-weight: 500;
+  padding: 0.45rem 1rem;
+  border-radius: 6px;
+}
+
+.custom-upload-btn:hover {
+  background-color: #bd7c06 !important;
+}
+
+button{
+    font-size: 1.3rem !important;
+}
