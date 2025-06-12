@@ -10,7 +10,7 @@ export default function Navbar({ products = [], addToCart}) {
 
   return (
     <>
-    <div className="navbar d-flex  justify-content-start text-center w-100 px-5">
+    <div className="navbar d-flex  justify-content-center text-center w-100">
       {/* 上方選單 */}
       <div className="d-flex">
         <NavbarItem

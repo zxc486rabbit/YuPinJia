@@ -1,15 +1,26 @@
 .navbar {
-    background: #3D3938;
-    height: 11vh;
-    padding-inline: 50px;
+     background: #3D3938;
+  height: 11vh;
+  padding: 0 1rem; /* RWD-friendly */
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.5rem;
   }
   /* 各個選項 */
   .navbar-item {
-    cursor: pointer;
-    transition: background 0.3s;
-    width: 180px;
-    height: 55px;
-    border-radius: 50px;
+     cursor: pointer;
+  transition: background 0.3s;
+  min-width: 120px; /* ✅ RWD-friendly，改為 min-width 而非固定 */
+  padding: 0.5rem 1rem;
+  height: 45px;
+  border-radius: 50px;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
   }
   
   .navbar-item:hover {
@@ -26,7 +37,7 @@
     background: white;  /* 橘紅色背景 */
     border-radius: 25px;   /* 圓角 */
     padding: 0px 15px;     /* 內距 */
-    width: 160px;          /* 設定固定寬度 */
+    max-width: 160px;          /* 設定固定寬度 */
     height: 40px;
   }
   

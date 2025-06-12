@@ -53,7 +53,7 @@ export default function Check() {
             { value: "5", label: "澎湖海產(乾貨)類" },
           ]}
         />
-        <div className="search-bar ms-auto">
+        <div className="search-bar">
           <FaSearch className="search-icon" />
           <input type="text" placeholder="搜尋..." />
         </div>
@@ -61,6 +61,8 @@ export default function Check() {
         <button onClick={handleSearch} className="search-button">
           搜尋
         </button>
+
+        <button className="ms-auto edit-button">盤點紀錄</button>
       </div>
       {/* 左右邊表格容器 */}
       <div className="d-flex mx-5">

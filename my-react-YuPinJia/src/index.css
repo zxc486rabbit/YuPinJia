@@ -2,6 +2,7 @@
   margin: 0;
   padding: 0;
 }
+
 button {
   border: none;
 }
@@ -11,13 +12,13 @@ tr{
 td{
   vertical-align: middle;
   padding-block: 10px !important;
-  font-size: 1.3rem;
+  font-size: 1.2rem;
 }
 label{
   font-size: 1.4rem;
 }
 input{
-  font-size: 1.4rem !important;
+  font-size: 1.2rem !important;
 }
 input[type="checkbox" i] {
   font-size: 1.4rem !important;
@@ -63,7 +64,7 @@ input[type="number"]::-webkit-inner-spin-button {
 .grayButton {
   background: #a5a5a5;
   color: #fff;
-  min-width: 300px;
+  min-width: 70%;
   height: 60px;
   font-size: 1.5rem;
   font-weight: bold;
@@ -72,11 +73,12 @@ input[type="number"]::-webkit-inner-spin-button {
   align-items: center;
   justify-content: center;
   line-height: 50px;
+  padding-inline: 20px;
 }
 .pinkButton {
   background: #d78282;
   color: #fff;
-  min-width: 300px;
+  min-width: 70%;
   height: 60px;
   font-size: 1.5rem;
   font-weight: bold;

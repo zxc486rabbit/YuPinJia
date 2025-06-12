@@ -35,15 +35,16 @@ export default function Home({ products =[] }) {
 
   return (
     <>
-      <div className="d-flex">
-        <div className="col-5">
-          <Cart items={cartItems} updateQuantity={updateQuantity} />
-        </div>
-        <div className="col">
-          {/* <CardTable products={products} /> */}
-          <Navbar  products={products} addToCart={addToCart}/>
-        </div>
-      </div>
+     <div className="container-fluid">
+  <div className="row">
+    <div className="col-5">
+      <Cart items={cartItems} updateQuantity={updateQuantity} />
+    </div>
+    <div className="col-7"> {/* 明確給 col-7，避免 col 自動爆版 */}
+      <Navbar products={products} addToCart={addToCart} />
+    </div>
+  </div>
+</div>
     </>
   );
 }

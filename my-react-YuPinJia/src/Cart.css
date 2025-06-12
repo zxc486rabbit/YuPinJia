@@ -6,7 +6,9 @@
     padding: 5px; /* 增加內邊距 */
     height: 100vh;
     background: #fff;
+      width: 100%;
 }
+
 
 /* 首頁購物車表頭 */
 .cart table th{
@@ -18,7 +20,7 @@
   padding-block: 15px;
   line-height: 35px;
   /* font-weight: bold; */
-  font-size: 1.5rem;
+  /* font-size: 1.5rem; */
 }
 
 
@@ -27,17 +29,18 @@
   align-items: center;
   justify-content: center;
 }
-/* 加減按鈕 */
 .quantity-btn {
   background-color: #fff;
   border: 1px solid #ccc;
-  padding: 7.5px 20px;
+  padding: 6px 12px;
   cursor: pointer;
-  font-size: 1rem;
+  font-size: 0.9rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 50px;
+  height: 40px;
+  min-width: 40px;
+  transition: background-color 0.2s;
 }
 .quantity-btn.add{
     border-radius: 0 5px 5px 0;
@@ -80,14 +83,15 @@
     font-size: 1.4rem;
 }
 /* 結帳按鈕 */
-.checkout-button{
-    width: 750px;
-    height: 70px;
-    background: #E67327;
-    border-radius: 10px;
-    color: white;
-    font-weight: bold;
-    font-size: 1.4rem;
+.checkout-button {
+  width: 100%;
+  max-width: 750px;
+  height: 70px;
+  background: #E67327;
+  border-radius: 10px;
+  color: white;
+  font-weight: bold;
+  font-size: 1.4rem;
 }
 /* 主卡片內容容器 */
 .content-container {

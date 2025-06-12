@@ -8,7 +8,7 @@ export default function NavbarItem({ text, active, onClick }) {
       }`}
       onClick={onClick}
     >
-      <div style={{ color: "#fff", fontSize: "1.5rem", fontWeight: "bold" }}>
+      <div style={{ color: "#fff", fontSize: "1.3rem", fontWeight: "bold" }}>
         {text}
       </div>
     </div>
