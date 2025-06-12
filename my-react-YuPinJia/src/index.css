@@ -151,7 +151,7 @@ input[type="number"]::-webkit-inner-spin-button {
   border-radius: 10px;
   font-weight: bold;
   font-size: 1.2rem;
-  min-width: 130px;
+  min-width: 8vw;
 }
 /* 進貨、調貨等..按鈕 */
 .cargo-button{

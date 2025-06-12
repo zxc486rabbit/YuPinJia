@@ -57,7 +57,7 @@ export default function TransPay() {
       <div
         className="table-container"
         style={{
-          maxHeight: "82vh", // 根據你想要的高度調整
+          maxHeight: "80vh", // 根據你想要的高度調整
           overflowY: "auto",
         }}
       >
@@ -79,7 +79,7 @@ export default function TransPay() {
               <th scope="col">應收金額</th>
               <th scope="col">匯款金額</th>
               <th scope="col">匯款後5碼</th>
-              <th scope="col">操作人</th>
+              {/* <th scope="col">操作人</th> */}
               <th scope="col">操作</th>
             </tr>
           </thead>
@@ -93,7 +93,7 @@ export default function TransPay() {
                   <td>1,234</td>
                   <td>1,234</td>
                   <td>84258</td>
-                  <td>{item.name}</td>
+                  {/* <td>{item.name}</td> */}
                   <td>
                     <button className="check-button">圖片</button>
                     <button className="edit-button mx-2">提醒</button>
