@@ -5,7 +5,7 @@ export default function SidebarItem({ icon, text, active, route }) {
 
   return (
     <div
-      className={`sidebar-item d-flex flex-column justify-content-center text-center py-3 ${
+      className={`sidebar-item d-flex flex-column justify-content-center text-center py-2 ${
         active ? "bg-dark" : ""
       }`}
       style={{

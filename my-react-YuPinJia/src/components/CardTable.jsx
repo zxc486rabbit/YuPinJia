@@ -6,7 +6,7 @@ export default function CardTable({ products = [], addToCart }) {
       {/* 主要內容區域 */}
       <div className="content-container w-100">
         {/* 右邊 */}
-        <div className="mt-3" style={{ height: "77vh", overflow: "auto" }}>
+        <div className="mt-3" style={{ height: "75vh", overflow: "auto" }}>
           {/* 表格 */}
           <table
             className="table mx-auto text-center"
@@ -38,7 +38,12 @@ export default function CardTable({ products = [], addToCart }) {
                 products.map((item) => (
                   <tr key={item.id}>
                     <td>{item.name}</td>
-                    <td className=" text-nowrap"> {Number(item.price.replace(/[^0-9.]/g, "")).toLocaleString()}</td>
+                    <td className=" text-nowrap">
+                      {" "}
+                      {Number(
+                        item.price.replace(/[^0-9.]/g, "")
+                      ).toLocaleString()}
+                    </td>
                     <td>
                       <button
                         onClick={() => addToCart(item)}
@@ -62,7 +67,7 @@ export default function CardTable({ products = [], addToCart }) {
           </table>
         </div>
 
-        <div className="d-flex mt-3 mb-2 mx-auto">
+        <div className="d-flex mt-3 mb-2 px-4 w-100">
           <button className="open-button me-3">開錢櫃</button>
           <button className="checkout-button">結帳</button>
         </div>

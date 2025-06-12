@@ -72,26 +72,28 @@
     align-items: center;
     justify-content: center;
 }
-/* 開錢櫃按鈕 */
-.open-button{
-    width: 150px;
-    height: 70px;
-    background: #737272;
-    border-radius: 10px;
-    color: white;
-    font-weight: bold;
-    font-size: 1.4rem;
+/* 開錢櫃按鈕（固定寬度） */
+.open-button {
+  width: 150px; /* ✅ 固定寬度 */
+  height: 70px;
+  background: #737272;
+  border-radius: 10px;
+  color: white;
+  font-weight: bold;
+  font-size: 1.4rem;
+  flex-shrink: 0; /* 防止被擠壓 */
 }
-/* 結帳按鈕 */
+
+/* 結帳按鈕（填滿剩下空間） */
 .checkout-button {
-  width: 100%;
-  max-width: 750px;
+  flex: 1; /* ✅ 填滿剩餘空間 */
   height: 70px;
   background: #E67327;
   border-radius: 10px;
   color: white;
   font-weight: bold;
   font-size: 1.4rem;
+  min-width: 0; /* 防止 overflow */
 }
 /* 主卡片內容容器 */
 .content-container {

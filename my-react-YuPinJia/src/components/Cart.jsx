@@ -23,8 +23,8 @@ export default function Cart({ items, updateQuantity }) {
       {/* 購物車 區域 */}
       <div className="cart py-3">
         <div className="w-100">
-          <div className=" text-center mb-3 d-flex justify-content-center  align-items-center mt-2">
-            <div className="d-flex">
+          <div className=" text-center mb-3 d-flex  align-items-center mt-2">
+            <div className="d-flex justify-content-center w-100">
               <button className="grayButton me-4">
                 <FaRegEdit className="me-1" />
                 暫存訂單
@@ -66,7 +66,7 @@ export default function Cart({ items, updateQuantity }) {
           </div>
         </div>
         <div
-          className="w-100 mt-2"
+          className="w-100 mt-auto"
           style={{
             fontSize: "1.2rem",
             fontWeight: "bold",
