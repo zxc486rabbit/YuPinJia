@@ -83,7 +83,7 @@ export default function ReturnGoods() {
 
   return (
     <>
-      <div className="search-container d-flex flex-wrap gap-3 px-4 pt-4 pb-3 rounded">
+      <div className="search-container d-flex flex-wrap gap-3 px-4 py-3 rounded">
         <SearchField
           label="訂單編號"
           type="text"
@@ -106,7 +106,7 @@ export default function ReturnGoods() {
       <div
         className="table-container"
         style={{
-          maxHeight: "82vh", // 根據你想要的高度調整
+          maxHeight: "80vh", // 根據你想要的高度調整
           overflowY: "auto",
         }}
       >
@@ -182,6 +182,7 @@ export default function ReturnGoods() {
         show={showModal}
         onHide={closeModal}
         dialogClassName="w-auto-modal"
+        size="lg"
         centered
       >
         <Modal.Header closeButton>
@@ -256,7 +257,7 @@ export default function ReturnGoods() {
               return (
                 <div
                   className="mt-3 p-3  bg-light border rounded "
-                  style={{ fontSize: "1.2rem" }}
+                  style={{ fontSize: "1rem" , lineHeight: "1.7" }}
                 >
                   <div className="d-flex">
                     <div>
@@ -465,13 +466,13 @@ export default function ReturnGoods() {
               color: "#333",
               borderRadius: "8px",
               fontWeight: "bold",
-              fontSize: "1.1rem",
+              fontSize: "1.3rem",
               marginBottom: "1rem",
             }}
           >
             處理中
           </div>
-          <div className="fs-5" style={{ lineHeight: "2rem" }}>
+          <div className="fs-5" style={{ lineHeight: "1.8" }}>
             <div>
               申請人：<strong>{selectedOrder?.applicant || "王大陸"}</strong>
             </div>

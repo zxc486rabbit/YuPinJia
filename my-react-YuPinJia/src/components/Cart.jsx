@@ -61,12 +61,12 @@ export default function Cart({ items, updateQuantity }) {
             </div>
           </div>
 
-          <div className="no-scrollbar mt-2">
+          <div className="no-scrollbar mt-2" style={{height:"59vh"}}>
             <CartTable items={items} updateQuantity={updateQuantity} />
           </div>
         </div>
         <div
-          className="w-100 mt-auto"
+          className="w-100 mt-2"
           style={{
             fontSize: "1.2rem",
             fontWeight: "bold",
@@ -85,7 +85,7 @@ export default function Cart({ items, updateQuantity }) {
             <span>點數折抵</span>
             <span style={{ color: "#C75D00" }}>-{pointDiscount}</span>
           </div>
-          <hr />
+          <hr style={{marginBlock:"0.5rem"}}/>
           <div
             className="d-flex justify-content-between mx-4"
             style={{ color: "#A40000" }}

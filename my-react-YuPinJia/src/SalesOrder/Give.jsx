@@ -35,7 +35,7 @@ export default function Give() {
 
   return (
     <>
-      <div className="search-container d-flex flex-wrap gap-3 px-4 pt-4 pb-3 rounded">
+      <div className="search-container d-flex flex-wrap gap-3 px-4 py-3 rounded">
         <SearchField
           label="產品"
           type="text"
@@ -143,7 +143,7 @@ export default function Give() {
         </Modal.Header>
         <Modal.Body>
           {editItem && (
-            <div style={{ fontSize: "1.4rem", lineHeight: "2" }}>
+            <div style={{ fontSize: "1.2rem", lineHeight: "2" }}>
               <div>商品：{editItem.product}</div>
               <div>日期：{editItem.startDate}</div>
               <div>

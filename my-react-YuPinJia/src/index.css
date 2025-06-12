@@ -12,22 +12,22 @@ tr{
 td{
   vertical-align: middle;
   padding-block: 10px !important;
-  font-size: 1.2rem;
+  font-size: 1.1rem;
 }
 label{
-  font-size: 1.4rem;
+  font-size: 1.1rem;
 }
 input{
-  font-size: 1.2rem !important;
+  font-size: 1.1rem !important;
 }
 input[type="checkbox" i] {
-  font-size: 1.4rem !important;
+  font-size: 1.1rem !important;
 }
 textarea{
-  font-size: 1.2rem !important;
+  font-size: 1.1rem !important;
 }
 .form-select {
-  font-size: 1.3rem !important;
+  font-size: 1.1rem !important;
 }
 /* 修改bs5預設樣式 */
 .row>* {
@@ -150,7 +150,7 @@ input[type="number"]::-webkit-inner-spin-button {
   padding: 5px 10px;
   border-radius: 10px;
   font-weight: bold;
-  font-size: 1.4rem;
+  font-size: 1.2rem;
   min-width: 130px;
 }
 /* 進貨、調貨等..按鈕 */
@@ -191,9 +191,14 @@ input[type="number"]::-webkit-inner-spin-button {
 }
 
 /* 彈出框的寬度 */
-.w-auto-modal {
+/* .w-auto-modal {
   max-width: 60%;
-}
+} */
 .modalButton{
   font-size: 1.3rem;
+}
+/* 覆蓋bs5 關閉按鈕顏色 */
+.modal-header .btn-close {
+  filter: invert(1); /* 把黑色變白色 */
+  opacity: 1;
 }

@@ -25,7 +25,7 @@ export default function TransPay() {
 
   return (
     <>
-      <div className="search-container d-flex flex-wrap gap-3 px-4 pt-4 pb-3 rounded">
+      <div className="search-container d-flex flex-wrap gap-3 px-4 py-3 rounded">
         <button className="add-button" onClick={() => setShowModal(true)}>
           添加匯款
         </button>

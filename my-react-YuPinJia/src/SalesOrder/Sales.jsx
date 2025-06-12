@@ -48,7 +48,7 @@ export default function OrderSearch() {
 
   return (
     <>
-      <div className="search-container d-flex flex-wrap gap-3 px-4 pt-4 pb-3 rounded">
+      <div className="search-container d-flex flex-wrap gap-3 px-4 py-3 rounded">
         <SearchField
           label="訂單編號"
           type="text"
@@ -94,7 +94,7 @@ export default function OrderSearch() {
       <div
         className="table-container"
         style={{
-          maxHeight: "76vh", // 根據你想要的高度調整
+          maxHeight: "73vh", // 根據你想要的高度調整
           overflowY: "auto",
         }}
       >
@@ -119,7 +119,7 @@ export default function OrderSearch() {
               <th scope="col">會員</th>
               <th scope="col">商品明細</th>
               <th scope="col">商品總金額</th>
-              <th scope="col">商品總數</th>
+              {/* <th scope="col">商品總數</th> */}
               <th scope="col">狀態</th>
               <th scope="col">統一編號</th>
               <th scope="col">發票</th>
@@ -147,7 +147,7 @@ export default function OrderSearch() {
                     </button>
                   </td>
                   <td>{item.totalAmount}</td>
-                  <td>{item.totalCount}</td>
+                  {/* <td>{item.totalCount}</td> */}
                   <td>{item.status}</td>
                   <td>{item.taxId}</td>
                   <td>{item.invoice}</td>
@@ -173,14 +173,15 @@ export default function OrderSearch() {
       <div className="d-flex align-items-center mt-2 ps-3">
         {/* <input type="checkbox" className="w-5 h-5 text-gray-600 me-2" /> */}
         {/* <h5 className="fw-bold mb-0 me-3">全選</h5> */}
-        <button className="pink-button me-3">列印清單</button>
-        <button className="pink-button">列印明細</button>
+        <button className="pink-button me-3" style={{ fontSize: "1.2rem" }}>列印清單</button>
+        <button className="pink-button" style={{ fontSize: "1.2rem" }}>列印明細</button>
       </div>
 
       <Modal
         show={showModal}
         onHide={closeModal}
         dialogClassName="w-auto-modal"
+        size="xl"
         centered
       >
         <Modal.Header closeButton>
@@ -253,7 +254,7 @@ export default function OrderSearch() {
               return (
                 <div
                   className="mt-3 p-3 d-flex justify-content-start bg-light border rounded"
-                  style={{ fontSize: "1.2rem" }}
+                  style={{ fontSize: "1.1rem" }}
                 >
                   <div>
                     共計商品：<strong>1</strong> 項
@@ -286,6 +287,7 @@ export default function OrderSearch() {
       <Modal
         show={showEditModal}
         onHide={closeEditModal}
+        size="xl"
         dialogClassName="w-auto-modal"
         centered
       >
@@ -362,7 +364,7 @@ export default function OrderSearch() {
               return (
                 <div
                   className="mt-3 p-3 d-flex justify-content-between bg-light border rounded"
-                  style={{ fontSize: "1.2rem" }}
+                  style={{ fontSize: "1rem" ,lineHeight: "1.7" }}
                 >
                   <div>
                     <div className="d-flex">
@@ -424,7 +426,7 @@ export default function OrderSearch() {
                     <div className="mt-3">
                       <button className="check-button fw-bold">退貨</button>
                       <button className="delete-button mx-4 fw-bold">作廢</button>
-                      <button className="pink-button" style={{fontSize: "1.2rem"}}>列印明細</button>
+                      <button className="pink-button" style={{fontSize: "1rem"}}>列印明細</button>
                     </div>
                   </div>
                   {/* 簽名紀錄 */}

@@ -17,6 +17,7 @@ export default function SearchField({ label, type, value, onChange, options, pla
             onChange={onChange}
             placeholder={label? `輸入${label}` : placeholder}
             className="form-control"
+             style={{ flex: "0 1 180px" }} // ← 可調寬度
           />
         )}
       </div>

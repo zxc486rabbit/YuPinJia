@@ -53,13 +53,22 @@ export default function AdjustRecordModal({ show, onHide, data }) {
   const calcTotal = () => {
     if (!selectedRecord) return { count: 0, total: 0 };
     const allItems = selectedRecord.detail || [];
-    const totalAmount = allItems.reduce((sum, item) => sum + item.quantity * item.cost, 0);
+    const totalAmount = allItems.reduce(
+      (sum, item) => sum + item.quantity * item.cost,
+      0
+    );
     return { count: allItems.length, total: totalAmount };
   };
 
   return (
     <>
-      <Modal show={show} onHide={onHide} size="xl" dialogClassName="modal-80w" centered>
+      <Modal
+        show={show}
+        onHide={onHide}
+        size="xl"
+        dialogClassName="modal-80w"
+        centered
+      >
         <Modal.Header closeButton>
           <Modal.Title>調貨紀錄</Modal.Title>
         </Modal.Header>
@@ -84,14 +93,20 @@ export default function AdjustRecordModal({ show, onHide, data }) {
                   <td>{item.date}</td>
                   <td>{item.quantity}</td>
                   <td>{item.operator}</td>
-                  <td> <button
-    className="check-button"
-    onClick={() => handleShowDetail(item, false)}
-  >
-    檢視
-  </button></td>
                   <td>
-                    <button className="btn btn-sm btn-outline-primary me-1" onClick={() => handleShowDetail(item, true)}>
+                    {" "}
+                    <button
+                      className="check-button"
+                      onClick={() => handleShowDetail(item, false)}
+                    >
+                      檢視
+                    </button>
+                  </td>
+                  <td>
+                    <button
+                      className="btn btn-sm btn-outline-primary me-1"
+                      onClick={() => handleShowDetail(item, true)}
+                    >
                       <FaEdit />
                     </button>
                     <button className="btn btn-sm btn-outline-danger">
@@ -104,11 +119,19 @@ export default function AdjustRecordModal({ show, onHide, data }) {
           </Table>
         </Modal.Body>
         <Modal.Footer>
-          <Button variant="secondary" onClick={onHide}>關閉</Button>
+          <Button variant="secondary" onClick={onHide}>
+            關閉
+          </Button>
         </Modal.Footer>
       </Modal>
 
-      <Modal show={showDetailModal} onHide={() => setShowDetailModal(false)} size="xl" dialogClassName="modal-80w" centered>
+      <Modal
+        show={showDetailModal}
+        onHide={() => setShowDetailModal(false)}
+        size="xl"
+        dialogClassName="modal-80w"
+        centered
+      >
         <Modal.Header closeButton>
           <Modal.Title>調貨明細</Modal.Title>
         </Modal.Header>
@@ -116,15 +139,22 @@ export default function AdjustRecordModal({ show, onHide, data }) {
           {selectedRecord && (
             <div className="mb-4 p-3 border rounded bg-white">
               <div className="row g-3">
-                {['門市', '調貨日期', '操作員'].map((label, i) => (
+                {["門市", "調貨日期", "操作員"].map((label, i) => (
                   <div className="col-md-4" key={label}>
-                    <Form.Label style={{ fontSize: '1rem' }}>{label}</Form.Label>
+                    <Form.Label style={{ fontSize: "1rem" }}>
+                      {label}
+                    </Form.Label>
                     <Form.Control
-                      type={label.includes('日期') ? 'date' : 'text'}
+                      type={label.includes("日期") ? "date" : "text"}
                       value={editableInfo[Object.keys(editableInfo)[i]]}
-                      onChange={(e) => setEditableInfo({ ...editableInfo, [Object.keys(editableInfo)[i]]: e.target.value })}
+                      onChange={(e) =>
+                        setEditableInfo({
+                          ...editableInfo,
+                          [Object.keys(editableInfo)[i]]: e.target.value,
+                        })
+                      }
                       disabled={!isEditing}
-                      style={{ fontSize: '1rem' }}
+                      style={{ fontSize: "1rem" }}
                     />
                   </div>
                 ))}
@@ -160,13 +190,21 @@ export default function AdjustRecordModal({ show, onHide, data }) {
               </tbody>
             </Table>
             <div className="text-end fw-bold mt-3">
-              共計 {calcTotal().count} 項，總計：{calcTotal().total.toLocaleString()} 元
+              共計 {calcTotal().count} 項，總計：
+              {calcTotal().total.toLocaleString()} 元
             </div>
           </div>
 
           {isEditing && (
             <div className="text-end mt-3">
-              <Button style={{ backgroundColor: '#D68E08', border: 'none', fontSize: '1rem' }} onClick={() => setIsEditing(false)}>
+              <Button
+                style={{
+                  backgroundColor: "#D68E08",
+                  border: "none",
+                  fontSize: "1rem",
+                }}
+                onClick={() => setIsEditing(false)}
+              >
                 儲存
               </Button>
             </div>

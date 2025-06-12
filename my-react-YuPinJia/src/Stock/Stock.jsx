@@ -40,7 +40,7 @@ export default function Stock() {
                 { value: "5", label: "澎湖海產(乾貨)類" },
               ]}
             />
-            <SearchField
+            {/* <SearchField
               type="select"
               value={orderId}
               onChange={(e) => setOrderId(e.target.value)}
@@ -84,7 +84,7 @@ export default function Stock() {
                 { value: "store", label: "午安" },
                 { value: "delivery", label: "晚安" },
               ]}
-            />
+            /> */}
 
             <div className="search-bar">
               <FaSearch className="search-icon" />
@@ -112,7 +112,7 @@ export default function Stock() {
               <table
                 className="table text-center mb-0"
                 style={{
-                  fontSize: "1.3rem",
+                  fontSize: "1.2rem",
                   width: "100%",
                   tableLayout: "fixed", // 固定欄寬
                   borderCollapse: "collapse",
@@ -131,7 +131,7 @@ export default function Stock() {
                     <th style={{ width: "400px" }}>商品名稱</th>
                     <th>總庫存</th>
                     <th>門市庫存</th>
-                    <th>未包裝訂單數量</th>
+                    <th>未包裝</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -173,7 +173,7 @@ export default function Stock() {
           <div className="col-5">
             <div style={{ height: "80vh", overflow: "auto" }}>
               {/* 表格 */}
-              <h4 className="no-safe-text mt-2 mb-0">預警產品</h4>
+              <h5 className="no-safe-text mt-1 mb-0 py-2">預警產品</h5>
               <table
                 className="table text-center"
                 style={{ fontSize: "1.3rem", width: "90%" }}
