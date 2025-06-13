@@ -1,7 +1,7 @@
 import { useState } from "react";
 import NavbarItem from "../components/NavbarItem"; //navbar模組
 import CreateMember from "./CreateMember"; //建立會員
-import MemberOverview from "./MemberOverview"; //會員總覽
+import MemberOverview from "./MemberOverview/MemberOverview"; //會員總覽
 import CreditLog from "./CreditLog"; //賒帳紀錄
 import Blacklist from "./Blacklist"; //黑名單
 

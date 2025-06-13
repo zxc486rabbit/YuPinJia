@@ -160,8 +160,8 @@ input[type="number"]::-webkit-inner-spin-button {
   padding: 5px 10px;
   border-radius: 10px;
   font-weight: bold;
-  font-size: 1.5rem;
-  min-width: 130px;
+  font-size: 1.2rem;
+  min-width: 110px;
 }
 /* 取消按鈕 */
 .cancel-button {
@@ -198,7 +198,7 @@ input[type="number"]::-webkit-inner-spin-button {
   font-size: 1.3rem;
 }
 /* 覆蓋bs5 關閉按鈕顏色 */
-.modal-header .btn-close {
-  filter: invert(1); /* 把黑色變白色 */
+/* .modal-header .btn-close {
+  filter: invert(1); 
   opacity: 1;
-}
+} */

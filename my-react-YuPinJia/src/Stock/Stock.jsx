@@ -171,7 +171,7 @@ export default function Stock() {
           </div>
           {/* 右邊 */}
           <div className="col-5">
-            <div style={{ height: "80vh", overflow: "auto" }}>
+            <div style={{ height: "79vh", overflow: "auto" }}>
               {/* 表格 */}
               <h5 className="no-safe-text mt-1 mb-0 py-2">預警產品</h5>
               <table

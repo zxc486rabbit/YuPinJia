@@ -5,7 +5,7 @@ export default function ShiftChangeCard({ title, paymentDetails, onclick }) {
     .reduce((sum, item) => sum + item.amount, 0);
 
   return (
-    <div className="card" style={{height: "22vh"}}>
+    <div className="card" >
       <div className="title">
         <div>
           {title} : {total.toLocaleString()} 元

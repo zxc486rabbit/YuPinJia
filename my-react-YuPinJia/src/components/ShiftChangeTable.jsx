@@ -6,7 +6,7 @@ export default function ShiftChangeTable({ rightTable }) {
       <div
         className="ms-2 me-2"
         style={{
-          height: "69vh", // ✅ 根據你的 layout 高度調整
+          height: "63vh", // ✅ 根據你的 layout 高度調整
           border: "1px solid #c5c6c7",
           display: "flex",
           flexDirection: "column",
@@ -17,7 +17,7 @@ export default function ShiftChangeTable({ rightTable }) {
           <table
             className="table mb-0"
             style={{
-              fontSize: "1.2rem",
+              fontSize: "1.1rem",
               fontWeight: "bold",
               tableLayout: "fixed",
               width: "100%",

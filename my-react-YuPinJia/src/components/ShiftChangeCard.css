@@ -2,6 +2,7 @@
     background: #fff;
     border: 1px solid #A3A3A3;
     margin:0 10px 15px;
+    min-height: 21vh;
 }
 .title{
     background: #678CBF;
@@ -11,7 +12,7 @@
     justify-content: space-between;
     align-items: center;
     padding:8px 20px;
-    font-size: 1.4rem;
+    font-size: 1.1rem;
 }
 .content{
     padding: 0 30px;
@@ -19,9 +20,9 @@
 .content .text{
     display: flex;
     justify-content: space-between;
-    font-size: 1.2rem;
+    font-size: 1.1rem;
     font-weight: bold;
-    margin-block: 15px;
+    margin-block: 10px;
 }
 .redContainer{
     height: 22vh !important;
@@ -35,9 +36,15 @@
     background: #EA4D4D;
     color: white;
     font-weight: bold;
-    font-size: 1.2rem;
-    margin: auto;
+    font-size: 1rem;
+    /* margin: auto; */
     width: 100%;
-    padding: 15px 20px;
+    padding: 13px 20px;
     /* height: 20px; */
+}
+.add-button{
+    padding: 0 !important;
+}
+td{
+    font-size: 1rem !important;
 }

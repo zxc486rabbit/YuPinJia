@@ -8,28 +8,28 @@ export default function ShiftChange() {
   const rightTable = [
     {
       id: "113A1251",
-      date: "12:10:05",
+      date: "12:10",
       total: "8",
       totalMoney: "1,450",
       payMethod: "現金",
     },
     {
       id: "113A1252",
-      date: "12:15:10",
+      date: "12:15",
       total: "5",
       totalMoney: "980",
       payMethod: "匯款",
     },
     {
       id: "113A1253",
-      date: "12:20:00",
+      date: "12:20",
       total: "3",
       totalMoney: "600",
       payMethod: "現金",
     },
     {
       id: "113A1260",
-      date: "13:10:50",
+      date: "13:10",
       total: "2",
       totalMoney: "300",
       payMethod: "現金",
@@ -38,21 +38,21 @@ export default function ShiftChange() {
   const rightTable1 = [
     {
       id: "113A1251",
-      date: "12:10:05",
+      date: "12:10",
       total: "80",
       totalMoney: "1,450",
       payMethod: "匯款",
     },
     {
       id: "113A1254",
-      date: "12:30:45",
+      date: "12:30",
       total: "12",
       totalMoney: "2,340",
       payMethod: "信用卡",
     },
     {
       id: "113A1255",
-      date: "12:32:20",
+      date: "12:32",
       total: "7",
       totalMoney: "1,500",
       payMethod: "現金",
@@ -61,21 +61,21 @@ export default function ShiftChange() {
   const rightTable2 = [
     {
       id: "113A1256",
-      date: "12:40:30",
+      date: "12:40",
       total: "10",
       totalMoney: "1,980",
       payMethod: "Line Pay",
     },
     {
       id: "113A1257",
-      date: "12:45:10",
+      date: "12:45",
       total: "6",
       totalMoney: "1,250",
       payMethod: "街口支付",
     },
     {
       id: "113A1261",
-      date: "13:15:00",
+      date: "13:15",
       total: "11",
       totalMoney: "2,150",
       payMethod: "匯款",
@@ -85,14 +85,14 @@ export default function ShiftChange() {
   const rightTable3 = [
     {
       id: "113A1258",
-      date: "13:00:00",
+      date: "13:00",
       total: "4",
       totalMoney: "720",
       payMethod: "悠遊付",
     },
     {
       id: "113A1259",
-      date: "13:05:15",
+      date: "13:05",
       total: "9",
       totalMoney: "1,680",
       payMethod: "信用卡",
@@ -101,7 +101,7 @@ export default function ShiftChange() {
   const rightTable4 = [
     {
       id: "113A1261",
-      date: "13:15:00",
+      date: "13:15",
       total: "11",
       totalMoney: "2,150",
       payMethod: "匯款",
@@ -221,7 +221,7 @@ export default function ShiftChange() {
     <>
       <div className="mx-4">
         {/* 上方機器資訊 */}
-        <div className="d-flex mt-3 gap-5">
+        <div className="d-flex mt-3">
           <p
             style={{ color: "#535353", fontSize: "1.1rem", fontWeight: "bold" }}
           >
@@ -311,7 +311,7 @@ export default function ShiftChange() {
             />
             <div className="redContainer">
               <div className="redContent">POS作廢訂單數 : 6</div>
-              <div className="redContent">未包裝訂單數 : 0</div>
+              <div className="redContent my-2">未包裝訂單數 : 0</div>
               <div className="redContent">POS作廢訂單數 : 0</div>
             </div>
           </div>
@@ -322,14 +322,14 @@ export default function ShiftChange() {
           </div>
         </div>
         {/* 下方金額總計 */}
-        <div className="ms-1 mt-2">
+        <div className="ms-1">
           {["現金", "轉帳", "支票", "刷卡", "貨到付款", "超商代收", "賒帳"].map(
             (label) => (
               <span
                 key={label}
                 style={{
                   color: "#535353",
-                  fontSize: "1.4rem",
+                  fontSize: "1.2rem",
                   fontWeight: "bold",
                   marginRight: "2rem",
                 }}
@@ -379,7 +379,7 @@ export default function ShiftChange() {
             width: "33%",
             textAlign: "right",
             fontWeight: "bold",
-            fontSize: "1.5rem",
+            fontSize: "1.4rem",
             color: "black",
           }}
         >

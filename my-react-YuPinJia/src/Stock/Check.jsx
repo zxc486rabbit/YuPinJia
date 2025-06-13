@@ -40,7 +40,7 @@ export default function Check() {
 
   return (
     <>
-      <div className="search-container d-flex gap-3 px-5 pt-4 pb-3 ">
+      <div className="search-container d-flex gap-3 px-5 py-3 ">
         <SearchField
           type="select"
           value={orderId}
@@ -62,151 +62,124 @@ export default function Check() {
           搜尋
         </button>
 
-        <button className="ms-auto edit-button">盤點紀錄</button>
+        <button className="ms-auto edit-button" style={{fontSize:"1.2rem" , fontWeight:"bold"}}>盤點紀錄</button>
       </div>
-      {/* 左右邊表格容器 */}
-      <div className="d-flex mx-5">
-        {/* 左邊表格 */}
+      {/* 表格區域 */}
+      <div className="d-flex  px-4">
+        {/* 左表格 */}
         {leftTableData.length > 0 && (
-          <div className="col-6" style={{ height: "74vh", overflow: "hidden" }}>
-            {/* 表格 */}
-            <table
-              className="table my-2 mx-auto text-center"
-              style={{
-                fontSize: "1.3rem",
-                border: "1px solid #D7D7D7",
-                width: "100%",
-              }}
-            >
-              <thead
-                className="table-info"
-                style={{ borderTop: "1px solid #c5c6c7" }}
-              >
+          <div style={{ flex: 1, height: "66vh", overflow: "hidden" }}>
+            <table className="table text-center" style={{ fontSize: "1.1rem", border: "1px solid #D7D7D7" }}>
+              <thead className="table-info">
                 <tr>
-                  <th scope="col">商品編號</th>
-                  <th scope="col">商品名稱</th>
-                  <th scope="col">庫存數量</th>
-                  <th scope="col">盤點數量</th>
+                  <th>商品編號</th>
+                  <th>商品名稱</th>
+                  <th>庫存數量</th>
+                  <th>盤點數量</th>
                 </tr>
               </thead>
               <tbody>
-                {tableData.length > 0 ? (
-                  // 取出目前頁面中左側表格的資料（每次10筆）
-                  tableData
-                    .slice(leftTableStart, leftTableStart + 12) // 從目前頁面左表格起始位置，取出 10 筆資料
-                    .map((item, index) => (
-                      <tr key={index}>
-                        <td>{leftTableStart + index + 1}</td>
-                        <td>{item.product}</td>
-                        <td>{item.stock}</td>
-                        <td>
-                          <input
-                            value={value}
-                            onChange={(e) => setValue(e.target.value)}
-                            style={{
-                              height: "40px",
-                              padding: "0 8px",
-                              border: "1px solid #8C8C8C",
-                              borderRadius: "4px",
-                              textAlign: "center",
-                            }}
-                          />
-                        </td>
-                      </tr>
-                    ))
-                ) : (
-                  <tr>
-                    <td colSpan="12">無資料</td>
+                {leftTableData.map((item, index) => (
+                  <tr key={index}>
+                    <td>{leftTableStart + index + 1}</td>
+                    <td>{item.product}</td>
+                    <td>{item.stock}</td>
+                    <td>
+                      <input
+                        value={value}
+                        onChange={(e) => setValue(e.target.value)}
+                        style={{
+                          height: "5vh",
+                          padding: "0 8px",
+                          border: "1px solid #8C8C8C",
+                          borderRadius: "4px",
+                          textAlign: "center",
+                          width: "100%",
+                        }}
+                      />
+                    </td>
                   </tr>
-                )}
+                ))}
               </tbody>
             </table>
           </div>
         )}
-        {/* 右邊表格 */}
+
+        {/* 右表格 */}
         {rightTableData.length > 0 && (
-          <div className="col-6" style={{ height: "74vh", overflow: "hidden" }}>
-            {/* 表格 */}
-            <table
-              className="table my-2 mx-auto text-center"
-              style={{
-                fontSize: "1.3rem",
-                border: "1px solid #D7D7D7",
-                width: "100%",
-              }}
-            >
-              <thead
-                className="table-info"
-                style={{ borderTop: "1px solid #c5c6c7" }}
-              >
+          <div style={{ flex: 1, height: "66vh", overflow: "hidden" }}>
+            <table className="table text-center" style={{ fontSize: "1.1rem", border: "1px solid #D7D7D7" }}>
+              <thead className="table-info">
                 <tr>
-                  <th scope="col">商品編號</th>
-                  <th scope="col">商品名稱</th>
-                  <th scope="col">庫存數量</th>
-                  <th scope="col">盤點數量</th>
+                  <th>商品編號</th>
+                  <th>商品名稱</th>
+                  <th>庫存數量</th>
+                  <th>盤點數量</th>
                 </tr>
               </thead>
               <tbody>
-                {tableData.length > 0 ? (
-                  tableData
-                    .slice(rightTableStart, rightTableStart + 12)
-                    .map((item, index) => (
-                      <tr key={index}>
-                        <td>{rightTableStart + index + 1}</td>
-                        <td>{item.product}</td>
-                        <td>{item.stock}</td>
-                        <td>
-                          <input
-                            value={value}
-                            onChange={(e) => setValue(e.target.value)}
-                            style={{
-                              height: "40px",
-                              padding: "0 8px",
-                              border: "1px solid #8C8C8C",
-                              borderRadius: "4px",
-                              textAlign: "center",
-                            }}
-                          />
-                        </td>
-                      </tr>
-                    ))
-                ) : (
-                  <tr>
-                    <td colSpan="12">無資料</td>
+                {rightTableData.map((item, index) => (
+                  <tr key={index}>
+                    <td>{rightTableStart + index + 1}</td>
+                    <td>{item.product}</td>
+                    <td>{item.stock}</td>
+                    <td>
+                      <input
+                        value={value}
+                        onChange={(e) => setValue(e.target.value)}
+                        style={{
+                          height: "5vh",
+                          padding: "0 8px",
+                          border: "1px solid #8C8C8C",
+                          borderRadius: "4px",
+                          textAlign: "center",
+                          width: "100%",
+                        }}
+                      />
+                    </td>
                   </tr>
-                )}
+                ))}
               </tbody>
             </table>
           </div>
         )}
       </div>
       {/* 換頁 */}
-      <div className="pagination-controls text-center mt-3">
+      <div className="pagination-controls text-center mt-4">
         <button
           onClick={handlePrevPage}
           disabled={currentPage === 1}
           className="btn btn-secondary mx-2 mb-2"
-          style={{fontSize:"1.3rem"}}
+          style={{ fontSize: "1.3rem" }}
         >
           上一頁
         </button>
-        <span style={{fontSize:"1.3rem"}}>
+        <span style={{ fontSize: "1.3rem" }}>
           第 {currentPage} 頁 / 共 {totalPages} 頁
         </span>
         <button
           onClick={handleNextPage}
           disabled={currentPage === totalPages}
           className="btn btn-secondary mx-2 mb-2"
-          style={{fontSize:"1.3rem"}}
+          style={{ fontSize: "1.3rem" }}
         >
           下一頁
         </button>
       </div>
-<div className="d-flex gap-3 me-5" style={{position:"absolute", bottom:"10px", right:"0"}}>
-      <button className="cargo-button" style={{background:"#ED7171"}}>一鍵清空</button>
-      <button className="cargo-button" style={{background:"#445A61"}}>暫存</button>
-      <button className="cargo-button" style={{background:"#337DD1"}}>送出</button>
-</div>
+      <div
+        className="d-flex gap-2 me-5"
+        style={{ position: "absolute", bottom: "35px", right: "0" }}
+      >
+        <button className="cargo-button" style={{ background: "#ED7171" }}>
+          一鍵清空
+        </button>
+        <button className="cargo-button" style={{ background: "#445A61" }}>
+          暫存
+        </button>
+        <button className="cargo-button" style={{ background: "#337DD1" }}>
+          送出
+        </button>
+      </div>
     </>
   );
 }
