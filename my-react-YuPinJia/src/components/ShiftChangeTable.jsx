@@ -4,7 +4,7 @@ export default function ShiftChangeTable({ rightTable }) {
   return (
     <>
       <div
-        className="ms-2 me-2"
+        className="ms-2 me-2 shift-change"
         style={{
           height: "63vh", // ✅ 根據你的 layout 高度調整
           border: "1px solid #c5c6c7",
