@@ -8,6 +8,7 @@ import MemberIndex from "./Member/MemberIndex"; // 會員頁面
 import ShiftChangeIndex from "./ShiftChange/ShiftChangeIndex"; // 交接班頁面
 import CustomerComplainIndex from "./CustomerComplain/CustomerComplainIndex"; // 客訴頁面
 import SettingIndex from "./Setting/SettingIndex"; // 設定頁面
+import PickupMethodPage from "./components/PickupMethodPage"; // 結帳頁面
 import "./Cart.css";
 import Modal from "react-modal";
 Modal.setAppElement("#root");
@@ -35,6 +36,8 @@ function App() {
           <Routes>
           {/* 主頁 */}
             <Route path="/" element={<Home products={products}/>} /> 
+            {/* 結帳頁面 */}
+                <Route path="/pickup" element={<PickupMethodPage />} />
           {/* 銷售訂單 */}
             <Route path="/SalesOrder/SalesIndex" element={<SalesIndex />} />
           {/* 庫存 */}

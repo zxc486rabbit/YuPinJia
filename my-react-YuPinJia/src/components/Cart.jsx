@@ -15,7 +15,9 @@ export default function Cart({ items, updateQuantity }) {
     (sum, item) => sum + item.unitPrice * item.quantity,
     0
   );
-  const pointDiscount = 23; // 假設固定折抵 6 元
+  const points = 23; // 會員點數
+  const discountPerPoint = 1; // 1點數可折抵幾元 目前1:1
+  const pointDiscount = points * discountPerPoint;
   const finalTotal = subtotal - pointDiscount;
 
   return (
@@ -38,10 +40,10 @@ export default function Cart({ items, updateQuantity }) {
           </div>
 
           <div style={{ fontSize: "1rem", padding: "0 15px" }}>
-              <p className="d-flex align-items-center mb-0 me-4">
-                <FaUser className="me-1" style={{ color: "#2f2f2f" }} /> 會員 :
-                金大發旅行社
-              </p>
+            <p className="d-flex align-items-center mb-0 me-4">
+              <FaUser className="me-1" style={{ color: "#2f2f2f" }} /> 會員 :
+              金大發旅行社
+            </p>
             <div className="d-flex align-items-center">
               <p className="d-flex align-items-center mb-0">
                 <FaGem className="me-1" style={{ color: "#2f2f2f" }} /> VIP
@@ -61,7 +63,7 @@ export default function Cart({ items, updateQuantity }) {
             </div>
           </div>
 
-          <div className="no-scrollbar mt-2" style={{height:"59vh"}}>
+          <div className="no-scrollbar mt-2" style={{ height: "57vh" }}>
             <CartTable items={items} updateQuantity={updateQuantity} />
           </div>
         </div>
@@ -85,7 +87,7 @@ export default function Cart({ items, updateQuantity }) {
             <span>點數折抵</span>
             <span style={{ color: "#C75D00" }}>-{pointDiscount}</span>
           </div>
-          <hr style={{marginBlock:"0.5rem"}}/>
+          <hr style={{ marginBlock: "0.5rem" }} />
           <div
             className="d-flex justify-content-between mx-4"
             style={{ color: "#A40000" }}

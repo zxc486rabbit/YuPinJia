@@ -192,6 +192,13 @@ input[type="number"]::-webkit-inner-spin-button {
   text-align: center;
 }
 
+.modal {
+  z-index: 1055 !important;
+}
+.modal-backdrop {
+  z-index: 1050 !important;
+}
+
 /* 彈出框的寬度 */
 /* .w-auto-modal {
   max-width: 60%;

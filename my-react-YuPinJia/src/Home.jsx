@@ -1,50 +1,97 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import Cart from "./components/Cart";
 import Navbar from "./components/Navbar";
+import CardTable from "./components/CardTable";
+import Card from "./components/Card";
+import CheckoutModal from "./components/CheckoutModal";
 
-export default function Home({ products =[] }) {
-  const [cartItems, setCartItems] = useState([]); //購物車內的商品，預設為空
+export default function Home({ products = [] }) {
+   const [activeTab, setActiveTab] = useState("熱銷排行");
+  const [cartItems, setCartItems] = useState([]);
+  const [showCheckoutModal, setShowCheckoutModal] = useState(false);
+  const [checkoutData, setCheckoutData] = useState(null);
+  const navigate = useNavigate();
 
+  /* ---------- 加入購物車 ---------- */
   const addToCart = (product) => {
-    // setCartItems：用來更新購物車項目
-    // prevItems：目前購物車裡的所有商品陣列
-    setCartItems((prevItems) => {
-      // 檢查是否已經有這個商品（依照 id 做判斷）
-      const exist = prevItems.find((item) => item.id === product.id);
+    const qty = product.quantity || 1;
+    setCartItems((prev) => {
+      const exist = prev.find((p) => p.id === product.id);
       if (exist) {
-        // 如果商品已存在，使用 map 將對應商品的數量加 1
-        return prevItems.map((item) =>
-          item.id === product.id
-            ? { ...item, quantity: item.quantity + 1 } // 增加數量
-            : item
+        return prev.map((p) =>
+          p.id === product.id
+            ? { ...p, quantity: p.quantity + qty }
+            : p
         );
-      } else {
-        // 如果商品尚未存在於購物車，將新商品加入陣列，並設定數量為 1
-        return [...prevItems, { ...product, quantity: 1,  unitPrice : Number(product.price.replace(/[^0-9.]/g, "")) }];
       }
+      return [
+        ...prev,
+        {
+          ...product,
+          quantity: qty,
+          unitPrice: Number(product.price.replace(/[^0-9.]/g, "")),
+        },
+      ];
     });
   };
 
+  /* ---------- 更新數量 ---------- */
   const updateQuantity = (id, quantity) => {
-    setCartItems((items) =>
-      items.map((item) =>
-        item.id === id ? { ...item, quantity: quantity } : item
-      )
+    setCartItems((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, quantity } : p))
     );
+  };
+
+  /* ---------- CardTable 點擊「結帳」時呼叫 ---------- */
+  const handleCheckout = (data) => {
+    setCheckoutData(data);
+    setShowCheckoutModal(true);
+  };
+
+  /* ---------- Modal 按下「確認結帳」 ---------- */
+  const confirmCheckout = () => {
+    setShowCheckoutModal(false);
+    // 把資料帶到取貨方式頁
+    navigate("/pickup", { state: checkoutData });
   };
 
   return (
     <>
-     <div className="container-fluid">
-  <div className="row">
-    <div className="col-5">
-      <Cart items={cartItems} updateQuantity={updateQuantity} />
-    </div>
-    <div className="col-7"> {/* 明確給 col-7，避免 col 自動爆版 */}
-      <Navbar products={products} addToCart={addToCart} />
-    </div>
-  </div>
-</div>
+      <div className="container-fluid">
+        <div className="row">
+          <div className="col-5">
+            <Cart items={cartItems} updateQuantity={updateQuantity} />
+          </div>
+
+          <div className="col-7">
+<Navbar activeTab={activeTab} setActiveTab={setActiveTab} />
+            {/* CardTable 多加 cartItems 與 onCheckout */}
+                {activeTab === "熱銷排行" && (
+              <CardTable
+                products={products}
+                addToCart={addToCart}
+                cartItems={cartItems}
+                onCheckout={handleCheckout}
+              />
+            )}
+            {activeTab === "產品分類" && (
+              <Card
+                products={products}
+                addToCart={addToCart}
+              />
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* 結帳確認彈窗 */}
+      <CheckoutModal
+        show={showCheckoutModal}
+        onHide={() => setShowCheckoutModal(false)}
+        data={checkoutData}
+        onConfirm={confirmCheckout}
+      />
     </>
   );
 }
