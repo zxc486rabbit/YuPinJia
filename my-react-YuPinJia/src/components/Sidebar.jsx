@@ -16,7 +16,7 @@ export default function Sidebar() {
       {/* 上方選單 */}
       <div>
         {/* <FaHome className="" style={{color: "#fff", fontSize: "4rem", height: "150px" }}/> */}
-        <div style={{ background: "#275BA3" }}>
+        <div className="pt-0" style={{ background: "#275BA3" }}>
           <SidebarItem icon={<FaHome size={50} />} route="/"/>
         </div>
         <SidebarItem icon={<FaClipboardList />} text="銷售訂單" route="/SalesOrder/SalesIndex"/>

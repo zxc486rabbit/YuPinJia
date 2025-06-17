@@ -1,0 +1,20 @@
+[
+  {
+    "id": 1,
+    "account": "vip001",
+    "phone": "0912345678",
+    "name": "金大發旅行社",
+    "type": "VIP",
+    "level": "青銅",
+    "points": 23
+  },
+  {
+    "id": 2,
+    "account": "user002",
+    "phone": "0922333444",
+    "name": "宏苑自動化",
+    "type": "一般",
+    "level": "白銀",
+    "points": 55
+  }
+]
