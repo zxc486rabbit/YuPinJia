@@ -221,47 +221,47 @@ export default function ShiftChange() {
     <>
       <div className="mx-4">
         {/* 上方機器資訊 */}
-        <div className="d-flex mt-3 gap-4">
-          <p
+        <div className="d-flex mt-3 mb-2 gap-4">
+          <span
             style={{ color: "#535353", fontSize: "1.1rem", fontWeight: "bold" }}
           >
             機器:
             <span className="ms-2" style={{ color: "black" }}>
               A01
             </span>
-          </p>
-          <p
+          </span>
+          <span
             style={{ color: "#535353", fontSize: "1.1rem", fontWeight: "bold" }}
           >
             工號:
             <span className="ms-2" style={{ color: "black" }}>
               15
             </span>
-          </p>
-          <p
+          </span>
+          <span
             style={{ color: "#535353", fontSize: "1.1rem", fontWeight: "bold" }}
           >
             操作員:
             <span className="ms-2" style={{ color: "black" }}>
               郭采潔
             </span>
-          </p>
-          <p
+          </span>
+          <span
             style={{ color: "#535353", fontSize: "1.1rem", fontWeight: "bold" }}
           >
             門市:
             <span className="ms-2" style={{ color: "black" }}>
               馬公門市
             </span>
-          </p>
-          <p
+          </span>
+          <span
             style={{ color: "#535353", fontSize: "1.1rem", fontWeight: "bold" }}
           >
             時間:
             <span className="ms-2" style={{ color: "black" }}>
               2024-01-25 / 12:30:55
             </span>
-          </p>
+          </span>
         </div>
         {/* 下方資訊欄 */}
         <div className="row">
