@@ -221,7 +221,7 @@ export default function ShiftChange() {
     <>
       <div className="mx-4">
         {/* 上方機器資訊 */}
-        <div className="d-flex mt-3">
+        <div className="d-flex mt-3 gap-4">
           <p
             style={{ color: "#535353", fontSize: "1.1rem", fontWeight: "bold" }}
           >
