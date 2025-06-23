@@ -37,7 +37,7 @@ export default function Give() {
     <>
       <div className="search-container d-flex flex-wrap gap-3 px-4 py-3 rounded">
         <SearchField
-          label="產品"
+          label="商品"
           type="text"
           value={orderId}
           onChange={(e) => setOrderId(e.target.value)}
@@ -68,9 +68,9 @@ export default function Give() {
         />
 
         {/* 搜尋按鈕 */}
-        <button onClick={handleSearch} className="search-button">
+        {/* <button onClick={handleSearch} className="search-button">
           搜尋
-        </button>
+        </button> */}
       </div>
       {/* 表格 */}
       <div
