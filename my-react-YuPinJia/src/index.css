@@ -211,3 +211,9 @@ input[type="number"]::-webkit-inner-spin-button {
   filter: invert(1); 
   opacity: 1;
 } */
+
+/* 首頁金額結算對齊css */
+.text-value {
+  min-width: 100px;
+  text-align: right;
+}

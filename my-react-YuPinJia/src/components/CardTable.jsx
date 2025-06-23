@@ -7,7 +7,13 @@ import { useState } from "react";
  * ── products   : 商品資料陣列
  * ── addToCart  : 加入購物車回呼函式
  */
-export default function CardTable({ products = [], addToCart, cartItems = [], onCheckout }) {
+export default function CardTable({
+  products = [],
+  addToCart,
+  cartItems = [],
+  onCheckout,
+   usedPoints = 0, // ✅ 新增的 props，從父層傳入
+}) {
   // 用來記錄「商品 id ➜ 使用者輸入的數量」的物件
   const [quantities, setQuantities] = useState({});
 
@@ -24,13 +30,16 @@ export default function CardTable({ products = [], addToCart, cartItems = [], on
     addToCart({ ...item, quantity });
   };
 
-   // ✅ 計算總數、總價、折扣後金額
+  // ✅ 計算總數、總價、折扣後金額
   const totalQuantity = cartItems.reduce((sum, item) => sum + item.quantity, 0);
-  const subtotal = cartItems.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
-  const pointDiscount = 23; // 假設固定點數折抵
+  const subtotal = cartItems.reduce(
+    (sum, item) => sum + item.unitPrice * item.quantity,
+    0
+  );
+  const pointDiscount = usedPoints; // 點數折抵
   const finalTotal = subtotal - pointDiscount;
 
-   const handleCheckout = () => {
+  const handleCheckout = () => {
     if (onCheckout) {
       onCheckout({
         items: cartItems,
@@ -38,6 +47,7 @@ export default function CardTable({ products = [], addToCart, cartItems = [], on
         subtotal,
         pointDiscount,
         finalTotal,
+        usedPoints,  
       });
     }
   };
@@ -88,7 +98,9 @@ export default function CardTable({ products = [], addToCart, cartItems = [], on
 
                       {/* 價格格式化 */}
                       <td className="text-nowrap">
-                        {Number(item.price.replace(/[^0-9.]/g, "")).toLocaleString()}
+                        {Number(
+                          item.price.replace(/[^0-9.]/g, "")
+                        ).toLocaleString()}
                       </td>
 
                       {/* 數量輸入框 */}
@@ -101,6 +113,14 @@ export default function CardTable({ products = [], addToCart, cartItems = [], on
                           onChange={(e) =>
                             handleQuantityChange(item.id, e.target.value)
                           }
+                          onFocus={(e) => {
+                            if (e.target.value) e.target.value = "";
+                          }}
+                          onBlur={(e) => {
+                            if (!e.target.value) {
+                              handleQuantityChange(item.id, 1);
+                            }
+                          }}
                           style={{ width: "70px", textAlign: "center" }}
                         />
                       </td>
@@ -132,7 +152,9 @@ export default function CardTable({ products = [], addToCart, cartItems = [], on
         {/* 底部操作按鈕 */}
         <div className="d-flex mt-3 mb-2 px-4 w-100">
           <button className="open-button me-3">開錢櫃</button>
-          <button className="checkout-button" onClick={handleCheckout}>結帳</button>
+          <button className="checkout-button" onClick={handleCheckout}>
+            結帳
+          </button>
         </div>
       </div>
     </>

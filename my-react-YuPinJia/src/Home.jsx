@@ -4,6 +4,7 @@ import Cart from "./components/Cart";
 import Navbar from "./components/Navbar";
 import CardTable from "./components/CardTable";
 import Card from "./components/Card";
+import NewArrivalTable from "./components/NewArrivalTable";
 import CheckoutModal from "./components/CheckoutModal";
 
 export default function Home({ products = [] }) {
@@ -11,21 +12,31 @@ export default function Home({ products = [] }) {
   const [cartItems, setCartItems] = useState([]);
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
   const [checkoutData, setCheckoutData] = useState(null);
-  const [currentMember, setCurrentMember] = useState(null); // ✅ 新增會員狀態
-  const [members, setMembers] = useState([]); // ✅ 讀取所有會員
+  const [currentMember, setCurrentMember] = useState(null);
+  const [members, setMembers] = useState([]);
   const navigate = useNavigate();
+  const [cartSummary, setCartSummary] = useState({
+    subtotal: 0,
+    usedPoints: 0,
+    finalTotal: 0,
+  });
 
-  /* ---------- 初始化讀取會員資料 ---------- */
+  // ✅ 初始化讀取會員資料
   useEffect(() => {
     fetch("/member.json")
       .then((res) => res.json())
       .then((data) => {
-        setMembers(data);
-        setCurrentMember(data[0]); // 預設第一位
+        if (Array.isArray(data) && data.length > 0) {
+          setMembers(data);
+          setCurrentMember(data[0]);
+        }
+      })
+      .catch((err) => {
+        console.error("載入會員資料失敗:", err);
       });
   }, []);
 
-  /* ---------- 加入購物車 ---------- */
+  // ✅ 加入購物車
   const addToCart = (product) => {
     const qty = product.quantity || 1;
     setCartItems((prev) => {
@@ -40,31 +51,39 @@ export default function Home({ products = [] }) {
         {
           ...product,
           quantity: qty,
-          unitPrice: Number(product.price.replace(/[^0-9.]/g, "")),
+          unitPrice: parseFloat(
+            product.price.replace(/[^\d.]/g, "").replace(/,/g, "")
+          ),
         },
       ];
     });
   };
 
-  /* ---------- 更新數量 ---------- */
+  // ✅ 更新購物車數量或刪除
   const updateQuantity = (id, quantity) => {
-    setCartItems((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, quantity } : p))
-    );
+    setCartItems((prev) => {
+      if (quantity <= 0) {
+        return prev.filter((item) => item.id !== id);
+      }
+      return prev.map((item) =>
+        item.id === id ? { ...item, quantity } : item
+      );
+    });
   };
 
-  /* ---------- 點擊結帳按鈕 ---------- */
+  // ✅ 點擊結帳
   const handleCheckout = (data) => {
     setCheckoutData({
       ...data,
-      member: currentMember, // ✅ 帶入會員資訊
+      member: currentMember,
     });
     setShowCheckoutModal(true);
   };
 
-  /* ---------- 確認結帳後 ---------- */
+  // ✅ 確認結帳
   const confirmCheckout = () => {
     setShowCheckoutModal(false);
+    setCartItems([]); // 清空購物車
     navigate("/pickup", { state: checkoutData });
   };
 
@@ -76,10 +95,11 @@ export default function Home({ products = [] }) {
             <Cart
               items={cartItems}
               updateQuantity={updateQuantity}
-              currentMember={currentMember} // ✅ 傳給 Cart
+              currentMember={currentMember}
               setCurrentMember={setCurrentMember}
               members={members}
               onCheckoutClick={handleCheckout}
+              onCartSummaryChange={(summary) => setCartSummary(summary)} // ✅ 接收總價資訊
             />
           </div>
 
@@ -90,17 +110,44 @@ export default function Home({ products = [] }) {
                 products={products}
                 addToCart={addToCart}
                 cartItems={cartItems}
-                onCheckout={handleCheckout}
+                usedPoints={cartSummary.usedPoints} // ✅ 將點數傳入
+                onCheckout={() =>
+                  handleCheckout({
+                    items: cartItems,
+                    subtotal: cartSummary.subtotal,
+                    usedPoints: cartSummary.usedPoints,
+                    finalTotal: cartSummary.finalTotal,
+                  })
+                }
               />
             )}
+            {activeTab === "新品排行" && (
+  <NewArrivalTable
+    products={products}
+    addToCart={addToCart}
+    cartItems={cartItems}
+    usedPoints={cartSummary.usedPoints}
+    onCheckout={() =>
+      handleCheckout({
+        items: cartItems,
+        subtotal: cartSummary.subtotal,
+        usedPoints: cartSummary.usedPoints,
+        finalTotal: cartSummary.finalTotal,
+      })
+    }
+  />
+)}
             {activeTab === "產品分類" && (
-              <Card products={products} addToCart={addToCart} />
+              <Card
+                products={products}
+                addToCart={addToCart}
+                onCheckout={handleCheckout} // ✅ 加上結帳按鈕（如果你的 Card 裡面有支援）
+              />
             )}
           </div>
         </div>
       </div>
 
-      {/* ✅ 帶入會員資料進結帳視窗 */}
       <CheckoutModal
         show={showCheckoutModal}
         onHide={() => setShowCheckoutModal(false)}

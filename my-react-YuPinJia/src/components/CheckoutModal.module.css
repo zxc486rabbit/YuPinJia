@@ -1,0 +1,16 @@
+/* CheckoutModal.module.css */
+.dialog {
+  max-width: 640px;          /* 依需求調整寬度 */
+}
+
+.bodyScroll {
+  max-height: 65vh;          /* 適合 POS 高度，可再調整 */
+  overflow-y: auto;          /* 只捲 modal body */
+}
+
+.checkBold {
+  width: 1.25rem;
+  height: 1.25rem;
+  border: 2px solid #555 !important;
+  border-radius: 0.25rem;
+}

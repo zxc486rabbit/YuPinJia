@@ -16,10 +16,10 @@ export default function QuantityControl({ defaultValue, onChange }) {
   };
 
   const handleDecrease = () => {
-    const newQty = quantity > 1 ? quantity - 1 : 1;
-    setQuantity(newQty);
-    onChange?.(newQty);
-  };
+  const newQty = quantity - 1;
+  setQuantity(newQty < 0 ? 0 : newQty);
+  onChange?.(newQty < 0 ? 0 : newQty);
+};
 
   const handleInputChange = (e) => {
     const value = parseInt(e.target.value, 10);
