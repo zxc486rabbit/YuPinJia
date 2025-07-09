@@ -52,7 +52,11 @@ export default function Home({ products = [] }) {
           ...product,
           quantity: qty,
           unitPrice: parseFloat(
-            product.price.replace(/[^\d.]/g, "").replace(/,/g, "")
+            product.unitPrice ??
+              product.price
+                ?.toString()
+                .replace(/[^\d.]/g, "")
+                .replace(/,/g, "")
           ),
         },
       ];
@@ -60,14 +64,40 @@ export default function Home({ products = [] }) {
   };
 
   // ✅ 更新購物車數量或刪除
-  const updateQuantity = (id, quantity) => {
+  const updateQuantity = (id, quantity, forceAdd = false, fullItem = null) => {
+    if (id === "__CLEAR__") {
+      setCartItems([]); // 清空購物車
+      return;
+    }
+
     setCartItems((prev) => {
+      const exist = prev.find((item) => item.id === id);
       if (quantity <= 0) {
         return prev.filter((item) => item.id !== id);
       }
-      return prev.map((item) =>
-        item.id === id ? { ...item, quantity } : item
-      );
+      if (exist) {
+        return prev.map((item) =>
+          item.id === id ? { ...item, quantity } : item
+        );
+      }
+      if (forceAdd && fullItem) {
+        return [
+          ...prev,
+          {
+            ...fullItem,
+            quantity,
+            unitPrice:
+              fullItem.unitPrice ??
+              parseFloat(
+                fullItem.price
+                  ?.toString()
+                  .replace(/[^\d.]/g, "")
+                  .replace(/,/g, "")
+              ),
+          },
+        ];
+      }
+      return prev;
     });
   };
 
@@ -94,12 +124,18 @@ export default function Home({ products = [] }) {
           <div className="col-5">
             <Cart
               items={cartItems}
-              updateQuantity={updateQuantity}
+              updateQuantity={(id, qty, forceAdd, fullItem) =>
+                updateQuantity(id, qty, forceAdd, fullItem)
+              }
               currentMember={currentMember}
               setCurrentMember={setCurrentMember}
               members={members}
               onCheckoutClick={handleCheckout}
-              onCartSummaryChange={(summary) => setCartSummary(summary)} // ✅ 接收總價資訊
+              onCartSummaryChange={(summary) => setCartSummary(summary)}
+              stockMap={products.reduce((acc, p) => {
+                acc[p.id] = p.stock ?? 9999;
+                return acc;
+              }, {})}
             />
           </div>
 
@@ -110,7 +146,7 @@ export default function Home({ products = [] }) {
                 products={products}
                 addToCart={addToCart}
                 cartItems={cartItems}
-                usedPoints={cartSummary.usedPoints} // ✅ 將點數傳入
+                usedPoints={cartSummary.usedPoints}
                 onCheckout={() =>
                   handleCheckout({
                     items: cartItems,
@@ -122,26 +158,26 @@ export default function Home({ products = [] }) {
               />
             )}
             {activeTab === "新品排行" && (
-  <NewArrivalTable
-    products={products}
-    addToCart={addToCart}
-    cartItems={cartItems}
-    usedPoints={cartSummary.usedPoints}
-    onCheckout={() =>
-      handleCheckout({
-        items: cartItems,
-        subtotal: cartSummary.subtotal,
-        usedPoints: cartSummary.usedPoints,
-        finalTotal: cartSummary.finalTotal,
-      })
-    }
-  />
-)}
+              <NewArrivalTable
+                products={products}
+                addToCart={addToCart}
+                cartItems={cartItems}
+                usedPoints={cartSummary.usedPoints}
+                onCheckout={() =>
+                  handleCheckout({
+                    items: cartItems,
+                    subtotal: cartSummary.subtotal,
+                    usedPoints: cartSummary.usedPoints,
+                    finalTotal: cartSummary.finalTotal,
+                  })
+                }
+              />
+            )}
             {activeTab === "產品分類" && (
               <Card
                 products={products}
                 addToCart={addToCart}
-                onCheckout={handleCheckout} // ✅ 加上結帳按鈕（如果你的 Card 裡面有支援）
+                onCheckout={handleCheckout}
               />
             )}
           </div>
@@ -154,6 +190,7 @@ export default function Home({ products = [] }) {
         data={checkoutData}
         member={currentMember}
         onConfirm={confirmCheckout}
+        onClearCart={() => setCartItems([])} 
       />
     </>
   );

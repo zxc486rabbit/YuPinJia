@@ -1,6 +1,7 @@
 import { Modal, Button, Table, Form } from "react-bootstrap";
 import { FaEdit, FaTrash } from "react-icons/fa";
 import { useState } from "react";
+import Swal from "sweetalert2";
 
 export default function RestockRecordModal({ show, onHide, data }) {
   const [showImageModal, setShowImageModal] = useState(false);
@@ -40,11 +41,17 @@ export default function RestockRecordModal({ show, onHide, data }) {
       operator: "汪寶寶",
       manager: "大胖熊",
     },
-    ...data,
+    ...data.map((item) => ({
+      ...item,
+      detail: item.detail || [], // 確保 detail 是陣列
+    })),
   ];
 
   const handleShowDetail = (record, editing = false) => {
-    setSelectedRecord(record);
+    setSelectedRecord({
+      ...record,
+      detail: Array.isArray(record.detail) ? record.detail : [], // 保護
+    });
     setIsEditing(editing);
     setEditableInfo({
       branch: record.branch,
@@ -55,16 +62,43 @@ export default function RestockRecordModal({ show, onHide, data }) {
     setShowDetailModal(true);
   };
 
+  const handleSave = () => {
+    Swal.fire({
+      title: "確認儲存變更？",
+      text: "儲存後將更新進貨紀錄",
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: "儲存",
+      cancelButtonText: "取消",
+    }).then((result) => {
+      if (result.isConfirmed) {
+        setIsEditing(false);
+        Swal.fire("已儲存", "進貨紀錄已更新", "success").then(() => {
+          setShowDetailModal(false);
+        });
+      }
+    });
+  };
+
   const calcTotal = () => {
     if (!selectedRecord) return { count: 0, total: 0 };
     const allItems = selectedRecord.detail || [];
-    const totalAmount = allItems.reduce((sum, item) => sum + item.quantity * item.cost, 0);
+    const totalAmount = allItems.reduce(
+      (sum, item) => sum + (item.quantity ?? 0) * (item.cost ?? 0),
+      0
+    );
     return { count: allItems.length, total: totalAmount };
   };
 
   return (
     <>
-      <Modal show={show} onHide={onHide} size="xl" dialogClassName="modal-80w" centered>
+      <Modal
+        show={show}
+        onHide={onHide}
+        size="xl"
+        dialogClassName="modal-80w"
+        centered
+      >
         <Modal.Header closeButton>
           <Modal.Title>進貨紀錄</Modal.Title>
         </Modal.Header>
@@ -93,19 +127,28 @@ export default function RestockRecordModal({ show, onHide, data }) {
                   <td>{item.date}</td>
                   <td>{item.quantity}</td>
                   <td>
-                    <button className="check-button" onClick={() => setShowImageModal(true)}>
+                    <button
+                      className="check-button"
+                      onClick={() => setShowImageModal(true)}
+                    >
                       {item.image}
                     </button>
                   </td>
                   <td>
-                    <button className="check-button" onClick={() => handleShowDetail(item)}>
+                    <button
+                      className="check-button"
+                      onClick={() => handleShowDetail(item)}
+                    >
                       檢視
                     </button>
                   </td>
                   <td>{item.operator}</td>
                   <td>{item.manager}</td>
                   <td>
-                    <button className="btn btn-sm btn-outline-primary me-1" onClick={() => handleShowDetail(item, true)}>
+                    <button
+                      className="btn btn-sm btn-outline-primary me-1"
+                      onClick={() => handleShowDetail(item, true)}
+                    >
                       <FaEdit />
                     </button>
                     <button className="btn btn-sm btn-outline-danger">
@@ -118,20 +161,36 @@ export default function RestockRecordModal({ show, onHide, data }) {
           </Table>
         </Modal.Body>
         <Modal.Footer>
-          <Button variant="secondary" onClick={onHide}>關閉</Button>
+          <Button variant="secondary" onClick={onHide}>
+            關閉
+          </Button>
         </Modal.Footer>
       </Modal>
 
-      <Modal show={showImageModal} onHide={() => setShowImageModal(false)} centered>
+      <Modal
+        show={showImageModal}
+        onHide={() => setShowImageModal(false)}
+        centered
+      >
         <Modal.Header closeButton>
           <Modal.Title>貨單照片</Modal.Title>
         </Modal.Header>
         <Modal.Body className="text-center">
-          <img src="https://via.placeholder.com/600x400.png?text=Sample+Invoice" alt="貨單" className="img-fluid" />
+          <img
+            src="https://via.placeholder.com/600x400.png?text=Sample+Invoice"
+            alt="貨單"
+            className="img-fluid"
+          />
         </Modal.Body>
       </Modal>
 
-      <Modal show={showDetailModal} onHide={() => setShowDetailModal(false)} size="xl" dialogClassName="modal-80w" centered>
+      <Modal
+        show={showDetailModal}
+        onHide={() => setShowDetailModal(false)}
+        size="xl"
+        dialogClassName="modal-80w"
+        centered
+      >
         <Modal.Header closeButton>
           <Modal.Title>進貨明細</Modal.Title>
         </Modal.Header>
@@ -139,15 +198,22 @@ export default function RestockRecordModal({ show, onHide, data }) {
           {selectedRecord && (
             <div className="mb-4 p-3 border rounded bg-white">
               <div className="row g-3">
-                {['門市', '供應商', '進貨日期', '操作員'].map((label, i) => (
+                {["門市", "供應商", "進貨日期", "操作員"].map((label, i) => (
                   <div className="col-md-3" key={label}>
-                    <Form.Label style={{ fontSize: '1rem' }}>{label}</Form.Label>
+                    <Form.Label style={{ fontSize: "1rem" }}>
+                      {label}
+                    </Form.Label>
                     <Form.Control
-                      type={label.includes('日期') ? 'date' : 'text'}
+                      type={label.includes("日期") ? "date" : "text"}
                       value={editableInfo[Object.keys(editableInfo)[i]]}
-                      onChange={(e) => setEditableInfo({ ...editableInfo, [Object.keys(editableInfo)[i]]: e.target.value })}
+                      onChange={(e) =>
+                        setEditableInfo({
+                          ...editableInfo,
+                          [Object.keys(editableInfo)[i]]: e.target.value,
+                        })
+                      }
                       disabled={!isEditing}
-                      style={{ fontSize: '1rem' }}
+                      style={{ fontSize: "1rem" }}
                     />
                   </div>
                 ))}
@@ -169,27 +235,41 @@ export default function RestockRecordModal({ show, onHide, data }) {
                 </tr>
               </thead>
               <tbody>
-                {selectedRecord?.detail.map((item, idx) => (
-                  <tr key={idx}>
-                    <td>{item.name}</td>
-                    <td>{item.category}</td>
-                    <td>{item.quantity}</td>
-                    <td>{item.pack}</td>
-                    <td>{item.unit}</td>
-                    <td>{item.price}</td>
-                    <td>{item.cost}</td>
+                {selectedRecord?.detail?.length > 0 ? (
+                  selectedRecord.detail.map((item, idx) => (
+                    <tr key={idx}>
+                      <td>{item.name}</td>
+                      <td>{item.category}</td>
+                      <td>{item.quantity}</td>
+                      <td>{item.pack}</td>
+                      <td>{item.unit}</td>
+                      <td>{item.price}</td>
+                      <td>{item.cost}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="7">此筆紀錄沒有明細資料</td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </Table>
             <div className="text-end fw-bold mt-3">
-              共計 {calcTotal().count} 項，總計：{calcTotal().total.toLocaleString()} 元
+              共計 {calcTotal().count} 項，總計：
+              {calcTotal().total.toLocaleString()} 元
             </div>
           </div>
 
           {isEditing && (
             <div className="text-end mt-3">
-              <Button style={{ backgroundColor: '#D68E08', border: 'none', fontSize: '1rem' }} onClick={() => setIsEditing(false)}>
+              <Button
+                style={{
+                  backgroundColor: "#D68E08",
+                  border: "none",
+                  fontSize: "1rem",
+                }}
+                onClick={handleSave}
+              >
                 儲存
               </Button>
             </div>

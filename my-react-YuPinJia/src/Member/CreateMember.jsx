@@ -32,7 +32,7 @@ export default function CreateMember() {
     }
 
   return (
-    <div className="container mt-5 ps-5">
+    <div className="container mt-5 ps-5 ms-0">
       <div className="card shadow rounded-4" style={{maxWidth:"60%"}}>
         <div className="card-body p-4">
           <h1 className="mb-4 fw-bold">
