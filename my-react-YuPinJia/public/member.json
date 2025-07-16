@@ -2,19 +2,59 @@
   {
     "id": 1,
     "account": "vip001",
-    "phone": "0912345678",
+    "phone": "1",
     "name": "金大發旅行社",
     "type": "VIP",
+    "subType": "導遊",
     "level": "青銅",
     "points": 23
   },
   {
     "id": 2,
     "account": "user002",
-    "phone": "0922333444",
+    "phone": "2",
     "name": "宏苑自動化",
     "type": "一般",
     "level": "白銀",
     "points": 55
+  },
+  {
+    "id": 3,
+    "account": "vip002",
+    "phone": "3",
+    "name": "昇陽企業",
+    "type": "VIP",
+    "subType": "廠商",
+    "level": "黃金",
+    "points": 120
+  },
+  {
+    "id": 4,
+    "account": "vip003",
+    "phone": "4",
+    "name": "美利達導遊",
+    "type": "VIP",
+    "subType": "導遊",
+    "level": "白金",
+    "points": 75
+  },
+  {
+    "id": 5,
+    "account": "vip004",
+    "phone": "5",
+    "name": "長榮物流",
+    "type": "VIP",
+    "subType": "廠商",
+    "level": "青銅",
+    "points": 30
+  },
+  {
+    "id": 6,
+    "account": "user003",
+    "phone": "0955666777",
+    "name": "張小明",
+    "type": "一般",
+    "level": "白銀",
+    "points": 12
   }
 ]

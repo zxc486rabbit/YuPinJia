@@ -1,10 +1,24 @@
 import QuantityControl from "./QuantityControl";
-// import DragScrollWrapper from "../components/DragScrollWrapper";
 
-export default function CartTable({ items, updateQuantity } ) {
+export default function CartTable({ items, updateQuantity, currentMember }) {
+  const getPrice = (item) => {
+    if (!currentMember) return item.unitPrice;
+    if (currentMember.type === "VIP" && currentMember.subType === "廠商") {
+      return Math.round(item.unitPrice * 0.9);
+    }
+    return item.unitPrice;
+  };
+
   return (
     <table className="table m-0" style={{ fontSize: "1.3rem" }}>
-      <thead className="table-light" style={{ borderTop: "1px solid #c5c6c7" , position: "sticky", top:"0" }}>
+      <thead
+        className="table-light"
+        style={{
+          borderTop: "1px solid #c5c6c7",
+          position: "sticky",
+          top: "0",
+        }}
+      >
         <tr>
           <th scope="col">名稱</th>
           <th scope="col">數量</th>
@@ -12,7 +26,7 @@ export default function CartTable({ items, updateQuantity } ) {
         </tr>
       </thead>
       <tbody>
-      {items.map((item) => (
+        {items.map((item) => (
           <tr key={item.id} className="cartTr">
             <td>{item.name}</td>
             <td className="quantity-control">
@@ -21,10 +35,13 @@ export default function CartTable({ items, updateQuantity } ) {
                 onChange={(value) => updateQuantity(item.id, value)}
               />
             </td>
-            <td> ${ (item.unitPrice * item.quantity).toLocaleString() }</td>
+            <td>
+              $
+              {(getPrice(item) * item.quantity).toLocaleString()}
+            </td>
           </tr>
         ))}
       </tbody>
     </table>
-  )
+  );
 }

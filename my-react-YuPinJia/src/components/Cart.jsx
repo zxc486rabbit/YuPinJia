@@ -18,7 +18,7 @@ export default function Cart({
   currentMember,
   setCurrentMember,
   members,
-   onCartSummaryChange,
+  onCartSummaryChange,
 }) {
   const [showModal, setShowModal] = useState(false); // 控制 modal 開關
   const [showReserved, setShowReserved] = useState(false); // 已保留訂單
@@ -36,8 +36,8 @@ export default function Cart({
   );
 
   const discountPerPoint = 1;
-const pointDiscount = usedPoints * discountPerPoint;
-const finalTotal = Math.max(subtotal - pointDiscount, 0);
+  const pointDiscount = usedPoints * discountPerPoint;
+  const finalTotal = Math.max(subtotal - pointDiscount, 0);
 
   /* 讀暫存訂單列表 */
   useEffect(() => {
@@ -46,10 +46,10 @@ const finalTotal = Math.max(subtotal - pointDiscount, 0);
   }, []);
 
   useEffect(() => {
-  if (typeof onCartSummaryChange === "function") {
-    onCartSummaryChange({ subtotal, usedPoints, finalTotal });
-  }
-}, [subtotal, usedPoints, finalTotal]);
+    if (typeof onCartSummaryChange === "function") {
+      onCartSummaryChange({ subtotal, usedPoints, finalTotal });
+    }
+  }, [subtotal, usedPoints, finalTotal]);
 
   /* ↘️ 1. 暫存按鈕 */
   const handleTempSave = () => {
@@ -117,56 +117,69 @@ const finalTotal = Math.max(subtotal - pointDiscount, 0);
         </div>
 
         <div className="no-scrollbar mt-3" style={{ height: "57vh" }}>
-          <CartTable items={items} updateQuantity={updateQuantity} />
+          <CartTable
+            items={items}
+            updateQuantity={updateQuantity}
+            currentMember={currentMember}
+          />
         </div>
       </div>
 
       {/* 計算區 */}
-<div className="w-100 mt-2 px-4" style={{ fontSize: "1.2rem", fontWeight: "bold" }}>
-  {/* 商品總數 */}
-  <div className="d-flex justify-content-between mb-1">
-    <span>商品總數</span>
-    <span className="text-value">{totalQuantity}</span>
-  </div>
-
-  {/* 小計 */}
-  <div className="d-flex justify-content-between mb-1">
-    <span>小計</span>
-    <span className="text-value">${subtotal.toLocaleString()}</span>
-  </div>
-
-  {/* 點數折抵輸入欄 + 全折按鈕 */}
-  <div className="d-flex justify-content-between align-items-center mb-1">
-    <span>點數折抵</span>
-    <div className="d-flex align-items-center">
-      <input
-        type="number"
-        value={usedPoints}
-        onChange={(e) => {
-          const val = parseInt(e.target.value, 10);
-          const safeVal = Math.min(Math.max(val || 0, 0), currentMember?.points || 0);
-          setUsedPoints(safeVal);
-        }}
-        className="form-control text-end me-2"
-        style={{ width: "100px", color: "#C75D00" }}
-      />
-      <button
-        className="btn btn-sm btn-outline-secondary"
-        onClick={() => setUsedPoints(currentMember?.points || 0)}
+      <div
+        className="w-100 mt-2 px-4"
+        style={{ fontSize: "1.2rem", fontWeight: "bold" }}
       >
-        全折
-      </button>
-    </div>
-  </div>
+        {/* 商品總數 */}
+        <div className="d-flex justify-content-between mb-1">
+          <span>商品總數</span>
+          <span className="text-value">{totalQuantity}</span>
+        </div>
 
-  <hr />
+        {/* 小計 */}
+        <div className="d-flex justify-content-between mb-1">
+          <span>小計</span>
+          <span className="text-value">${subtotal.toLocaleString()}</span>
+        </div>
 
-  {/* 總價 */}
-  <div className="d-flex justify-content-between" style={{ color: "#A40000" }}>
-    <span>總價</span>
-    <span className="text-value">${finalTotal.toLocaleString()}</span>
-  </div>
-</div>
+        {/* 點數折抵輸入欄 + 全折按鈕 */}
+        <div className="d-flex justify-content-between align-items-center mb-1">
+          <span>點數折抵</span>
+          <div className="d-flex align-items-center">
+            <input
+              type="number"
+              value={usedPoints}
+              onChange={(e) => {
+                const val = parseInt(e.target.value, 10);
+                const safeVal = Math.min(
+                  Math.max(val || 0, 0),
+                  currentMember?.points || 0
+                );
+                setUsedPoints(safeVal);
+              }}
+              className="form-control text-end me-2"
+              style={{ width: "100px", color: "#C75D00" }}
+            />
+            <button
+              className="btn btn-sm btn-outline-secondary"
+              onClick={() => setUsedPoints(currentMember?.points || 0)}
+            >
+              全折
+            </button>
+          </div>
+        </div>
+
+        <hr />
+
+        {/* 總價 */}
+        <div
+          className="d-flex justify-content-between"
+          style={{ color: "#A40000" }}
+        >
+          <span>總價</span>
+          <span className="text-value">${finalTotal.toLocaleString()}</span>
+        </div>
+      </div>
 
       {/* 切換會員 Modal */}
       {members?.length > 0 && (

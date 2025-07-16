@@ -1,162 +1,148 @@
-import { useState } from "react";
-
-/**
- * CardTable 產品清單表格元件
- *
- * props
- * ── products   : 商品資料陣列
- * ── addToCart  : 加入購物車回呼函式
- */
 export default function CardTable({
   products = [],
   addToCart,
   cartItems = [],
   onCheckout,
-   usedPoints = 0, // ✅ 新增的 props，從父層傳入
+  usedPoints = 0,
 }) {
-  // 用來記錄「商品 id ➜ 使用者輸入的數量」的物件
-  const [quantities, setQuantities] = useState({});
-
-  // 處理數量輸入框變動
-  const handleQuantityChange = (id, value) => {
-    setQuantities((prev) => ({
-      ...prev,
-      [id]: Number(value), // 轉成數值，避免變成字串
-    }));
+  const handleAddToCart = (item) => {
+    addToCart({ ...item, quantity: 1 });
   };
-
-  // 點擊「加入」按鈕時，將商品與數量加入購物車
-  const handleAddToCart = (item, quantity) => {
-    addToCart({ ...item, quantity });
-  };
-
-  // ✅ 計算總數、總價、折扣後金額
-  const totalQuantity = cartItems.reduce((sum, item) => sum + item.quantity, 0);
-  const subtotal = cartItems.reduce(
-    (sum, item) => sum + item.unitPrice * item.quantity,
-    0
-  );
-  const pointDiscount = usedPoints; // 點數折抵
-  const finalTotal = subtotal - pointDiscount;
 
   const handleCheckout = () => {
     if (onCheckout) {
+      const totalQuantity = cartItems.reduce(
+        (sum, item) => sum + item.quantity,
+        0
+      );
+      const subtotal = cartItems.reduce(
+        (sum, item) => sum + item.unitPrice * item.quantity,
+        0
+      );
+      const finalTotal = subtotal - usedPoints;
+
       onCheckout({
         items: cartItems,
         totalQuantity,
         subtotal,
-        pointDiscount,
+        pointDiscount: usedPoints,
         finalTotal,
-        usedPoints,  
+        usedPoints,
       });
     }
   };
 
   return (
-    <>
-      {/* 主要內容區域 */}
-      <div className="content-container w-100">
-        {/* 商品清單表格（右側） */}
-        <div className="mt-3" style={{ height: "75vh", overflow: "auto" }}>
-          <table
-            className="table mx-auto text-center"
-            style={{
-              fontSize: "1.3rem",
-              border: "1px solid #D7D7D7",
-              width: "90%",
-            }}
-          >
-            {/* 表頭固定在最上方 */}
-            <thead
-              className="table-info"
-              style={{
-                borderTop: "1px solid #c5c6c7",
-                position: "sticky",
-                top: 0,
-                background: "#d1ecf1",
-                zIndex: 1,
-              }}
-            >
-              <tr>
-                <th scope="col">商品名稱</th>
-                <th scope="col">價格</th>
-                <th scope="col">數量</th>
-                <th scope="col">操作</th>
-                <th scope="col">庫存</th>
-              </tr>
-            </thead>
+    <div className="content-container w-100">
+      <div
+        className="mt-3 px-2"
+        style={{
+          height: "75vh",
+          overflow: "auto",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "16px",
+          }}
+        >
+          {products.length > 0 ? (
+            products.map((item) => (
+              <div
+                key={item.id}
+                style={{
+                  width: "160px",
+                  height: "120px",
+                  border: "1px solid #cce5ff",
+                  borderRadius: "10px",
+                  background: "#fff",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "space-between",
+                  boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+                  cursor: "pointer",
+                  padding: "8px",
+                  transition: "all 0.2s",
+                }}
+                onClick={() => handleAddToCart(item)}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = "scale(1.02)";
+                  e.currentTarget.style.backgroundColor = "#e9f7fe";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = "scale(1)";
+                  e.currentTarget.style.backgroundColor = "#fff";
+                }}
+              >
+                {/* 商品名稱 */}
+                <div
+                  style={{
+                    fontWeight: "600",
+                    fontSize: "1.2rem",
+                    color: "#333",
+                    minHeight: "60px",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    display: "-webkit-box",
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: "vertical",
+                    textAlign: "center",
+                  }}
+                >
+                  {item.name}
+                </div>
 
-            <tbody>
-              {products.length > 0 ? (
-                products.map((item) => {
-                  const currentQty = quantities[item.id] || 1; // 取得目前輸入的數量
+                {/* 底部庫存 + 按鈕 */}
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    padding: "0 2px",
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: "0.75rem",
+                      color: item.stock > 0 ? "#155724" : "#721c24",
+                    }}
+                  >
+                    {item.stock > 0 ? `庫存 ${item.stock}` : "缺貨"}
+                  </span>
 
-                  return (
-                    <tr key={item.id}>
-                      {/* 商品名稱 */}
-                      <td>{item.name}</td>
-
-                      {/* 價格格式化 */}
-                      <td className="text-nowrap">
-                        {Number(
-                          item.price.replace(/[^0-9.]/g, "")
-                        ).toLocaleString()}
-                      </td>
-
-                      {/* 數量輸入框 */}
-                      <td>
-                        <input
-                          type="number"
-                          min="1"
-                          max={item.stock}
-                          value={currentQty}
-                          onChange={(e) =>
-                            handleQuantityChange(item.id, e.target.value)
-                          }
-                          onFocus={(e) => {
-                            if (e.target.value) e.target.value = "";
-                          }}
-                          onBlur={(e) => {
-                            if (!e.target.value) {
-                              handleQuantityChange(item.id, 1);
-                            }
-                          }}
-                          style={{ width: "70px", textAlign: "center" }}
-                        />
-                      </td>
-
-                      {/* 加入購物車按鈕 */}
-                      <td>
-                        <button
-                          onClick={() => handleAddToCart(item, currentQty)}
-                          className="add-button me-2"
-                        >
-                          加入
-                        </button>
-                      </td>
-
-                      {/* 庫存顯示 */}
-                      <td>{item.stock}</td>
-                    </tr>
-                  );
-                })
-              ) : (
-                <tr>
-                  <td colSpan="12">無資料</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* 底部操作按鈕 */}
-        <div className="d-flex mt-3 mb-2 px-4 w-100">
-          <button className="open-button me-3">開錢櫃</button>
-          <button className="checkout-button" onClick={handleCheckout}>
-            結帳
-          </button>
+                  {/* 價格 */}
+                  <div
+                    style={{
+                      color: "#ff5722",
+                      fontWeight: "700",
+                      fontSize: "1.1rem",
+                      textAlign: "center",
+                    }}
+                  >
+                    $
+                    {Number(
+                      item.price.replace(/[^0-9.]/g, "")
+                    ).toLocaleString()}
+                  </div>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="text-center mt-4">無商品資料</div>
+          )}
         </div>
       </div>
-    </>
+      {/* 底部操作按鈕 */}{" "}
+      <div className="d-flex mt-3 mb-2 px-4 w-100">
+        {" "}
+        <button className="open-button me-3">開錢櫃</button>{" "}
+        <button className="checkout-button" onClick={handleCheckout}>
+          {" "}
+          結帳{" "}
+        </button>{" "}
+      </div>
+    </div>
   );
 }

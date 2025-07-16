@@ -122,21 +122,21 @@ export default function Home({ products = [] }) {
               />
             )}
             {activeTab === "新品排行" && (
-  <NewArrivalTable
-    products={products}
-    addToCart={addToCart}
-    cartItems={cartItems}
-    usedPoints={cartSummary.usedPoints}
-    onCheckout={() =>
-      handleCheckout({
-        items: cartItems,
-        subtotal: cartSummary.subtotal,
-        usedPoints: cartSummary.usedPoints,
-        finalTotal: cartSummary.finalTotal,
-      })
-    }
-  />
-)}
+              <NewArrivalTable
+                products={products}
+                addToCart={addToCart}
+                cartItems={cartItems}
+                usedPoints={cartSummary.usedPoints}
+                onCheckout={() =>
+                  handleCheckout({
+                    items: cartItems,
+                    subtotal: cartSummary.subtotal,
+                    usedPoints: cartSummary.usedPoints,
+                    finalTotal: cartSummary.finalTotal,
+                  })
+                }
+              />
+            )}
             {activeTab === "產品分類" && (
               <Card
                 products={products}
