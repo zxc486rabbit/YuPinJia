@@ -118,7 +118,7 @@ export default function CheckoutFlow({ onComplete, cartItems = [] }) {
                 onClick={() => setDelivery(opt.label)}
               >
                 <div>{opt.icon}</div>
-                <div style={{ fontSize: "1.2rem", marginTop: "8px" }}>
+                <div style={{ fontSize: "1.1rem", marginTop: "8px" }}>
                   {opt.label}
                 </div>
               </div>
@@ -268,7 +268,7 @@ const styles = {
     borderStyle: "solid",
     borderColor: "#ddd",
     borderRadius: "8px",
-    padding: "30px",
+    padding: "15px",
     textAlign: "center",
     cursor: "pointer",
     fontWeight: "bold",
