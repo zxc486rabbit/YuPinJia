@@ -1,3 +1,5 @@
+import Swal from "sweetalert2";
+
 export default function CardTable({
   products = [],
   addToCart,
@@ -10,30 +12,113 @@ export default function CardTable({
     addToCart({ ...item, quantity: 1 });
   };
 
-  const handleCheckout = () => {
-    if (onCheckout) {
-      const totalQuantity = cartItems.reduce(
-        (sum, item) => sum + item.quantity,
-        0
-      );
-      const subtotal = cartItems.reduce(
-        (sum, item) => sum + item.unitPrice * item.quantity,
-        0
-      );
-      const finalTotal = subtotal - usedPoints;
+  const checkoutWithDiscount = (isGuideSelf = false) => {
+    const totalQuantity = cartItems.reduce(
+      (sum, item) => sum + item.quantity,
+      0
+    );
 
-      onCheckout({
-        items: cartItems,
-        totalQuantity,
-        subtotal,
-        pointDiscount: usedPoints,
-        finalTotal,
-        usedPoints,
-      });
-    }
+    const subtotal = cartItems.reduce((sum, item) => {
+      const price = Number(item.unitPrice ?? 0);
+      const shouldDiscount =
+        currentMember?.type === "VIP" &&
+        ((currentMember?.subType === "廠商") ||
+          (currentMember?.subType === "導遊" && isGuideSelf));
+      const finalPrice = shouldDiscount
+        ? Math.round(price * 0.9)
+        : price;
+
+      return sum + finalPrice * item.quantity;
+    }, 0);
+
+    const finalTotal = subtotal - usedPoints;
+
+    onCheckout?.({
+      items: cartItems,
+      totalQuantity,
+      subtotal,
+      pointDiscount: usedPoints,
+      finalTotal,
+      usedPoints,
+    });
   };
 
-  // 會員打折計算
+  const handleCheckout = () => {
+  if (!onCheckout) return;
+
+  if (currentMember?.type === "VIP" && currentMember?.subType === "導遊") {
+    Swal.fire({
+      title: "<strong>請選擇結帳身份</strong>",
+      html: `
+        <div style="display: flex; gap: 1rem; justify-content: center; margin-top:1rem;">
+          <div id="guideSelf" style="
+            flex:1;
+            cursor:pointer;
+            padding: 1.5rem;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: #f9f9f9;
+            font-size: 1.5rem;
+            font-weight: 600;
+            text-align: center;
+            transition: all 0.2s ease;
+          ">
+            導遊<br/><span style="font-size:1.2rem; color:#28a745">(9折)</span>
+          </div>
+          <div id="customer" style="
+            flex:1;
+            cursor:pointer;
+            padding: 1.5rem;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: #f9f9f9;
+            font-size: 1.5rem;
+            font-weight: 600;
+            text-align: center;
+            transition: all 0.2s ease;
+          ">
+            客人<br/><span style="font-size:1.2rem; color:#007bff">(原價)</span>
+          </div>
+        </div>
+      `,
+      showCancelButton: true,
+      cancelButtonText: `
+        <div style="font-size:1.2rem; padding:0.5rem 1rem;">
+          取消
+        </div>`,
+      showConfirmButton: false,
+      didOpen: () => {
+        const guideSelfBtn = Swal.getPopup().querySelector("#guideSelf");
+        const customerBtn = Swal.getPopup().querySelector("#customer");
+
+        guideSelfBtn.addEventListener("mouseenter", () => {
+          guideSelfBtn.style.boxShadow = "0 0 10px rgba(0,0,0,0.1)";
+        });
+        guideSelfBtn.addEventListener("mouseleave", () => {
+          guideSelfBtn.style.boxShadow = "none";
+        });
+        customerBtn.addEventListener("mouseenter", () => {
+          customerBtn.style.boxShadow = "0 0 10px rgba(0,0,0,0.1)";
+        });
+        customerBtn.addEventListener("mouseleave", () => {
+          customerBtn.style.boxShadow = "none";
+        });
+
+        guideSelfBtn.addEventListener("click", () => {
+          Swal.close();
+          checkoutWithDiscount(true);
+        });
+        customerBtn.addEventListener("click", () => {
+          Swal.close();
+          checkoutWithDiscount(false);
+        });
+      },
+    });
+  } else {
+    checkoutWithDiscount(false);
+  }
+};
+
   const getMemberPrice = (basePrice) => {
     if (currentMember?.type === "VIP" && currentMember?.subType === "廠商") {
       return Math.round(basePrice * 0.9);
@@ -103,7 +188,7 @@ export default function CardTable({
                   {item.name}
                 </div>
 
-                {/* 底部庫存 + 按鈕 */}
+                {/* 底部庫存 + 價格 */}
                 <div
                   style={{
                     display: "flex",
@@ -122,53 +207,59 @@ export default function CardTable({
                   </span>
 
                   {/* 價格 */}
-                  <div
-  style={{
-    textAlign: "right",
-  }}
->
-  {currentMember?.type === "VIP" && currentMember?.subType === "廠商" ? (
-    <div>
-      <div
-        style={{
-          fontSize: "0.8rem",
-          color: "#888",
-          textDecoration: "line-through",
-        }}
-      >
-        ${Number(item.price.replace(/[^0-9.]/g, "")).toLocaleString()}
-      </div>
-      <div
-        style={{
-          color: "#ff5722",
-          fontWeight: "700",
-          fontSize: "1.1rem",
-        }}
-      >
-        ${getMemberPrice(Number(item.price.replace(/[^0-9.]/g, ""))).toLocaleString()}
-        <span
-          style={{
-            fontSize: "0.7rem",
-            color: "#28a745",
-            marginLeft: "4px",
-          }}
-        >
-          會員價
-        </span>
-      </div>
-    </div>
-  ) : (
-    <div
-      style={{
-        color: "#ff5722",
-        fontWeight: "700",
-        fontSize: "1.1rem",
-      }}
-    >
-      ${Number(item.price.replace(/[^0-9.]/g, "")).toLocaleString()}
-    </div>
-  )}
-</div>
+                  <div style={{ textAlign: "right" }}>
+                    {currentMember?.type === "VIP" &&
+                    currentMember?.subType === "廠商" ? (
+                      <div>
+                        <div
+                          style={{
+                            fontSize: "0.8rem",
+                            color: "#888",
+                            textDecoration: "line-through",
+                          }}
+                        >
+                          $
+                          {Number(
+                            item.price.replace(/[^0-9.]/g, "")
+                          ).toLocaleString()}
+                        </div>
+                        <div
+                          style={{
+                            color: "#ff5722",
+                            fontWeight: "700",
+                            fontSize: "1.1rem",
+                          }}
+                        >
+                          $
+                          {getMemberPrice(
+                            Number(item.price.replace(/[^0-9.]/g, ""))
+                          ).toLocaleString()}
+                          <span
+                            style={{
+                              fontSize: "0.7rem",
+                              color: "#28a745",
+                              marginLeft: "4px",
+                            }}
+                          >
+                            會員價
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div
+                        style={{
+                          color: "#ff5722",
+                          fontWeight: "700",
+                          fontSize: "1.1rem",
+                        }}
+                      >
+                        $
+                        {Number(
+                          item.price.replace(/[^0-9.]/g, "")
+                        ).toLocaleString()}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             ))
@@ -177,14 +268,13 @@ export default function CardTable({
           )}
         </div>
       </div>
-      {/* 底部操作按鈕 */}{" "}
+
+      {/* 底部操作按鈕 */}
       <div className="d-flex mt-3 mb-2 px-4 w-100">
-        {" "}
-        <button className="open-button me-3">開錢櫃</button>{" "}
+        <button className="open-button me-3">開錢櫃</button>
         <button className="checkout-button" onClick={handleCheckout}>
-          {" "}
-          結帳{" "}
-        </button>{" "}
+          結帳
+        </button>
       </div>
     </div>
   );
