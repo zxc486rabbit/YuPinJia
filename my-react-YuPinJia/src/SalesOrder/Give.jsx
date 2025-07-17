@@ -137,9 +137,18 @@ export default function Give() {
       <Modal show={showModal} onHide={handleModalClose} centered>
         <Modal.Header
           closeButton
+          className="give-modal-header"
           style={{ backgroundColor: "#3D7EA6", color: "white" }}
         >
           <Modal.Title>贈送紀錄</Modal.Title>
+          {/* 強制讓 close button 白色 */}
+          <style>
+            {`
+      .give-modal-header .btn-close {
+        filter: invert(1);
+      }
+    `}
+          </style>
         </Modal.Header>
         <Modal.Body>
           {editItem && (

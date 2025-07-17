@@ -11,7 +11,14 @@ import {
 } from "react-icons/fa";
 import styles from "./CheckoutModal.module.css";
 
-export default function CheckoutModal({ show, onHide, data, onConfirm, member }) {
+export default function CheckoutModal({
+  show,
+  onHide,
+  data,
+  onConfirm,
+  member,
+  onClearCart,
+}) {
   const navigate = useNavigate();
   const finalTotal = data?.finalTotal ?? 0;
 
@@ -31,13 +38,42 @@ export default function CheckoutModal({ show, onHide, data, onConfirm, member })
 
   const [isPrinting, setIsPrinting] = useState(false);
 
-  const needExtraInfo = ["機場提貨", "碼頭提貨", "宅配到府", "訂單自取"].includes(
-    delivery
-  );
+  const needExtraInfo = [
+    "機場提貨",
+    "碼頭提貨",
+    "宅配到府",
+    "訂單自取",
+  ].includes(delivery);
 
   /* -------- 結帳 / 成立訂單 -------- */
- const handleFinish = useCallback(() => {
-  const checkoutData = {
+  const handleFinish = useCallback(() => {
+    const checkoutData = {
+      payment,
+      carrier,
+      taxId,
+      carrierNumber,
+      delivery,
+      customerName,
+      customerPhone,
+      pickupLocation,
+      pickupTime,
+      note,
+      payOnDelivery,
+    };
+
+    setIsPrinting(true); // 顯示列印中
+
+    setTimeout(() => {
+      setIsPrinting(false);
+      if (onClearCart) onClearCart();
+      if (payOnDelivery) {
+        // 貨到付款，跳轉頁面
+        navigate("/SalesOrder/SalesIndex");
+      }
+
+      onHide?.(); // 無論如何，關閉彈出框
+    }, 1000);
+  }, [
     payment,
     carrier,
     taxId,
@@ -49,35 +85,9 @@ export default function CheckoutModal({ show, onHide, data, onConfirm, member })
     pickupTime,
     note,
     payOnDelivery,
-  };
-
-  setIsPrinting(true); // 顯示列印中
-
-  setTimeout(() => {
-    setIsPrinting(false);
-
-    if (payOnDelivery) {
-      // 貨到付款，跳轉頁面
-      navigate("/SalesOrder/SalesIndex");
-    }
-
-    onHide?.(); // 無論如何，關閉彈出框
-  }, 1000);
-}, [
-  payment,
-  carrier,
-  taxId,
-  carrierNumber,
-  delivery,
-  customerName,
-  customerPhone,
-  pickupLocation,
-  pickupTime,
-  note,
-  payOnDelivery,
-  navigate,
-  onHide,
-]);
+    navigate,
+    onHide,
+  ]);
 
   /* -------- 帶入會員預設值 -------- */
   useEffect(() => {
@@ -133,42 +143,77 @@ export default function CheckoutModal({ show, onHide, data, onConfirm, member })
 
             {/* 付款方式 */}
             <Form.Group className="mb-3">
-              <Form.Label><FaCreditCard className="me-2" />付款方式</Form.Label>
-              <Form.Select size="lg" value={payment} onChange={(e) => setPayment(e.target.value)}>
-                <option>現金</option><option>刷卡</option>
-                <option>行動支付</option><option>賒帳</option>
+              <Form.Label>
+                <FaCreditCard className="me-2" />
+                付款方式
+              </Form.Label>
+              <Form.Select
+                size="lg"
+                value={payment}
+                onChange={(e) => setPayment(e.target.value)}
+              >
+                <option>現金</option>
+                <option>刷卡</option>
+                <option>行動支付</option>
+                <option>賒帳</option>
               </Form.Select>
             </Form.Group>
 
             {/* 發票載具 */}
             <Form.Group className="mb-3">
-              <Form.Label><FaBarcode className="me-2" />發票載具</Form.Label>
-              <Form.Select size="lg" value={carrier} onChange={(e) => setCarrier(e.target.value)}>
-                <option>紙本發票</option><option>手機載具</option>
-                <option>自然人憑證</option><option>統一編號</option>
+              <Form.Label>
+                <FaBarcode className="me-2" />
+                發票載具
+              </Form.Label>
+              <Form.Select
+                size="lg"
+                value={carrier}
+                onChange={(e) => setCarrier(e.target.value)}
+              >
+                <option>紙本發票</option>
+                <option>手機載具</option>
+                <option>自然人憑證</option>
+                <option>統一編號</option>
               </Form.Select>
 
               {carrier === "統一編號" && (
                 <Form.Control
-                  className="mt-2" placeholder="輸入 8 碼統編" maxLength={8}
-                  value={taxId} onChange={(e) => setTaxId(e.target.value)}
+                  className="mt-2"
+                  placeholder="輸入 8 碼統編"
+                  maxLength={8}
+                  value={taxId}
+                  onChange={(e) => setTaxId(e.target.value)}
                 />
               )}
               {carrier !== "紙本發票" && carrier !== "統一編號" && (
                 <Form.Control
-                  className="mt-2" placeholder="請輸入載具號碼"
-                  value={carrierNumber} onChange={(e) => setCarrierNumber(e.target.value)}
+                  className="mt-2"
+                  placeholder="請輸入載具號碼"
+                  value={carrierNumber}
+                  onChange={(e) => setCarrierNumber(e.target.value)}
                 />
               )}
             </Form.Group>
 
             {/* 配送方式 */}
             <Form.Group className="mb-3">
-              <Form.Label><FaTruck className="me-2" />配送方式</Form.Label>
-              <Form.Select size="lg" value={delivery} onChange={(e) => setDelivery(e.target.value)}>
-                <option>現場帶走</option><option>機場提貨</option><option>碼頭提貨</option>
-                <option>宅配到府</option><option>店到店</option><option>訂單自取</option>
-                <option>代客送貨</option><option>超商取貨</option>
+              <Form.Label>
+                <FaTruck className="me-2" />
+                配送方式
+              </Form.Label>
+              <Form.Select
+                size="lg"
+                value={delivery}
+                onChange={(e) => setDelivery(e.target.value)}
+              >
+                <option>現場帶走</option>
+                <option>機場提貨</option>
+                <option>碼頭提貨</option>
+                <option>宅配到府</option>
+                <option>店到店</option>
+                <option>訂單自取</option>
+                <option>代客送貨</option>
+                <option>超商取貨</option>
               </Form.Select>
             </Form.Group>
 
@@ -178,27 +223,44 @@ export default function CheckoutModal({ show, onHide, data, onConfirm, member })
                 <Row className="mb-2">
                   <Col>
                     <Form.Label>姓名</Form.Label>
-                    <Form.Control value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
+                    <Form.Control
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
+                    />
                   </Col>
                   <Col>
                     <Form.Label>聯絡電話</Form.Label>
-                    <Form.Control value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} />
+                    <Form.Control
+                      value={customerPhone}
+                      onChange={(e) => setCustomerPhone(e.target.value)}
+                    />
                   </Col>
                 </Row>
                 <Row className="mb-2">
                   <Col>
                     <Form.Label>出貨點</Form.Label>
-                    <Form.Control value={pickupLocation} onChange={(e) => setPickupLocation(e.target.value)} />
+                    <Form.Control
+                      value={pickupLocation}
+                      onChange={(e) => setPickupLocation(e.target.value)}
+                    />
                   </Col>
                   <Col>
                     <Form.Label>收款時間</Form.Label>
-                    <Form.Control type="datetime-local" value={pickupTime} onChange={(e) => setPickupTime(e.target.value)} />
+                    <Form.Control
+                      type="datetime-local"
+                      value={pickupTime}
+                      onChange={(e) => setPickupTime(e.target.value)}
+                    />
                   </Col>
                 </Row>
                 <Form.Group className="mb-2">
                   <Form.Label>備註</Form.Label>
-                  <Form.Control as="textarea" rows={2} placeholder="請填寫交貨相關注意事項或聯絡備註"
-                    value={note} onChange={(e) => setNote(e.target.value)}
+                  <Form.Control
+                    as="textarea"
+                    rows={2}
+                    placeholder="請填寫交貨相關注意事項或聯絡備註"
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
                   />
                 </Form.Group>
 

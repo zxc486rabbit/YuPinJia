@@ -34,21 +34,27 @@ function App() {
         {/* 主要內容區域 - 根據路由切換顯示不同內容 */}
         <div className="w-100">
           <Routes>
-          {/* 主頁 */}
-            <Route path="/" element={<Home products={products}/>} /> 
+            {/* 主頁 */}
+            <Route path="/" element={<Home products={products} />} />
             {/* 結帳頁面 */}
-                <Route path="/pickup" element={<PickupMethodPage />} />
-          {/* 銷售訂單 */}
+            <Route path="/pickup" element={<PickupMethodPage />} />
+            {/* 銷售訂單 */}
             <Route path="/SalesOrder/SalesIndex" element={<SalesIndex />} />
-          {/* 庫存 */}
+            {/* 庫存 */}
             <Route path="/Stock/StockIndex" element={<StockIndex />} />
-          {/* 會員 */}
+            {/* 會員 */}
             <Route path="/Member/MemberIndex" element={<MemberIndex />} />
-          {/* 交接班 */}
-            <Route path="/ShiftChange/ShiftChangeIndex" element={<ShiftChangeIndex />} />
-          {/* 客訴 */}
-            <Route path="/CustomerComplain/CustomerComplainIndex" element={<CustomerComplainIndex />} />
-          {/* 設定 */}
+            {/* 交接班 */}
+            <Route
+              path="/ShiftChange/ShiftChangeIndex"
+              element={<ShiftChangeIndex />}
+            />
+            {/* 客訴 */}
+            <Route
+              path="/CustomerComplain/CustomerComplainIndex"
+              element={<CustomerComplainIndex />}
+            />
+            {/* 設定 */}
             <Route path="/Setting/SettingIndex" element={<SettingIndex />} />
           </Routes>
         </div>

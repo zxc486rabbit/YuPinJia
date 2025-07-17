@@ -3,6 +3,7 @@ import * as XLSX from "xlsx";
 import { FaSearch, FaTimes } from "react-icons/fa";
 import SearchField from "../components/SearchField";
 import RestockRecordModal from "./RestockRecordModal";
+import Swal from "sweetalert2";
 
 export default function Restock() {
   const [orderId, setOrderId] = useState("");
@@ -11,6 +12,7 @@ export default function Restock() {
   const [restockList, setRestockList] = useState([]);
   const fileInputRef = useRef(null);
   const [showModal, setShowModal] = useState(false);
+  const [restockRecords, setRestockRecords] = useState([]);
 
   const handleSearch = () => {
     console.log("搜尋條件：", { orderId });
@@ -49,7 +51,9 @@ export default function Restock() {
   };
 
   const handleDelete = (product) => {
-    const confirmDelete = window.confirm(`確定要刪除「${product}」這筆商品嗎？`);
+    const confirmDelete = window.confirm(
+      `確定要刪除「${product}」這筆商品嗎？`
+    );
     if (confirmDelete) {
       setRestockList((prev) => prev.filter((item) => item.product !== product));
     }
@@ -96,7 +100,10 @@ export default function Restock() {
   return (
     <div className="container-fluid">
       <div className="row">
-        <div className="col-4 d-flex flex-column" style={{ background: "#fff", height: "89vh" }}>
+        <div
+          className="col-4 d-flex flex-column"
+          style={{ background: "#fff", height: "89vh" }}
+        >
           <div className="flex-grow-1">
             <div className="d-flex justify-content-between align-items-center my-3 mx-4">
               <h4 className="fw-bold m-0">進貨明細</h4>
@@ -108,16 +115,26 @@ export default function Restock() {
                   onChange={handleFileUpload}
                   style={{ display: "none" }}
                 />
-                <button className="add-button me-2" onClick={() => fileInputRef.current.click()}>
+                <button
+                  className="add-button me-2"
+                  onClick={() => fileInputRef.current.click()}
+                >
                   上傳進貨單
                 </button>
-                <button className="add-button" style={{ background: "#D68E08" }} onClick={() => setShowModal(true)}>
+                <button
+                  className="add-button"
+                  style={{ background: "#D68E08" }}
+                  onClick={() => setShowModal(true)}
+                >
                   進貨紀錄
                 </button>
               </div>
             </div>
             <table className="table mb-2" style={{ fontSize: "1.2rem" }}>
-              <thead className="table-light" style={{ borderTop: "1px solid #c5c6c7" }}>
+              <thead
+                className="table-light"
+                style={{ borderTop: "1px solid #c5c6c7" }}
+              >
                 <tr>
                   <th className="text-center">商品名稱</th>
                   <th className="text-center">進貨日期</th>
@@ -134,7 +151,11 @@ export default function Restock() {
                     <td className="text-center">
                       <FaTimes
                         onClick={() => handleDelete(item.product)}
-                        style={{ color: "red", cursor: "pointer", fontSize: "1rem" }}
+                        style={{
+                          color: "red",
+                          cursor: "pointer",
+                          fontSize: "1rem",
+                        }}
                         title="刪除"
                       />
                     </td>
@@ -145,18 +166,66 @@ export default function Restock() {
             <button
               className="clear-button d-flex justify-content-center ms-auto me-2"
               onClick={() => {
-                const confirmClear = window.confirm("確定要清空所有進貨明細嗎？");
-                if (confirmClear) {
-                  setRestockList([]);
-                }
+                Swal.fire({
+                  title: "確定要清空進貨明細？",
+                  text: "此操作無法復原！",
+                  icon: "warning",
+                  showCancelButton: true,
+                  confirmButtonText: "確定",
+                  cancelButtonText: "取消",
+                }).then((result) => {
+                  if (result.isConfirmed) {
+                    setRestockList([]);
+                    Swal.fire("已清空", "所有進貨明細已被清空", "success");
+                  }
+                });
               }}
             >
               清空
             </button>
           </div>
-          <div className="d-flex justify-content-between mx-4 align-items-center py-3" style={{ fontSize: "1.3rem", fontWeight: "bold", lineHeight: "1.8", borderTop: "2px solid #E2E2E2" }}>
-            <span>商品總數 : {restockList.reduce((sum, item) => sum + item.quantity, 0)} 件</span>
-            <button className="cargo-button">進貨</button>
+          <div
+            className="d-flex justify-content-between mx-4 align-items-center py-3"
+            style={{
+              fontSize: "1.3rem",
+              fontWeight: "bold",
+              lineHeight: "1.8",
+              borderTop: "2px solid #E2E2E2",
+            }}
+          >
+            <span>
+              商品總數 :{" "}
+              {restockList.reduce((sum, item) => sum + item.quantity, 0)} 件
+            </span>
+            <button
+  className="cargo-button"
+  onClick={() => {
+    if (restockList.length === 0) {
+      Swal.fire("無進貨資料", "請先添加進貨明細後再進貨", "info");
+      return;
+    }
+
+    Swal.fire({
+      title: "確認進貨？",
+      text: `共 ${restockList.reduce(
+        (sum, item) => sum + item.quantity,
+        0
+      )} 件商品`,
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: "進貨",
+      cancelButtonText: "取消",
+    }).then((result) => {
+      if (result.isConfirmed) {
+        setRestockRecords((prev) => [...prev, ...restockList]); // 👈 加到紀錄
+        setRestockList([]); // 清空購物車
+        Swal.fire("進貨完成", "商品進貨已完成", "success");
+      }
+    });
+  }}
+>
+  進貨
+</button>
           </div>
         </div>
 
@@ -184,8 +253,24 @@ export default function Restock() {
           </div>
 
           <div style={{ height: "76vh", overflow: "auto" }}>
-            <table className="table mx-auto text-center" style={{ fontSize: "1.3rem", border: "1px solid #D7D7D7", width: "90%" }}>
-              <thead className="table-info" style={{ borderTop: "1px solid #c5c6c7", position: "sticky", top: 0, background: "#d1ecf1", zIndex: 1 }}>
+            <table
+              className="table mx-auto text-center"
+              style={{
+                fontSize: "1.3rem",
+                border: "1px solid #D7D7D7",
+                width: "90%",
+              }}
+            >
+              <thead
+                className="table-info"
+                style={{
+                  borderTop: "1px solid #c5c6c7",
+                  position: "sticky",
+                  top: 0,
+                  background: "#d1ecf1",
+                  zIndex: 1,
+                }}
+              >
                 <tr>
                   <th scope="col">商品名稱</th>
                   <th scope="col">數量</th>
@@ -211,7 +296,10 @@ export default function Restock() {
                         />
                       </td>
                       <td>
-                        <button className="add-button me-2" onClick={() => handleAdd(item)}>
+                        <button
+                          className="add-button me-2"
+                          onClick={() => handleAdd(item)}
+                        >
                           加入
                         </button>
                       </td>
@@ -228,7 +316,11 @@ export default function Restock() {
         </div>
       </div>
 
-      <RestockRecordModal show={showModal} onHide={() => setShowModal(false)} data={restockList} />
+      <RestockRecordModal
+  show={showModal}
+  onHide={() => setShowModal(false)}
+  data={restockRecords}
+/>
     </div>
   );
 }

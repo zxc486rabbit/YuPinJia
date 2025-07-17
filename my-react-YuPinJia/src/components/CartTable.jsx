@@ -1,6 +1,7 @@
 import QuantityControl from "./QuantityControl";
 
 export default function CartTable({ items, updateQuantity, currentMember }) {
+  // 計算會員金額
   const getPrice = (item) => {
     if (!currentMember) return item.unitPrice;
     if (currentMember.type === "VIP" && currentMember.subType === "廠商") {

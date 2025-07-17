@@ -14,6 +14,21 @@ export default function OrderSearch() {
   const [showModal, setShowModal] = useState(false); //檢視按鈕彈出框
   const [showEditModal, setShowEditModal] = useState(false); //編輯按鈕彈出框
 
+  const renderStatusBadge = (status) => {
+    switch (status) {
+      case "已完成":
+        return <span className="badge bg-success fs-6">已完成</span>;
+      case "處理中":
+        return <span className="badge bg-warning text-dark fs-6">處理中</span>;
+      case "已取消":
+        return <span className="badge bg-danger fs-6">已取消</span>;
+      case "待出貨":
+        return <span className="badge bg-info text-dark fs-6">待出貨</span>;
+      default:
+        return <span className="badge bg-secondary fs-6">未知</span>;
+    }
+  };
+
   const handleSearch = () => {
     console.log("搜尋條件：", { orderId, pickupTime, pickupMethod, status });
   };
@@ -148,7 +163,7 @@ export default function OrderSearch() {
                   </td>
                   <td>{item.totalAmount}</td>
                   {/* <td>{item.totalCount}</td> */}
-                  <td>{item.status}</td>
+                  <td>{renderStatusBadge(item.status)}</td>
                   <td>{item.taxId}</td>
                   <td>{item.invoice}</td>
                   <td>{item.remarks}</td>
@@ -173,8 +188,12 @@ export default function OrderSearch() {
       <div className="d-flex align-items-center mt-2 ps-3">
         {/* <input type="checkbox" className="w-5 h-5 text-gray-600 me-2" /> */}
         {/* <h5 className="fw-bold mb-0 me-3">全選</h5> */}
-        <button className="pink-button me-3" style={{ fontSize: "1.2rem" }}>列印清單</button>
-        <button className="pink-button" style={{ fontSize: "1.2rem" }}>列印明細</button>
+        <button className="pink-button me-3" style={{ fontSize: "1.2rem" }}>
+          列印清單
+        </button>
+        <button className="pink-button" style={{ fontSize: "1.2rem" }}>
+          列印明細
+        </button>
       </div>
 
       <Modal
@@ -364,7 +383,7 @@ export default function OrderSearch() {
               return (
                 <div
                   className="mt-3 p-3 d-flex justify-content-between bg-light border rounded"
-                  style={{ fontSize: "1rem" ,lineHeight: "1.7" }}
+                  style={{ fontSize: "1rem", lineHeight: "1.7" }}
                 >
                   <div>
                     <div className="d-flex">
@@ -425,8 +444,15 @@ export default function OrderSearch() {
                     </div>
                     <div className="mt-3">
                       <button className="check-button fw-bold">退貨</button>
-                      <button className="delete-button mx-4 fw-bold">作廢</button>
-                      <button className="pink-button" style={{fontSize: "1rem"}}>列印明細</button>
+                      <button className="delete-button mx-4 fw-bold">
+                        作廢
+                      </button>
+                      <button
+                        className="pink-button"
+                        style={{ fontSize: "1rem" }}
+                      >
+                        列印明細
+                      </button>
                     </div>
                   </div>
                   {/* 簽名紀錄 */}

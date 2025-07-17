@@ -4,6 +4,7 @@ export default function CardTable({
   cartItems = [],
   onCheckout,
   usedPoints = 0,
+  currentMember,
 }) {
   const handleAddToCart = (item) => {
     addToCart({ ...item, quantity: 1 });
@@ -30,6 +31,14 @@ export default function CardTable({
         usedPoints,
       });
     }
+  };
+
+  // 會員打折計算
+  const getMemberPrice = (basePrice) => {
+    if (currentMember?.type === "VIP" && currentMember?.subType === "廠商") {
+      return Math.round(basePrice * 0.9);
+    }
+    return basePrice;
   };
 
   return (
@@ -114,18 +123,52 @@ export default function CardTable({
 
                   {/* 價格 */}
                   <div
-                    style={{
-                      color: "#ff5722",
-                      fontWeight: "700",
-                      fontSize: "1.1rem",
-                      textAlign: "center",
-                    }}
-                  >
-                    $
-                    {Number(
-                      item.price.replace(/[^0-9.]/g, "")
-                    ).toLocaleString()}
-                  </div>
+  style={{
+    textAlign: "right",
+  }}
+>
+  {currentMember?.type === "VIP" && currentMember?.subType === "廠商" ? (
+    <div>
+      <div
+        style={{
+          fontSize: "0.8rem",
+          color: "#888",
+          textDecoration: "line-through",
+        }}
+      >
+        ${Number(item.price.replace(/[^0-9.]/g, "")).toLocaleString()}
+      </div>
+      <div
+        style={{
+          color: "#ff5722",
+          fontWeight: "700",
+          fontSize: "1.1rem",
+        }}
+      >
+        ${getMemberPrice(Number(item.price.replace(/[^0-9.]/g, ""))).toLocaleString()}
+        <span
+          style={{
+            fontSize: "0.7rem",
+            color: "#28a745",
+            marginLeft: "4px",
+          }}
+        >
+          會員價
+        </span>
+      </div>
+    </div>
+  ) : (
+    <div
+      style={{
+        color: "#ff5722",
+        fontWeight: "700",
+        fontSize: "1.1rem",
+      }}
+    >
+      ${Number(item.price.replace(/[^0-9.]/g, "")).toLocaleString()}
+    </div>
+  )}
+</div>
                 </div>
               </div>
             ))
