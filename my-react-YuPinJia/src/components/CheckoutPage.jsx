@@ -5,11 +5,15 @@ import CheckoutFlow from "../components/CheckoutFlow";
 export default function CheckoutPage() {
   const navigate = useNavigate();
   const [cartItems, setCartItems] = useState([]);
+  const [currentMember, setCurrentMember] = useState({});
 
   useEffect(() => {
     const savedData = JSON.parse(localStorage.getItem("checkoutData") || "{}");
     if (Array.isArray(savedData.items)) {
       setCartItems(savedData.items);
+    }
+    if (savedData.member) {
+      setCurrentMember(savedData.member);
     }
   }, []);
 
@@ -33,6 +37,7 @@ export default function CheckoutPage() {
       <div style={{ padding: "20px" }}>
         <CheckoutFlow
           cartItems={cartItems}
+          currentMember={currentMember}
           onComplete={(result) => {
             navigate("/summary", { state: result });
           }}

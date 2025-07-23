@@ -1,4 +1,4 @@
-import Swal from "sweetalert2";
+import React from "react";
 
 export default function CardTable({
   products = [],
@@ -7,12 +7,29 @@ export default function CardTable({
   onCheckout,
   usedPoints = 0,
   currentMember,
+  isGuideSelf = false,
 }) {
   const handleAddToCart = (item) => {
     addToCart({ ...item, quantity: 1 });
   };
 
-  const checkoutWithDiscount = (isGuideSelf = false) => {
+  const parsePrice = (str) => Number(str.replace(/[^0-9.]/g, ""));
+
+  const getMemberPrice = (basePrice) => {
+    const discountRate =
+      isGuideSelf || currentMember?.subType === "廠商"
+        ? (currentMember?.discountRate ?? 1)
+        : 1;
+
+    if (currentMember?.type === "VIP") {
+      return Math.round(basePrice * discountRate);
+    }
+    return basePrice;
+  };
+
+  const checkoutWithDiscount = () => {
+    if (!onCheckout) return;
+
     const totalQuantity = cartItems.reduce(
       (sum, item) => sum + item.quantity,
       0
@@ -20,13 +37,11 @@ export default function CardTable({
 
     const subtotal = cartItems.reduce((sum, item) => {
       const price = Number(item.unitPrice ?? 0);
-      const shouldDiscount =
-        currentMember?.type === "VIP" &&
-        ((currentMember?.subType === "廠商") ||
-          (currentMember?.subType === "導遊" && isGuideSelf));
-      const finalPrice = shouldDiscount
-        ? Math.round(price * 0.9)
-        : price;
+      const discountRate =
+        isGuideSelf || currentMember?.subType === "廠商"
+          ? (currentMember?.discountRate ?? 1)
+          : 1;
+      const finalPrice = Math.round(price * discountRate);
 
       return sum + finalPrice * item.quantity;
     }, 0);
@@ -43,236 +58,156 @@ export default function CardTable({
     });
   };
 
-  const handleCheckout = () => {
-  if (!onCheckout) return;
-
-  if (currentMember?.type === "VIP" && currentMember?.subType === "導遊") {
-    Swal.fire({
-      title: "<strong>請選擇結帳身份</strong>",
-      html: `
-        <div style="display: flex; gap: 1rem; justify-content: center; margin-top:1rem;">
-          <div id="guideSelf" style="
-            flex:1;
-            cursor:pointer;
-            padding: 1.5rem;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            background: #f9f9f9;
-            font-size: 1.5rem;
-            font-weight: 600;
-            text-align: center;
-            transition: all 0.2s ease;
-          ">
-            導遊<br/><span style="font-size:1.2rem; color:#28a745">(9折)</span>
-          </div>
-          <div id="customer" style="
-            flex:1;
-            cursor:pointer;
-            padding: 1.5rem;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            background: #f9f9f9;
-            font-size: 1.5rem;
-            font-weight: 600;
-            text-align: center;
-            transition: all 0.2s ease;
-          ">
-            客人<br/><span style="font-size:1.2rem; color:#007bff">(原價)</span>
-          </div>
-        </div>
-      `,
-      showCancelButton: true,
-      cancelButtonText: `
-        <div style="font-size:1.2rem; padding:0.5rem 1rem;">
-          取消
-        </div>`,
-      showConfirmButton: false,
-      didOpen: () => {
-        const guideSelfBtn = Swal.getPopup().querySelector("#guideSelf");
-        const customerBtn = Swal.getPopup().querySelector("#customer");
-
-        guideSelfBtn.addEventListener("mouseenter", () => {
-          guideSelfBtn.style.boxShadow = "0 0 10px rgba(0,0,0,0.1)";
-        });
-        guideSelfBtn.addEventListener("mouseleave", () => {
-          guideSelfBtn.style.boxShadow = "none";
-        });
-        customerBtn.addEventListener("mouseenter", () => {
-          customerBtn.style.boxShadow = "0 0 10px rgba(0,0,0,0.1)";
-        });
-        customerBtn.addEventListener("mouseleave", () => {
-          customerBtn.style.boxShadow = "none";
-        });
-
-        guideSelfBtn.addEventListener("click", () => {
-          Swal.close();
-          checkoutWithDiscount(true);
-        });
-        customerBtn.addEventListener("click", () => {
-          Swal.close();
-          checkoutWithDiscount(false);
-        });
-      },
-    });
-  } else {
-    checkoutWithDiscount(false);
-  }
-};
-
-  const getMemberPrice = (basePrice) => {
-    if (currentMember?.type === "VIP" && currentMember?.subType === "廠商") {
-      return Math.round(basePrice * 0.9);
-    }
-    return basePrice;
-  };
-
   return (
     <div className="content-container w-100">
       <div
-        className="mt-3 px-2"
+        className="mt-3 px-3"
         style={{
           height: "75vh",
-          overflow: "auto",
+          overflowY: "auto",
         }}
       >
         <div
           style={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: "16px",
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
+            gap: "20px",
           }}
         >
           {products.length > 0 ? (
-            products.map((item) => (
-              <div
-                key={item.id}
-                style={{
-                  width: "160px",
-                  height: "120px",
-                  border: "1px solid #cce5ff",
-                  borderRadius: "10px",
-                  background: "#fff",
-                  display: "flex",
-                  flexDirection: "column",
-                  justifyContent: "space-between",
-                  boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
-                  cursor: "pointer",
-                  padding: "8px",
-                  transition: "all 0.2s",
-                }}
-                onClick={() => handleAddToCart(item)}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = "scale(1.02)";
-                  e.currentTarget.style.backgroundColor = "#e9f7fe";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = "scale(1)";
-                  e.currentTarget.style.backgroundColor = "#fff";
-                }}
-              >
-                {/* 商品名稱 */}
-                <div
-                  style={{
-                    fontWeight: "600",
-                    fontSize: "1.2rem",
-                    color: "#333",
-                    minHeight: "60px",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    display: "-webkit-box",
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: "vertical",
-                    textAlign: "center",
-                  }}
-                >
-                  {item.name}
-                </div>
+            products.map((item) => {
+              const originalPrice = parsePrice(item.price);
+              const discountedPrice = getMemberPrice(originalPrice);
+              const isDiscounted =
+                currentMember?.type === "VIP" &&
+                (isGuideSelf || currentMember?.subType === "廠商") &&
+                discountedPrice !== originalPrice;
 
-                {/* 底部庫存 + 價格 */}
+              return (
                 <div
+                  key={item.id}
                   style={{
+                    height: "140px",
+                    border: "1px solid #dee2e6",
+                    borderRadius: "10px",
+                    background: "#fff",
                     display: "flex",
+                    flexDirection: "column",
                     justifyContent: "space-between",
-                    alignItems: "center",
-                    padding: "0 2px",
+                    boxShadow: "0 2px 4px rgba(0,0,0,0.08)",
+                    cursor: "pointer",
+                    padding: "10px",
+                    transition: "all 0.2s",
+                  }}
+                  onClick={() => handleAddToCart(item)}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = "scale(1.03)";
+                    e.currentTarget.style.boxShadow =
+                      "0 4px 8px rgba(0,0,0,0.15)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = "scale(1)";
+                    e.currentTarget.style.boxShadow =
+                      "0 2px 4px rgba(0,0,0,0.08)";
                   }}
                 >
-                  <span
+                  <div
                     style={{
-                      fontSize: "0.75rem",
-                      color: item.stock > 0 ? "#155724" : "#721c24",
+                      fontWeight: "600",
+                      fontSize: "1rem",
+                      color: "#495057",
+                      minHeight: "48px",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      display: "-webkit-box",
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: "vertical",
+                      textAlign: "center",
                     }}
                   >
-                    {item.stock > 0 ? `庫存 ${item.stock}` : "缺貨"}
-                  </span>
+                    {item.name}
+                  </div>
 
-                  {/* 價格 */}
-                  <div style={{ textAlign: "right" }}>
-                    {currentMember?.type === "VIP" &&
-                    currentMember?.subType === "廠商" ? (
-                      <div>
-                        <div
-                          style={{
-                            fontSize: "0.8rem",
-                            color: "#888",
-                            textDecoration: "line-through",
-                          }}
-                        >
-                          $
-                          {Number(
-                            item.price.replace(/[^0-9.]/g, "")
-                          ).toLocaleString()}
-                        </div>
-                        <div
-                          style={{
-                            color: "#ff5722",
-                            fontWeight: "700",
-                            fontSize: "1.1rem",
-                          }}
-                        >
-                          $
-                          {getMemberPrice(
-                            Number(item.price.replace(/[^0-9.]/g, ""))
-                          ).toLocaleString()}
-                          <span
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      padding: "0 2px",
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: "0.75rem",
+                        backgroundColor:
+                          item.stock > 0 ? "#d4edda" : "#f8d7da",
+                        color: item.stock > 0 ? "#155724" : "#721c24",
+                        padding: "2px 4px",
+                        borderRadius: "4px",
+                      }}
+                    >
+                      {item.stock > 0 ? `庫存 ${item.stock}` : "缺貨"}
+                    </span>
+
+                    <div style={{ textAlign: "right" }}>
+                      {isDiscounted ? (
+                        <div>
+                          <div
                             style={{
-                              fontSize: "0.7rem",
-                              color: "#28a745",
-                              marginLeft: "4px",
+                              fontSize: "0.75rem",
+                              color: "#868e96",
+                              textDecoration: "line-through",
                             }}
                           >
-                            會員價
-                          </span>
+                            ${originalPrice.toLocaleString()}
+                          </div>
+                          <div
+                            style={{
+                              color: "#e83e8c",
+                              fontWeight: "700",
+                              fontSize: "1rem",
+                            }}
+                          >
+                            ${discountedPrice.toLocaleString()}
+                            <span
+                              style={{
+                                fontSize: "0.65rem",
+                                color: "#28a745",
+                                marginLeft: "3px",
+                              }}
+                            >
+                              會員價
+                            </span>
+                          </div>
                         </div>
-                      </div>
-                    ) : (
-                      <div
-                        style={{
-                          color: "#ff5722",
-                          fontWeight: "700",
-                          fontSize: "1.1rem",
-                        }}
-                      >
-                        $
-                        {Number(
-                          item.price.replace(/[^0-9.]/g, "")
-                        ).toLocaleString()}
-                      </div>
-                    )}
+                      ) : (
+                        <div
+                          style={{
+                            color: "#e83e8c",
+                            fontWeight: "700",
+                            fontSize: "1rem",
+                          }}
+                        >
+                          ${originalPrice.toLocaleString()}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           ) : (
             <div className="text-center mt-4">無商品資料</div>
           )}
         </div>
       </div>
 
-      {/* 底部操作按鈕 */}
-      <div className="d-flex mt-3 mb-2 px-4 w-100">
+      <div
+        className="d-flex mt-3 mb-2 px-4 w-100"
+        style={{ gap: "10px", justifyContent: "flex-start" }}
+      >
         <button className="open-button me-3">開錢櫃</button>
-        <button className="checkout-button" onClick={handleCheckout}>
+        <button className="checkout-button" onClick={checkoutWithDiscount}>
           結帳
         </button>
       </div>

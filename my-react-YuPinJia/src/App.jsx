@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import Sidebar from "./components/sidebar";
+import AppLayout from "./AppLayout"; // 👈 主版面
 import Home from "./Home"; // 主頁
 import SalesIndex from "./SalesOrder/SalesIndex"; // 銷售訂單頁面
 import StockIndex from "./Stock/StockIndex"; // 庫存頁面
@@ -9,6 +10,7 @@ import ShiftChangeIndex from "./ShiftChange/ShiftChangeIndex"; // 交接班頁�
 import CustomerComplainIndex from "./CustomerComplain/CustomerComplainIndex"; // 客訴頁面
 import SettingIndex from "./Setting/SettingIndex"; // 設定頁面
 import CheckoutPage from "./components/CheckoutPage"; // 結帳頁面
+import PrintPage from "./components/PrintPage"; // 列印頁面
 import "./Cart.css";
 import Modal from "react-modal";
 Modal.setAppElement("#root");
@@ -25,15 +27,9 @@ function App() {
 
   return (
     <Router>
-      <div className="d-flex">
-        {/* Sidebar 區域 */}
-        <div className="sidebar-container">
-          <Sidebar />
-        </div>
-
-        {/* 主要內容區域 - 根據路由切換顯示不同內容 */}
-        <div className="w-100">
           <Routes>
+          {/* 用 AppLayout 套 Sidebar */}
+        <Route element={<AppLayout />}>
             {/* 主頁 */}
             <Route path="/" element={<Home products={products} />} />
             {/* 結帳頁面 */}
@@ -56,9 +52,11 @@ function App() {
             />
             {/* 設定 */}
             <Route path="/Setting/SettingIndex" element={<SettingIndex />} />
+            </Route>
+
+            {/* 列印 */}
+            <Route path="/print" element={<PrintPage />} />
           </Routes>
-        </div>
-      </div>
     </Router>
   );
 }

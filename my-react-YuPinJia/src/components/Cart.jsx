@@ -22,6 +22,8 @@ export default function Cart({
   members,
   onCartSummaryChange,
   stockMap = {},
+   isGuideSelf,            // ✅ 新增
+  setIsGuideSelf    
 }) {
   const [showModal, setShowModal] = useState(false);
   const [showReserved, setShowReserved] = useState(false);
@@ -151,11 +153,74 @@ const savedAmount = originalTotal - discountedTotal;
     });
   };
 
-  const handleSwitchByInput = (member) => {
-    updateQuantity("__CLEAR__", 0);
-    setUsedPoints(0);
+ const handleSwitchByInput = (member) => {
+  updateQuantity("__CLEAR__", 0);
+  setUsedPoints(0);
+
+  if (member?.type === "VIP" && member?.subType === "導遊") {
+    Swal.fire({
+      title: "<strong>請選擇結帳身份</strong>",
+      html: `
+        <div style="display: flex; gap: 1rem; justify-content: center; margin-top:1rem;">
+          <div id="guideSelf" style="
+            flex:1;
+            cursor:pointer;
+            padding: 1.5rem;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: #f9f9f9;
+            font-size: 1.5rem;
+            font-weight: 600;
+            text-align: center;
+            transition: all 0.2s ease;
+          ">
+            導遊<br/><span style="font-size:1.2rem; color:#28a745">(${Math.round(
+              (member?.discountRate ?? 1) * 10
+            )}折)</span>
+          </div>
+          <div id="customer" style="
+            flex:1;
+            cursor:pointer;
+            padding: 1.5rem;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: #f9f9f9;
+            font-size: 1.5rem;
+            font-weight: 600;
+            text-align: center;
+            transition: all 0.2s ease;
+          ">
+            客人<br/><span style="font-size:1.2rem; color:#007bff">(原價)</span>
+          </div>
+        </div>
+      `,
+      showCancelButton: true,
+      cancelButtonText: `
+        <div style="font-size:1.2rem; padding:0.5rem 1rem;">
+          取消
+        </div>`,
+      showConfirmButton: false,
+      didOpen: () => {
+        const guideSelfBtn = Swal.getPopup().querySelector("#guideSelf");
+        const customerBtn = Swal.getPopup().querySelector("#customer");
+
+        guideSelfBtn.addEventListener("click", () => {
+          Swal.close();
+          setCurrentMember(member);
+          setIsGuideSelf(true);
+        });
+        customerBtn.addEventListener("click", () => {
+          Swal.close();
+          setCurrentMember(member);
+          setIsGuideSelf(false);
+        });
+      },
+    });
+  } else {
     setCurrentMember(member);
-  };
+    setIsGuideSelf(false);
+  }
+};
 
   return (
     <div className="cart py-3">
@@ -278,8 +343,10 @@ const savedAmount = originalTotal - discountedTotal;
   <span className="text-value">
     ${finalTotal.toLocaleString()}
     {isDealer(currentMember) && (
-      <span className="text-success ms-2 small">(含會員折扣)</span>
-    )}
+  <span className="text-success ms-2 small">
+    ( {Math.round((currentMember?.discountRate ?? 1) * 10)}折)
+  </span>
+)}
   </span>
 </div>
 </div>

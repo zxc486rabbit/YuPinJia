@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import "../components/Search.css"; // 引入 搜尋框 的 CSS 來調整樣式
 import SearchField from "../components/SearchField"; // 引入 搜尋框 模組
 import { Modal, Button } from "react-bootstrap"; // 使用彈出框套件
+import Swal from "sweetalert2";
 
 export default function OrderSearch() {
   const [orderId, setOrderId] = useState("");
@@ -14,36 +15,75 @@ export default function OrderSearch() {
   const [showModal, setShowModal] = useState(false); //檢視按鈕彈出框
   const [showEditModal, setShowEditModal] = useState(false); //編輯按鈕彈出框
 
+  const STATUS_FLOW = ["待付款", "已付款", "已出貨", "配送中", "已完成"];
+
   const renderStatusBadge = (status) => {
     switch (status) {
       case "已完成":
         return <span className="badge bg-success fs-6">已完成</span>;
-      case "處理中":
-        return <span className="badge bg-warning text-dark fs-6">處理中</span>;
-      case "已取消":
-        return <span className="badge bg-danger fs-6">已取消</span>;
-      case "待出貨":
-        return <span className="badge bg-info text-dark fs-6">待出貨</span>;
+      case "配送中":
+        return <span className="badge bg-warning text-dark fs-6">配送中</span>;
+      case "已出貨":
+        return <span className="badge bg-primary fs-6">已出貨</span>;
+      case "待付款":
+        return <span className="badge bg-info text-dark fs-6">待付款</span>;
+      case "已付款":
+        return <span className="badge bg-secondary text-light fs-6">已付款</span>;
+      case "已作廢":
+        return <span className="badge bg-danger fs-6">已作廢</span>;
       default:
         return <span className="badge bg-secondary fs-6">未知</span>;
     }
   };
 
-  const handleSearch = () => {
-    console.log("搜尋條件：", { orderId, pickupTime, pickupMethod, status });
+  const getNextStatus = (status) => {
+    const index = STATUS_FLOW.indexOf(status);
+    if (index >= 0 && index < STATUS_FLOW.length - 1) {
+      return STATUS_FLOW[index + 1];
+    }
+    return status; 
   };
 
-  // 檢視訂單彈出框
+  const getNextStepLabel = (status) => {
+    switch (status) {
+      case "待付款":
+        return "確認付款";
+      case "已付款":
+        return "確認出貨";
+      case "已出貨":
+        return "確認配送";
+      case "配送中":
+        return "完成訂單";
+      case "已完成":
+        return "已完成";
+      case "已作廢":
+        return "復原訂單";
+      default:
+        return "下一步";
+    }
+  };
+
+  const handleSearch = () => {
+    const filtered = tableData.filter((item) => {
+      if (orderId && !item.orderId.includes(orderId)) return false;
+      if (pickupTime && item.pickupTime !== pickupTime) return false;
+      if (pickupMethod !== "all" && item.pickupMethod !== pickupMethod) return false;
+      if (status !== "all" && item.status !== status) return false;
+      return true;
+    });
+    setTableData(filtered);
+  };
+
   const handleView = (order) => {
     setSelectedOrder(order);
     setShowModal(true);
   };
-  // 編輯訂單彈出框
+
   const handleEdit = (order) => {
     setSelectedOrder(order);
     setShowEditModal(true);
   };
-  // 關閉彈出框
+
   const closeModal = () => {
     setShowModal(false);
     setSelectedOrder(null);
@@ -54,8 +94,79 @@ export default function OrderSearch() {
     setSelectedOrder(null);
   };
 
+  const handleCompleteOrder = () => {
+    const isCancelled = selectedOrder?.status === "已作廢";
+    const nextStatus = isCancelled
+      ? selectedOrder.prevStatus || "待付款"
+      : getNextStatus(selectedOrder?.status);
+
+    Swal.fire({
+      title: isCancelled
+        ? `確定要復原訂單狀態為「${nextStatus}」嗎？`
+        : `確定要將訂單狀態更新為「${nextStatus}」嗎？`,
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: "是的，確認",
+      cancelButtonText: "取消",
+    }).then((result) => {
+      if (result.isConfirmed) {
+        setTableData((prev) =>
+          prev.map((order) => {
+            if (order.orderId === selectedOrder.orderId) {
+              if (isCancelled) {
+                return { ...order, status: order.prevStatus, prevStatus: null };
+              } else {
+                return { ...order, status: nextStatus };
+              }
+            }
+            return order;
+          })
+        );
+        setShowEditModal(false);
+        setSelectedOrder(null);
+
+        Swal.fire({
+          title: `訂單已更新為「${nextStatus}」`,
+          icon: "success",
+          timer: 1500,
+          showConfirmButton: false,
+        });
+      }
+    });
+  };
+
+  const handleCancelOrder = () => {
+    Swal.fire({
+      title: `確定要將訂單狀態更新為「已作廢」嗎？`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "是的，作廢",
+      cancelButtonText: "取消",
+    }).then((result) => {
+      if (result.isConfirmed) {
+        setTableData((prev) =>
+          prev.map((order) => {
+            if (order.orderId === selectedOrder.orderId) {
+              return { ...order, prevStatus: order.status, status: "已作廢" };
+            }
+            return order;
+          })
+        );
+        setShowEditModal(false);
+        setSelectedOrder(null);
+
+        Swal.fire({
+          title: `訂單已更新為「已作廢」`,
+          icon: "success",
+          timer: 1500,
+          showConfirmButton: false,
+        });
+      }
+    });
+  };
+
   useEffect(() => {
-    fetch("/SalesTable.json") // 從 public 目錄讀取 JSON
+    fetch("/SalesTable.json")
       .then((response) => response.json())
       .then((data) => setTableData(data))
       .catch((error) => console.error("載入失敗:", error));
@@ -444,15 +555,23 @@ export default function OrderSearch() {
                     </div>
                     <div className="mt-3">
                       <button className="check-button fw-bold">退貨</button>
-                      <button className="delete-button mx-4 fw-bold">
-                        作廢
-                      </button>
+                      <button className="delete-button mx-4 fw-bold" onClick={handleCancelOrder}>
+  作廢
+</button>
                       <button
                         className="pink-button"
                         style={{ fontSize: "1rem" }}
                       >
                         列印明細
                       </button>
+                      <Button
+                        variant="success"
+                        className="fw-bold ms-4"
+                        onClick={handleCompleteOrder}
+                        disabled={selectedOrder?.status === "已完成"}
+                      >
+                        {getNextStepLabel(selectedOrder?.status)}
+                      </Button>
                     </div>
                   </div>
                   {/* 簽名紀錄 */}

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React from "react";
 
 export default function NewArrivalTable({
   products = [],
@@ -6,84 +6,208 @@ export default function NewArrivalTable({
   cartItems = [],
   onCheckout,
   usedPoints = 0,
+  currentMember,
+  isGuideSelf = false,
 }) {
-  const [quantities, setQuantities] = useState({});
-
-  const handleQuantityChange = (id, value) => {
-    setQuantities((prev) => ({
-      ...prev,
-      [id]: Number(value),
-    }));
+  const handleAddToCart = (item) => {
+    addToCart({ ...item, quantity: 1 });
   };
 
-  const handleAddToCart = (item, quantity) => {
-    addToCart({ ...item, quantity });
+  const parsePrice = (str) => Number(str.replace(/[^0-9.]/g, ""));
+
+  const getMemberPrice = (basePrice) => {
+    const discountRate =
+      isGuideSelf || currentMember?.subType === "廠商"
+        ? (currentMember?.discountRate ?? 1)
+        : 1;
+
+    if (currentMember?.type === "VIP") {
+      return Math.round(basePrice * discountRate);
+    }
+    return basePrice;
   };
 
-  // ✅ 只顯示最近上架商品
-  const sortedProducts = [...products].sort((a, b) =>
-    new Date(b.createdAt) - new Date(a.createdAt)
-  );
+  const checkoutWithDiscount = () => {
+    if (!onCheckout) return;
 
-  const subtotal = cartItems.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
-  const pointDiscount = usedPoints;
-  const finalTotal = subtotal - pointDiscount;
+    const subtotal = cartItems.reduce((sum, item) => {
+      const price = Number(item.unitPrice ?? 0);
+      const discountRate =
+        isGuideSelf || currentMember?.subType === "廠商"
+          ? (currentMember?.discountRate ?? 1)
+          : 1;
+      const finalPrice = Math.round(price * discountRate);
 
-  const handleCheckout = () => {
+      return sum + finalPrice * item.quantity;
+    }, 0);
+
+    const finalTotal = subtotal - usedPoints;
+
     onCheckout?.({
       items: cartItems,
       subtotal,
-      usedPoints,
+      pointDiscount: usedPoints,
       finalTotal,
+      usedPoints,
     });
   };
 
+  const newProducts = [...products]
+    .sort((a, b) => b.id - a.id)
+    .slice(0, 6);
+
   return (
     <div className="content-container w-100">
-      <div className="mt-3" style={{ height: "75vh", overflow: "auto" }}>
-        <table className="table mx-auto text-center" style={{ width: "90%", fontSize: "1.3rem" }}>
-          <thead className="table-warning sticky-top" style={{ zIndex: 1 }}>
-            <tr>
-              <th>商品名稱</th>
-              <th>價格</th>
-              <th>數量</th>
-              <th>操作</th>
-              <th>庫存</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sortedProducts.map((item) => {
-              const qty = quantities[item.id] || 1;
+      <div
+        className="mt-3 px-3"
+        style={{
+          height: "75vh",
+          overflowY: "auto",
+        }}
+      >
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
+            gap: "20px",
+          }}
+        >
+          {newProducts.length > 0 ? (
+            newProducts.map((item) => {
+              const originalPrice = parsePrice(item.price);
+              const discountedPrice = getMemberPrice(originalPrice);
+              const isDiscounted =
+                currentMember?.type === "VIP" &&
+                (isGuideSelf || currentMember?.subType === "廠商") &&
+                discountedPrice !== originalPrice;
+
               return (
-                <tr key={item.id}>
-                  <td>{item.name}</td>
-                  <td>{Number(item.price.replace(/[^0-9.]/g, "")).toLocaleString()}</td>
-                  <td>
-                    <input
-                      type="number"
-                      min="1"
-                      max={item.stock}
-                      value={qty}
-                      onChange={(e) => handleQuantityChange(item.id, e.target.value)}
-                      style={{ width: "70px", textAlign: "center" }}
-                    />
-                  </td>
-                  <td>
-                    <button className="add-button me-2" onClick={() => handleAddToCart(item, qty)}>
-                      加入
-                    </button>
-                  </td>
-                  <td>{item.stock}</td>
-                </tr>
+                <div
+                  key={item.id}
+                  style={{
+                    height: "140px",
+                    border: "1px solid #dee2e6",
+                    borderRadius: "10px",
+                    background: "#fff",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "space-between",
+                    boxShadow: "0 2px 4px rgba(0,0,0,0.08)",
+                    cursor: "pointer",
+                    padding: "10px",
+                    transition: "all 0.2s",
+                  }}
+                  onClick={() => handleAddToCart(item)}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = "scale(1.03)";
+                    e.currentTarget.style.boxShadow =
+                      "0 4px 8px rgba(0,0,0,0.15)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = "scale(1)";
+                    e.currentTarget.style.boxShadow =
+                      "0 2px 4px rgba(0,0,0,0.08)";
+                  }}
+                >
+                  <div
+                    style={{
+                      fontWeight: "600",
+                      fontSize: "1rem",
+                      color: "#495057",
+                      minHeight: "48px",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      display: "-webkit-box",
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: "vertical",
+                      textAlign: "center",
+                    }}
+                  >
+                    {item.name}
+                  </div>
+
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      padding: "0 2px",
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: "0.75rem",
+                        backgroundColor:
+                          item.stock > 0 ? "#d4edda" : "#f8d7da",
+                        color: item.stock > 0 ? "#155724" : "#721c24",
+                        padding: "2px 4px",
+                        borderRadius: "4px",
+                      }}
+                    >
+                      {item.stock > 0 ? `庫存 ${item.stock}` : "缺貨"}
+                    </span>
+
+                    <div style={{ textAlign: "right" }}>
+                      {isDiscounted ? (
+                        <div>
+                          <div
+                            style={{
+                              fontSize: "0.75rem",
+                              color: "#868e96",
+                              textDecoration: "line-through",
+                            }}
+                          >
+                            ${originalPrice.toLocaleString()}
+                          </div>
+                          <div
+                            style={{
+                              color: "#e83e8c",
+                              fontWeight: "700",
+                              fontSize: "1rem",
+                            }}
+                          >
+                            ${discountedPrice.toLocaleString()}
+                            <span
+                              style={{
+                                fontSize: "0.65rem",
+                                color: "#28a745",
+                                marginLeft: "3px",
+                              }}
+                            >
+                              會員價
+                            </span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div
+                          style={{
+                            color: "#e83e8c",
+                            fontWeight: "700",
+                            fontSize: "1rem",
+                          }}
+                        >
+                          ${originalPrice.toLocaleString()}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
               );
-            })}
-          </tbody>
-        </table>
+            })
+          ) : (
+            <div className="text-center mt-4">無新品資料</div>
+          )}
+        </div>
       </div>
 
-      <div className="d-flex mt-3 mb-2 px-4 w-100">
+      <div
+        className="d-flex mt-3 mb-2 px-4 w-100"
+        style={{ gap: "10px", justifyContent: "flex-start" }}
+      >
         <button className="open-button me-3">開錢櫃</button>
-        <button className="checkout-button" onClick={handleCheckout}>結帳</button>
+        <button className="checkout-button" onClick={checkoutWithDiscount}>
+          結帳
+        </button>
       </div>
     </div>
   );

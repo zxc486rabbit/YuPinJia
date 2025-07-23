@@ -7,7 +7,8 @@
     "type": "VIP",
     "subType": "導遊",
     "level": "青銅",
-    "points": 23
+    "points": 23,
+    "discountRate": 0.9
   },
   {
     "id": 2,
@@ -16,7 +17,8 @@
     "name": "宏苑自動化",
     "type": "一般",
     "level": "白銀",
-    "points": 55
+    "points": 55,
+    "discountRate": 1
   },
   {
     "id": 3,
@@ -26,7 +28,8 @@
     "type": "VIP",
     "subType": "廠商",
     "level": "黃金",
-    "points": 120
+    "points": 120,
+    "discountRate": 0.85
   },
   {
     "id": 4,
@@ -36,7 +39,8 @@
     "type": "VIP",
     "subType": "導遊",
     "level": "白金",
-    "points": 75
+    "points": 75,
+    "discountRate": 0.88
   },
   {
     "id": 5,
@@ -46,7 +50,8 @@
     "type": "VIP",
     "subType": "廠商",
     "level": "青銅",
-    "points": 30
+    "points": 30,
+    "discountRate": 0.87
   },
   {
     "id": 6,
@@ -55,6 +60,7 @@
     "name": "張小明",
     "type": "一般",
     "level": "白銀",
-    "points": 12
+    "points": 12,
+    "discountRate": 1
   }
 ]
