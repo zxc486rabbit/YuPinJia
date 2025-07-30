@@ -1,13 +1,10 @@
 import QuantityControl from "./QuantityControl";
 
 export default function CartTable({ items, updateQuantity, currentMember }) {
-  // 計算會員金額
+  // 計算會員金額（改為統一使用 discountRate）
   const getPrice = (item) => {
-    if (!currentMember) return item.unitPrice;
-    if (currentMember.type === "VIP" && currentMember.subType === "廠商") {
-      return Math.round(item.unitPrice * 0.9);
-    }
-    return item.unitPrice;
+    const discount = currentMember?.discountRate ?? 1;
+    return Math.round(item.unitPrice * discount);
   };
 
   return (
@@ -28,17 +25,16 @@ export default function CartTable({ items, updateQuantity, currentMember }) {
       </thead>
       <tbody>
         {items.map((item) => (
-          <tr key={item.id} className="cartTr">
+          <tr key={item.productId} className="cartTr">
             <td>{item.name}</td>
             <td className="quantity-control">
               <QuantityControl
                 defaultValue={item.quantity}
-                onChange={(value) => updateQuantity(item.id, value)}
+                onChange={(value) => updateQuantity(item.productId, value)}
               />
             </td>
             <td>
-              $
-              {(getPrice(item) * item.quantity).toLocaleString()}
+              ${ (getPrice(item) * item.quantity).toLocaleString() }
             </td>
           </tr>
         ))}

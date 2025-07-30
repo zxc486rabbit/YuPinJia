@@ -1,4 +1,3 @@
-import { useState, useEffect } from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import Sidebar from "./components/sidebar";
 import AppLayout from "./AppLayout"; // 👈 主版面
@@ -11,27 +10,21 @@ import CustomerComplainIndex from "./CustomerComplain/CustomerComplainIndex"; //
 import SettingIndex from "./Setting/SettingIndex"; // 設定頁面
 import CheckoutPage from "./components/CheckoutPage"; // 結帳頁面
 import PrintPage from "./components/PrintPage"; // 列印頁面
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "./Cart.css";
 import Modal from "react-modal";
 Modal.setAppElement("#root");
 
 function App() {
-  const [products, setProducts] = useState([]);
-
-  useEffect(() => {
-    fetch("/product.json") // 從 public 目錄讀取 JSON
-      .then((response) => response.json())
-      .then((data) => setProducts(data))
-      .catch((error) => console.error("載入失敗:", error));
-  }, []);
-
+  const queryClient = new QueryClient();
   return (
+      <QueryClientProvider client={queryClient}>
     <Router>
           <Routes>
           {/* 用 AppLayout 套 Sidebar */}
         <Route element={<AppLayout />}>
             {/* 主頁 */}
-            <Route path="/" element={<Home products={products} />} />
+            <Route path="/" element={<Home />} />
             {/* 結帳頁面 */}
             <Route path="/checkout" element={<CheckoutPage />} />
             {/* 銷售訂單 */}
@@ -58,6 +51,7 @@ function App() {
             <Route path="/print" element={<PrintPage />} />
           </Routes>
     </Router>
+    </QueryClientProvider>
   );
 }
 

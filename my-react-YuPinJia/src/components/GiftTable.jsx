@@ -7,11 +7,16 @@ export default function GiftTable({
   onCheckout,
 }) {
   const handleAddToCart = (item) => {
-    addToCart({ ...item, quantity: 1 });
+  const product = {
+    ...item,
+    productId: item.productId ?? item.id, // ⬅️ 統一用 productId 作為 key
+    quantity: 1,
   };
+  addToCart(product);
+};
 
   // 贈送邏輯：庫存 <= 5
-  const giftProducts = products.filter((item) => item.stock <= 5);
+  const giftProducts = products.filter((item) => item.nowStock <= 5);
 
   return (
     <div className="content-container w-100">
@@ -87,13 +92,13 @@ export default function GiftTable({
                     style={{
                       fontSize: "0.75rem",
                       backgroundColor:
-                        item.stock > 0 ? "#d4edda" : "#f8d7da",
-                      color: item.stock > 0 ? "#155724" : "#721c24",
+                        item.nowStock > 0 ? "#d4edda" : "#f8d7da",
+                      color: item.nowStock > 0 ? "#155724" : "#721c24",
                       padding: "2px 4px",
                       borderRadius: "4px",
                     }}
                   >
-                    {item.stock > 0 ? `庫存 ${item.stock}` : "缺貨"}
+                    {item.nowStock > 0 ? `庫存 ${item.nowStock}` : "缺貨"}
                   </span>
 
                   <div

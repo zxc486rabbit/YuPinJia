@@ -1,35 +1,85 @@
 import { FaSearch, FaTimes } from "react-icons/fa";
 import NavbarItem from "./NavbarItem";
 import "./Navbar.css";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
-export default function Navbar({ activeTab, setActiveTab, onSearch, suggestions }) {
+export default function Navbar({
+  activeTab,
+  setActiveTab,
+  onSearch,
+  suggestions,
+}) {
   const [searchTerm, setSearchTerm] = useState("");
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [highlightIndex, setHighlightIndex] = useState(-1); // 👈 新增
 
   const handleSearch = (e) => {
     if (e.key === "Enter") {
       onSearch?.(searchTerm.trim());
+      setShowSuggestions(false);
     }
   };
 
   const handleClear = () => {
     setSearchTerm("");
     onSearch?.(""); // 重置搜尋
+    setShowSuggestions(false);
   };
 
-  const handleSuggestionClick = (serial) => {
-    setSearchTerm(serial);
-    onSearch?.(serial);
+  const handleSuggestionClick = (item) => {
+    setSearchTerm(item.name);
+    onSearch?.(item.name);
+    setShowSuggestions(false);
   };
+
+  useEffect(() => {
+    onSearch?.(searchTerm.trim());
+  }, [searchTerm]);
 
   return (
     <div className="navbar d-flex justify-content-center text-center w-100 flex-column">
       {/* 上方選單 */}
       <div className="d-flex">
-        <NavbarItem text="熱銷排行" active={activeTab === "熱銷排行"} onClick={() => setActiveTab("熱銷排行")} />
-        <NavbarItem text="新品排行" active={activeTab === "新品排行"} onClick={() => setActiveTab("新品排行")} />
-        <NavbarItem text="產品分類" active={activeTab === "產品分類"} onClick={() => setActiveTab("產品分類")} />
-        <NavbarItem text="贈送" active={activeTab === "贈送"} onClick={() => setActiveTab("贈送")} />
+        <NavbarItem
+          text="熱銷排行"
+          active={activeTab === "熱銷排行"}
+          onClick={() => {
+            setActiveTab("熱銷排行");
+            setSearchTerm("");
+            setShowSuggestions(false);
+            onSearch?.("");
+          }}
+        />
+        <NavbarItem
+          text="新品排行"
+          active={activeTab === "新品排行"}
+          onClick={() => {
+            setActiveTab("新品排行");
+            setSearchTerm("");
+            setShowSuggestions(false);
+            onSearch?.("");
+          }}
+        />
+        <NavbarItem
+          text="產品分類"
+          active={activeTab === "產品分類"}
+          onClick={() => {
+            setActiveTab("產品分類");
+            setSearchTerm("");
+            setShowSuggestions(false);
+            onSearch?.("");
+          }}
+        />
+        <NavbarItem
+          text="贈送"
+          active={activeTab === "贈送"}
+          onClick={() => {
+            setActiveTab("贈送");
+            setSearchTerm("");
+            setShowSuggestions(false);
+            onSearch?.("");
+          }}
+        />
       </div>
 
       {/* 搜尋欄 */}
@@ -42,15 +92,20 @@ export default function Navbar({ activeTab, setActiveTab, onSearch, suggestions 
           onChange={(e) => {
             const val = e.target.value;
             setSearchTerm(val);
-            onSearch?.(val.trim());
+            setShowSuggestions(true);
           }}
           onKeyDown={handleSearch}
+          onFocus={() => setShowSuggestions(true)}
         />
         {searchTerm && (
-          <FaTimes className="clear-icon" onClick={handleClear} style={{ cursor: "pointer" }} />
+          <FaTimes
+            className="clear-icon"
+            onClick={handleClear}
+            style={{ cursor: "pointer" }}
+          />
         )}
 
-        {suggestions?.length > 0 && (
+        {showSuggestions && suggestions?.length > 0 && (
           <div
             style={{
               position: "absolute",
@@ -70,9 +125,9 @@ export default function Navbar({ activeTab, setActiveTab, onSearch, suggestions 
               <div
                 key={s.id}
                 style={{ padding: "4px 8px", cursor: "pointer" }}
-                onClick={() => handleSuggestionClick(s.serialNumber)}
+                onClick={() => handleSuggestionClick(s)}
               >
-                {s.serialNumber} - {s.name}
+                {s.productNumber} - {s.name}
               </div>
             ))}
           </div>

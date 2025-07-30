@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 
 export default function CategoryProductTable({
   products = [],
@@ -8,57 +8,38 @@ export default function CategoryProductTable({
   usedPoints = 0,
   currentMember,
   isGuideSelf = false,
+  categories = [],
+  selectedCategoryId,
+  setSelectedCategoryId,
 }) {
-  const [selectedCategory, setSelectedCategory] = useState(null);
-
   const handleAddToCart = (item) => {
-    addToCart({ ...item, quantity: 1 });
+  const product = {
+    ...item,
+    productId: item.productId ?? item.id, // ⬅️ 統一用 productId 作為 key
+    quantity: 1,
   };
+  addToCart(product);
+};
 
-  const parsePrice = (str) => Number(str.replace(/[^0-9.]/g, ""));
-
+  const parsePrice = (str) => Number(String(str).replace(/[^0-9.]/g, ""));
   const getMemberPrice = (basePrice) => {
     const discountRate =
       isGuideSelf || currentMember?.subType === "廠商"
         ? currentMember?.discountRate ?? 1
         : 1;
-
     if (currentMember?.type === "VIP") {
       return Math.round(basePrice * discountRate);
     }
     return basePrice;
   };
 
-  const categoryGroups = products.reduce((acc, item) => {
-    if (!acc[item.category]) acc[item.category] = [];
-    acc[item.category].push(item);
-    return acc;
-  }, {});
-
-  const checkoutWithDiscount = () => {
-    if (!onCheckout) return;
-
-    const subtotal = cartItems.reduce((sum, item) => {
-      const price = Number(item.unitPrice ?? 0);
-      const discountRate =
-        isGuideSelf || currentMember?.subType === "廠商"
-          ? currentMember?.discountRate ?? 1
-          : 1;
-      const finalPrice = Math.round(price * discountRate);
-
-      return sum + finalPrice * item.quantity;
-    }, 0);
-
-    const finalTotal = subtotal - usedPoints;
-
-    onCheckout?.({
-      items: cartItems,
-      subtotal,
-      pointDiscount: usedPoints,
-      finalTotal,
-      usedPoints,
-    });
+  const handleCheckout = () => {
+    onCheckout?.();
   };
+
+  const currentCategory = categories.find(
+    (cat) => cat.id === selectedCategoryId
+  );
 
   return (
     <div className="content-container w-100">
@@ -69,7 +50,8 @@ export default function CategoryProductTable({
           overflowY: "auto",
         }}
       >
-        {!selectedCategory ? (
+        {/* 沒選分類時，顯示所有分類清單 */}
+        {!selectedCategoryId ? (
           <div
             style={{
               display: "grid",
@@ -77,9 +59,9 @@ export default function CategoryProductTable({
               gap: "20px",
             }}
           >
-            {Object.keys(categoryGroups).map((category) => (
+            {categories.map((cat) => (
               <div
-                key={category}
+                key={cat.id}
                 style={{
                   height: "100px",
                   border: "1px solid #dee2e6",
@@ -95,7 +77,7 @@ export default function CategoryProductTable({
                   boxShadow: "0 1px 2px rgba(0,0,0,0.1)",
                   transition: "all 0.2s",
                 }}
-                onClick={() => setSelectedCategory(category)}
+                onClick={() => setSelectedCategoryId(cat.id)}
                 onMouseEnter={(e) =>
                   (e.currentTarget.style.backgroundColor = "#e9ecef")
                 }
@@ -103,66 +85,53 @@ export default function CategoryProductTable({
                   (e.currentTarget.style.backgroundColor = "#f8f9fa")
                 }
               >
-                {category}
+                {cat.name}
               </div>
             ))}
           </div>
         ) : (
           <>
+            {/* 上方標題列與返回按鈕 */}
             <div
-  style={{
-    display: "flex",
-    alignItems: "center",
-    gap: "12px",
-    marginBottom: "16px",
-  }}
->
-  <button
-  style={{
-    padding: "8px 20px",
-    fontSize: "0.95rem",
-    fontWeight: "600",
-    background: "linear-gradient(90deg, #4a90e2, #357ABD)",
-    color: "#fff",
-    border: "none",
-    borderRadius: "6px",
-    cursor: "pointer",
-    boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
-    transition: "all 0.2s ease-in-out",
-  }}
-  onMouseEnter={(e) => {
-    e.currentTarget.style.background =
-      "linear-gradient(90deg, #357ABD, #2a65a0)";
-  }}
-  onMouseLeave={(e) => {
-    e.currentTarget.style.background =
-      "linear-gradient(90deg, #4a90e2, #357ABD)";
-  }}
-  onMouseDown={(e) => {
-    e.currentTarget.style.transform = "scale(0.97)";
-  }}
-  onMouseUp={(e) => {
-    e.currentTarget.style.transform = "scale(1)";
-  }}
-  onClick={() => setSelectedCategory(null)}
->
-  ← 返回分類
-</button>
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "12px",
+                marginBottom: "16px",
+              }}
+            >
+              <button
+                style={{
+                  padding: "8px 20px",
+                  fontSize: "0.95rem",
+                  fontWeight: "600",
+                  backgroundColor: "#357ABD", // ✅ 改為單一背景色
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                  boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+                  transition: "all 0.2s ease-in-out",
+                }}
+                onClick={() => setSelectedCategoryId(null)}
+              >
+                ← 返回分類
+              </button>
+              <h4
+                style={{
+                  borderLeft: "4px solid #adb5bd",
+                  paddingLeft: "10px",
+                  fontWeight: "700",
+                  fontSize: "1.2rem",
+                  color: "#495057",
+                  margin: 0,
+                }}
+              >
+                {currentCategory?.name || "產品列表"}
+              </h4>
+            </div>
 
-  <h4
-    style={{
-      borderLeft: "4px solid #adb5bd", // 灰色邊條
-      paddingLeft: "10px",
-      fontWeight: "700",
-      fontSize: "1.2rem",
-      color: "#495057", // 深灰文字
-      margin: 0,
-    }}
-  >
-    {selectedCategory}
-  </h4>
-</div>
-
+            {/* 商品清單 */}
             <div
               style={{
                 display: "grid",
@@ -170,7 +139,7 @@ export default function CategoryProductTable({
                 gap: "20px",
               }}
             >
-              {categoryGroups[selectedCategory].map((item) => {
+              {products.map((item) => {
                 const originalPrice = parsePrice(item.price);
                 const discountedPrice = getMemberPrice(originalPrice);
                 const isDiscounted =
@@ -180,7 +149,7 @@ export default function CategoryProductTable({
 
                 return (
                   <div
-                    key={item.id}
+                    key={item.productId}
                     style={{
                       height: "140px",
                       border: "1px solid #dee2e6",
@@ -235,18 +204,18 @@ export default function CategoryProductTable({
                         style={{
                           fontSize: "0.75rem",
                           backgroundColor:
-                            item.stock > 0 ? "#d4edda" : "#f8d7da",
-                          color: item.stock > 0 ? "#155724" : "#721c24",
+                            item.nowStock > 0 ? "#d4edda" : "#f8d7da",
+                          color: item.nowStock > 0 ? "#155724" : "#721c24",
                           padding: "2px 4px",
                           borderRadius: "4px",
                         }}
                       >
-                        {item.stock > 0 ? `庫存 ${item.stock}` : "缺貨"}
+                        {item.nowStock > 0 ? `庫存 ${item.nowStock}` : "缺貨"}
                       </span>
 
                       <div style={{ textAlign: "right" }}>
                         {isDiscounted ? (
-                          <div>
+                          <>
                             <div
                               style={{
                                 fontSize: "0.75rem",
@@ -274,7 +243,7 @@ export default function CategoryProductTable({
                                 會員價
                               </span>
                             </div>
-                          </div>
+                          </>
                         ) : (
                           <div
                             style={{
@@ -301,7 +270,7 @@ export default function CategoryProductTable({
         style={{ gap: "10px", justifyContent: "flex-start" }}
       >
         <button className="open-button me-3">開錢櫃</button>
-        <button className="checkout-button" onClick={checkoutWithDiscount}>
+        <button className="checkout-button" onClick={handleCheckout}>
           結帳
         </button>
       </div>

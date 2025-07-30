@@ -9,11 +9,20 @@ export default function CardTable({
   currentMember,
   isGuideSelf = false,
 }) {
-  const handleAddToCart = (item) => {
-    addToCart({ ...item, quantity: 1 });
+ const handleAddToCart = (item) => {
+  const product = {
+    ...item,
+    productId: item.productId ?? item.id, // ⬅️ 統一用 productId 作為 key
+    quantity: 1,
   };
+  addToCart(product);
+};
 
-  const parsePrice = (str) => Number(str.replace(/[^0-9.]/g, ""));
+const parsePrice = (str) => {
+  return typeof str === "number"
+    ? str
+    : parseFloat(String(str ?? "0").replace(/[^\d.]/g, "")) || 0;
+};
 
   const getMemberPrice = (basePrice) => {
     const discountRate =
@@ -140,13 +149,13 @@ export default function CardTable({
                       style={{
                         fontSize: "0.75rem",
                         backgroundColor:
-                          item.stock > 0 ? "#d4edda" : "#f8d7da",
-                        color: item.stock > 0 ? "#155724" : "#721c24",
+                          item.nowStock  > 0 ? "#d4edda" : "#f8d7da",
+                        color: item.nowStock  > 0 ? "#155724" : "#721c24",
                         padding: "2px 4px",
                         borderRadius: "4px",
                       }}
                     >
-                      {item.stock > 0 ? `庫存 ${item.stock}` : "缺貨"}
+                      {item.nowStock  > 0 ? `庫存 ${item.nowStock }` : "缺貨"}
                     </span>
 
                     <div style={{ textAlign: "right" }}>

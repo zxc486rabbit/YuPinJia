@@ -1,21 +1,36 @@
 import { useState, useEffect } from "react";
+import axios from "axios";
 import "../components/Search.css"; // 引入 搜尋框 的 CSS 來調整樣式
 import SearchField from "../components/SearchField"; // 引入 搜尋框 模組
 import { Modal, Button } from "react-bootstrap"; // 使用彈出框套件
 import Swal from "sweetalert2";
 
-export default function OrderSearch() {
+export default function Sales() {
   const [orderId, setOrderId] = useState("");
   const [pickupTime, setPickupTime] = useState("");
   const [pickupMethod, setPickupMethod] = useState("all");
   const [status, setStatus] = useState("all");
 
-  const [tableData, setTableData] = useState([]); // 存放表格資料
+  const [tableData, setTableData] = useState([]); // 僅供顯示與搜尋用
+  const [originalData, setOriginalData] = useState([]); // /保留全部原始資料
+  const [memberMap, setMemberMap] = useState({}); // 會員姓名
   const [selectedOrder, setSelectedOrder] = useState(null); //記錄選到哪筆
   const [showModal, setShowModal] = useState(false); //檢視按鈕彈出框
   const [showEditModal, setShowEditModal] = useState(false); //編輯按鈕彈出框
 
-  const STATUS_FLOW = ["待付款", "已付款", "已出貨", "配送中", "已完成"];
+  const STATUS_FLOW = ["賒帳", "已付款", "已出貨", "配送中", "已完成"];
+  const statusMap = {
+    0: "未付款",
+    1: "賒帳",
+    2: "已付款",
+    3: "已出貨",
+    4: "配送中",
+    5: "已完成",
+  };
+
+  const reverseStatusMap = Object.fromEntries(
+    Object.entries(statusMap).map(([key, val]) => [val, Number(key)])
+  );
 
   const renderStatusBadge = (status) => {
     switch (status) {
@@ -28,9 +43,13 @@ export default function OrderSearch() {
       case "待付款":
         return <span className="badge bg-info text-dark fs-6">待付款</span>;
       case "已付款":
-        return <span className="badge bg-secondary text-light fs-6">已付款</span>;
-      case "已作廢":
+        return (
+          <span className="badge bg-secondary text-light fs-6">已付款</span>
+        );
+      case "作廢":
         return <span className="badge bg-danger fs-6">已作廢</span>;
+      case "賒帳":
+        return <span className="badge bg-warning text-dark fs-6">賒帳</span>;
       default:
         return <span className="badge bg-secondary fs-6">未知</span>;
     }
@@ -41,12 +60,12 @@ export default function OrderSearch() {
     if (index >= 0 && index < STATUS_FLOW.length - 1) {
       return STATUS_FLOW[index + 1];
     }
-    return status; 
+    return status; // 已經是「已完成」就不變
   };
 
   const getNextStepLabel = (status) => {
     switch (status) {
-      case "待付款":
+      case "賒帳":
         return "確認付款";
       case "已付款":
         return "確認出貨";
@@ -63,81 +82,247 @@ export default function OrderSearch() {
     }
   };
 
+  // 封裝「折扣後總價」邏輯
+  const calculateDiscountedTotal = (unitPrice, quantity, discount = 0) => {
+    return unitPrice * quantity - discount;
+  };
+
   const handleSearch = () => {
-    const filtered = tableData.filter((item) => {
-      if (orderId && !item.orderId.includes(orderId)) return false;
-      if (pickupTime && item.pickupTime !== pickupTime) return false;
-      if (pickupMethod !== "all" && item.pickupMethod !== pickupMethod) return false;
-      if (status !== "all" && item.status !== status) return false;
-      return true;
+  axios
+    .get("https://yupinjia.hyjr.com.tw/api/api/t_SalesOrder", {
+      params: {
+        orderNumber: orderId || undefined,
+        pickupTime: pickupTime || undefined,
+        deliveryMethod: pickupMethod !== "all" ? pickupMethod : undefined,
+        status: status !== "all" ? Number(status) : undefined,
+      },
+    })
+    .then((res) => {
+      const raw = res.data;
+      raw.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+      const mapped = raw.map((order) => {
+        const member = memberMap[order.memberId];
+        const identity = member?.isDistributor
+          ? member?.buyerType === 1
+            ? "(導遊)"
+            : member?.buyerType === 2
+            ? "(經銷商)"
+            : ""
+          : "";
+
+        const total = Number(order.totalAmount || 0);
+        const paid = Number(order.paymentAmount || 0);
+        const delivery = order.deliveryMethod ?? "";
+
+        return {
+          id: order.id,
+          orderId: order.orderNumber,
+          store: order.storeName ?? "馬公門市",
+          member: `${member?.fullName || "未命名會員"} ${identity}`,
+          phone: order.mobile ?? "",
+          totalAmount: total.toLocaleString(),
+          pay: order.paymentMethod ?? "現金付款",
+          carrier: order.carrierNumber || "無",
+          invoice: order.invoiceNumber || "無",
+          taxId: order.unifiedBusinessNumber || "無",
+          address:
+            order.pickupInfo?.match(/地點:(.*?),/)?.[1] ||
+            order.pickupInfo?.match(/地點:(.*)/)?.[1] ||
+            "",
+          pickupTime: order.pickupInfo?.match(/時間:(.*)/)?.[1] ?? "無",
+          operator: order.operatorName ?? "操作員A",
+          deliveryMethod: delivery,
+          createdDate: order.createdAt?.split("T")[0] ?? "",
+          paymentAmount: paid,
+          creditAmount: total - paid,
+          status: statusMap[order.status] ?? "未知",
+        };
+      });
+
+      setOriginalData(mapped);
+      setTableData(mapped);
+    })
+    .catch((err) => {
+      console.error("搜尋失敗", err);
+      Swal.fire("錯誤", "搜尋訂單失敗，請稍後再試", "error");
     });
-    setTableData(filtered);
-  };
+};
 
-  const handleView = (order) => {
-    setSelectedOrder(order);
+  // 檢視訂單彈出框
+const handleView = async (order) => {
+  try {
+    setSelectedOrder({ ...order, productDetails: [] }); // 先打開空的彈出框
     setShowModal(true);
-  };
 
-  const handleEdit = (order) => {
-    setSelectedOrder(order);
-    setShowEditModal(true);
-  };
+    const res = await axios.get(
+      `https://yupinjia.hyjr.com.tw/api/api/t_SalesOrderItem/${order.id}`
+    );
 
+    // 因為是單筆資料，所以包成陣列後再處理
+    const productDetails = [res.data].map((item) => ({
+      productName: item.productName,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      discountedAmount: item.discountedAmount ?? 0,
+    }));
+
+    setSelectedOrder((prev) => ({
+      ...prev,
+      productDetails,
+    }));
+  } catch (error) {
+    console.error("取得商品明細失敗", error);
+    Swal.fire("錯誤", "載入商品明細失敗", "error");
+  }
+};
+
+  // 編輯訂單彈出框
+  const handleEdit = async (order) => {
+  // Step 1: 先開彈出框（視覺上更即時）
+  setSelectedOrder({
+    ...order,
+    productDetails: [],
+    totalAmount: 0,
+    paymentAmount: order.paymentAmount ?? 0,
+    creditAmount: 0,
+  });
+  setShowEditModal(true);
+
+  try {
+    // Step 2: 同步抓商品明細與最新主表
+    const [itemRes, mainOrderRes] = await Promise.all([
+      axios.get(`https://yupinjia.hyjr.com.tw/api/api/t_SalesOrderItem/${order.id}`),
+      axios.get(`https://yupinjia.hyjr.com.tw/api/api/t_SalesOrder/${order.id}`),
+    ]);
+
+    // Step 3: 商品明細處理
+    const item = itemRes.data;
+    const productDetails = Array.isArray(item) ? item : [item]; // 保險寫法
+    const parsedDetails = productDetails.map((p) => ({
+      productName: p.productName,
+      shippingLocation: p.shippingLocation ?? "",
+      quantity: p.quantity,
+      unitPrice: p.unitPrice,
+      discountedAmount: p.discountedAmount ?? 0,
+      status: p.status ?? "",
+    }));
+
+    const totalAmount = parsedDetails.reduce((sum, item) => {
+      return sum + item.unitPrice * item.quantity - item.discountedAmount;
+    }, 0);
+
+    const paidAmount = Number(mainOrderRes.data.paymentAmount || 0);
+    const newStatus = paidAmount < totalAmount ? "賒帳" : "已付款";
+
+    // Step 4: 更新主表資料
+    await axios.put(
+      `https://yupinjia.hyjr.com.tw/api/api/t_SalesOrder/${order.id}`,
+      {
+        ...mainOrderRes.data,
+        totalAmount: totalAmount,
+        status: statusMap[newStatus],
+      }
+    );
+
+    // Step 5: 更新彈出框資料
+    setSelectedOrder((prev) => ({
+      ...prev,
+      totalAmount,
+      paymentAmount: paidAmount,
+      creditAmount: totalAmount - paidAmount,
+      status: newStatus,
+      productDetails: parsedDetails,
+    }));
+  } catch (error) {
+    console.error("載入或更新主表失敗", error);
+    Swal.fire("錯誤", "無法載入訂單明細或更新主表", "error");
+  }
+};
+  // 關閉彈出框
   const closeModal = () => {
     setShowModal(false);
     setSelectedOrder(null);
   };
 
-  const closeEditModal = () => {
-    setShowEditModal(false);
-    setSelectedOrder(null);
-  };
+  const handleCompleteOrder = async () => {
+    if (!selectedOrder) return;
 
-  const handleCompleteOrder = () => {
-    const isCancelled = selectedOrder?.status === "已作廢";
-    const nextStatus = isCancelled
-      ? selectedOrder.prevStatus || "待付款"
-      : getNextStatus(selectedOrder?.status);
+    const FLOW = ["未付款", "賒帳", "已付款", "已出貨", "配送中", "已完成"];
 
-    Swal.fire({
-      title: isCancelled
-        ? `確定要復原訂單狀態為「${nextStatus}」嗎？`
-        : `確定要將訂單狀態更新為「${nextStatus}」嗎？`,
+    const currentStatus = selectedOrder.status;
+    const index = FLOW.indexOf(currentStatus);
+    const nextStatus =
+      index >= 0 && index < FLOW.length - 1 ? FLOW[index + 1] : currentStatus;
+    const nextStatusCode = reverseStatusMap[nextStatus]; // 中文轉數字
+
+    if (nextStatusCode === undefined) {
+      Swal.fire("錯誤", "狀態轉換錯誤，請聯繫管理員", "error");
+      return;
+    }
+
+    const confirmText = `確定要將訂單狀態變更為「${nextStatus}」嗎？`;
+
+    const result = await Swal.fire({
+      title: confirmText,
       icon: "question",
       showCancelButton: true,
-      confirmButtonText: "是的，確認",
+      confirmButtonText: "確認",
       cancelButtonText: "取消",
-    }).then((result) => {
-      if (result.isConfirmed) {
-        setTableData((prev) =>
-          prev.map((order) => {
-            if (order.orderId === selectedOrder.orderId) {
-              if (isCancelled) {
-                return { ...order, status: order.prevStatus, prevStatus: null };
-              } else {
-                return { ...order, status: nextStatus };
-              }
-            }
-            return order;
-          })
-        );
-        setShowEditModal(false);
-        setSelectedOrder(null);
-
-        Swal.fire({
-          title: `訂單已更新為「${nextStatus}」`,
-          icon: "success",
-          timer: 1500,
-          showConfirmButton: false,
-        });
-      }
     });
+
+    if (!result.isConfirmed) return;
+
+    const payload = {
+      id: selectedOrder.id,
+      orderNumber: selectedOrder.orderId || "",
+      storeId: selectedOrder.storeId || 1,
+      memberId: selectedOrder.memberId || 1,
+      totalAmount: Number(
+        selectedOrder.totalAmount?.toString().replace(/,/g, "") || 0
+      ),
+      totalQuantity: selectedOrder.totalQuantity || 1,
+      status: nextStatusCode, // ✅ 正確：送數字狀態碼給後端
+      unifiedBusinessNumber: selectedOrder.unifiedBusinessNumber || "",
+      invoiceNumber: selectedOrder.invoiceNumber || "",
+      note: selectedOrder.note || "",
+      deliveryMethod: selectedOrder.deliveryMethod || "",
+      dealerMemberId: selectedOrder.dealerMemberId || 0,
+      paymentMethod: selectedOrder.paymentMethod || "現金付款",
+      carrierNumber: selectedOrder.carrierNumber || "",
+      createdAt: selectedOrder.createdAt || new Date().toISOString(),
+      operatorName: selectedOrder.operatorName || "系統",
+      pickupInfo: selectedOrder.pickupInfo || "",
+      signature: selectedOrder.signature || "",
+      mobile: selectedOrder.mobile || "0912345678",
+    };
+
+    try {
+      await axios.put(
+        `https://yupinjia.hyjr.com.tw/api/api/t_SalesOrder/${selectedOrder.id}`,
+        payload
+      );
+
+      Swal.fire("更新成功", `訂單狀態已變更為「${nextStatus}」`, "success");
+
+      // 更新彈出框中的資料狀態
+      setSelectedOrder({ ...selectedOrder, status: nextStatus });
+
+      // 更新表格資料（狀態用中文）
+      setTableData((prev) =>
+        prev.map((item) =>
+          item.id === selectedOrder.id ? { ...item, status: nextStatus } : item
+        )
+      );
+    } catch (error) {
+      console.error("更新訂單狀態失敗：", error);
+      Swal.fire("錯誤", "更新訂單狀態失敗，請稍後再試", "error");
+    }
   };
 
   const handleCancelOrder = () => {
     Swal.fire({
-      title: `確定要將訂單狀態更新為「已作廢」嗎？`,
+      title: `確定要將訂單狀態更新為「已取消」嗎？`,
       icon: "warning",
       showCancelButton: true,
       confirmButtonText: "是的，作廢",
@@ -156,7 +341,7 @@ export default function OrderSearch() {
         setSelectedOrder(null);
 
         Swal.fire({
-          title: `訂單已更新為「已作廢」`,
+          title: `訂單已更新為「已取消」`,
           icon: "success",
           timer: 1500,
           showConfirmButton: false,
@@ -165,12 +350,99 @@ export default function OrderSearch() {
     });
   };
 
+  const closeEditModal = () => {
+    setShowEditModal(false);
+    setSelectedOrder(null);
+  };
+
+  // 先載入會員對照表
   useEffect(() => {
-    fetch("/SalesTable.json")
-      .then((response) => response.json())
-      .then((data) => setTableData(data))
-      .catch((error) => console.error("載入失敗:", error));
+    axios
+      .get("https://yupinjia.hyjr.com.tw/api/api/t_Member")
+      .then((res) => {
+        const map = {};
+        res.data.forEach((m) => {
+          map[m.id] = {
+            fullName: m.fullName,
+            buyerType: m.buyerType, // 1=導遊、2=經銷商
+          };
+        });
+        setMemberMap(map);
+      })
+      .catch((err) => console.error("載入會員失敗", err));
   }, []);
+
+  // 再載入訂單資料
+  useEffect(() => {
+    axios
+      .get("https://yupinjia.hyjr.com.tw/api/api/t_SalesOrder")
+      .then((res) => {
+        const raw = res.data;
+
+        // ✅ 加這一行：照建立時間從新到舊排
+        raw.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+        const mapped = raw.map((order) => {
+          const member = memberMap[order.memberId];
+          const identity = member?.isDistributor
+            ? member?.buyerType === 1
+              ? "(導遊)"
+              : member?.buyerType === 2
+              ? "(經銷商)"
+              : ""
+            : "";
+
+          const total = Number(order.totalAmount || 0);
+          const paid = Number(order.paymentAmount || 0);
+          const delivery = order.deliveryMethod ?? "";
+
+          return {
+            id: order.id,
+            orderId: order.orderNumber,
+            store: order.storeName ?? "馬公門市",
+            member: `${member?.fullName || "未命名會員"} ${identity}`,
+            phone: order.mobile ?? "",
+            totalAmount: total.toLocaleString(),
+            pay: order.paymentMethod ?? "現金付款",
+            carrier: order.carrierNumber || "無",
+            invoice: order.invoiceNumber || "無",
+            taxId: order.unifiedBusinessNumber || "無",
+            address:
+              order.pickupInfo?.match(/地點:(.*?),/)?.[1] ||
+              order.pickupInfo?.match(/地點:(.*)/)?.[1] ||
+              "",
+            pickupTime: order.pickupInfo?.match(/時間:(.*)/)?.[1] ?? "無",
+            operator: order.operatorName ?? "操作員A",
+            deliveryMethod: delivery,
+            createdDate: order.createdAt?.split("T")[0] ?? "",
+            paymentAmount: paid,
+            creditAmount: total - paid,
+            status: statusMap[order.status] ?? "未知", // ✅ 直接用後端數字映射中文
+          };
+        });
+        setOriginalData(mapped); // 🔹 保留原始
+        setTableData(mapped); // 🔹 顯示用
+      })
+      .catch((err) => {
+        console.error("載入訂單失敗", err);
+      });
+  }, [memberMap]); // ⬅️ 等會員對照表有了再跑訂單轉換
+
+  useEffect(() => {
+    if (selectedOrder) {
+      console.log("會員對照表", memberMap);
+      console.log("🟢 selectedOrder 更新：", selectedOrder);
+      console.log("配送方式：", selectedOrder.deliveryMethod);
+      console.log("經銷會員：", selectedOrder.member);
+      console.log("手機：", selectedOrder.phone);
+      console.log("發票號碼：", selectedOrder.invoice);
+      console.log("載具編號：", selectedOrder.carrier);
+      console.log("地址：", selectedOrder.address);
+      console.log("成立時間：", selectedOrder.createdDate);
+      console.log("操作員：", selectedOrder.operator);
+      console.log("取貨資訊：", selectedOrder.pickupTime);
+    }
+  }, [selectedOrder]);
 
   return (
     <>
@@ -194,8 +466,12 @@ export default function OrderSearch() {
           onChange={(e) => setPickupMethod(e.target.value)}
           options={[
             { value: "all", label: "全部" },
-            { value: "store", label: "門市取貨" },
-            { value: "delivery", label: "宅配" },
+    { value: "現場帶走", label: "現場帶走" },
+    { value: "機場提貨", label: "機場提貨" },
+    { value: "碼頭提貨", label: "碼頭提貨" },
+    { value: "宅配到府", label: "宅配到府" },
+    { value: "店到店", label: "店到店" },
+    { value: "訂單自取", label: "訂單自取" },
           ]}
         />
         <SearchField
@@ -204,16 +480,31 @@ export default function OrderSearch() {
           value={status}
           onChange={(e) => setStatus(e.target.value)}
           options={[
-            { value: "all", label: "全部" },
-            { value: "pending", label: "待處理" },
-            { value: "completed", label: "已完成" },
-            { value: "cancelled", label: "已取消" },
+             { value: "all", label: "全部" },
+    { value: "0", label: "未付款" },
+    { value: "1", label: "賒帳" },
+    { value: "2", label: "已付款" },
+    { value: "3", label: "已出貨" },
+    { value: "4", label: "配送中" },
+    { value: "5", label: "已完成" },
           ]}
         />
 
         {/* 搜尋按鈕 */}
         <button onClick={handleSearch} className="search-button">
           搜尋
+        </button>
+        <button
+          className="btn btn-outline-secondary"
+          onClick={() => {
+            setOrderId("");
+            setPickupTime("");
+            setPickupMethod("all");
+            setStatus("all");
+            setTableData(originalData); // ✅ 還原表格
+          }}
+        >
+          清除搜尋
         </button>
       </div>
       {/* 表格 */}
@@ -255,8 +546,8 @@ export default function OrderSearch() {
           </thead>
           <tbody>
             {tableData.length > 0 ? (
-              tableData.map((item, index) => (
-                <tr key={index}>
+              tableData.map((item) => (
+                <tr key={item.id}>
                   <td>
                     {" "}
                     <input type="checkbox" className="w-5 h-5 text-gray-600" />
@@ -330,73 +621,109 @@ export default function OrderSearch() {
               }}
             >
               <tr>
-                <th scope="col">商品名稱</th>
-                <th scope="col">數量</th>
-                <th scope="col">單價</th>
-                <th scope="col">金額</th>
-                <th scope="col">折扣後</th>
+                <th>商品名稱</th>
+                <th>單價</th>
+                <th>數量</th>
+                <th>折扣後總額</th>
               </tr>
             </thead>
             <tbody>
-              {selectedOrder ? (
-                <tr>
-                  <td>{selectedOrder.product}</td>
-                  <td>{selectedOrder.totalCount}</td>
-                  <td>{selectedOrder.totalAmount}</td>
-                  <td>
-                    {(() => {
-                      const count = Number(selectedOrder.totalCount);
-                      const amount = Number(
-                        selectedOrder.totalAmount.replace(/,/g, "")
-                      );
-                      const total = count * amount;
-                      return total.toLocaleString(); // 千分位格式
-                    })()}
-                  </td>
-                  <td>
-                    {(() => {
-                      const count = Number(selectedOrder.totalCount);
-                      const amount = Number(
-                        selectedOrder.totalAmount.replace(/,/g, "")
-                      );
-                      const discounted = Math.round(count * amount * 0.9); // 四捨五入
-                      return discounted.toLocaleString();
-                    })()}
-                  </td>
-                </tr>
+              {selectedOrder?.productDetails?.length > 0 ? (
+                selectedOrder.productDetails.map((item, i) => {
+                  const unitPrice = Number(item.unitPrice);
+                  const quantity = Number(item.quantity);
+                  const discountedAmount = Number(item.discountedAmount ?? 0);
+                  const discountedTotal = calculateDiscountedTotal(
+                    unitPrice,
+                    quantity,
+                    discountedAmount
+                  );
+                  const discountedUnitPrice = discountedAmount
+                    ? Math.round(discountedTotal / quantity)
+                    : unitPrice;
+
+                  return (
+                    <tr key={i}>
+                      <td>{item.productName}</td>
+                      <td>
+                        {discountedAmount > 0 ? (
+                          <>
+                            <div
+                              style={{
+                                textDecoration: "line-through",
+                                color: "#888",
+                              }}
+                            >
+                              ${unitPrice.toLocaleString()}
+                            </div>
+                            <div
+                              style={{ color: "#dc3545", fontWeight: "bold" }}
+                            >
+                              ${discountedUnitPrice.toLocaleString()}
+                            </div>
+                          </>
+                        ) : (
+                          `$${unitPrice.toLocaleString()}`
+                        )}
+                      </td>
+                      <td>{quantity}</td>
+                      <td style={{ color: "#28a745", fontWeight: "bold" }}>
+                        ${discountedTotal.toLocaleString()}
+                      </td>
+                    </tr>
+                  );
+                })
               ) : (
                 <tr>
-                  <td colSpan="12">無資料</td>
+                  <td colSpan="4">無資料</td>
                 </tr>
               )}
             </tbody>
           </table>
-          {selectedOrder &&
+          {selectedOrder?.productDetails?.length > 0 &&
             (() => {
-              const count = Number(selectedOrder.totalCount);
-              const amount = Number(
-                selectedOrder.totalAmount.replace(/,/g, "")
-              );
-              const total = count * amount;
-              const discounted1 = Math.round(total * 0.1);
-              const discounted = Math.round(total * 0.9);
+              let originalTotal = 0;
+              let discountedTotal = 0;
+
+              selectedOrder.productDetails.forEach((item) => {
+                const unitPrice = Number(item.unitPrice);
+                const quantity = Number(item.quantity);
+                const discountedAmount = Number(item.discountedAmount ?? 0);
+
+                originalTotal += unitPrice * quantity;
+                discountedTotal += unitPrice * quantity - discountedAmount;
+              });
+
+              const totalDiscount = originalTotal - discountedTotal;
 
               return (
                 <div
                   className="mt-3 p-3 d-flex justify-content-start bg-light border rounded"
-                  style={{ fontSize: "1.1rem" }}
+                  style={{ fontSize: "1.1rem", gap: "2rem" }}
                 >
                   <div>
-                    共計商品：<strong>1</strong> 項
-                  </div>
-                  <div className="mx-4">
-                    總金額：<strong>{total.toLocaleString()}</strong> 元
-                  </div>
-                  <div className="me-4">
-                    折扣：<strong>{discounted1.toLocaleString()}</strong> 元
+                    共計商品：
+                    <strong>
+                      {selectedOrder?.productDetails?.length ?? 0} 項
+                    </strong>
                   </div>
                   <div>
-                    總計：<strong>{discounted.toLocaleString()}</strong> 元
+                    折扣前金額：
+                    <strong>${originalTotal.toLocaleString()}</strong> 元
+                  </div>
+                  <div>
+                    折扣後金額：
+                    <strong style={{ color: "#28a745" }}>
+                      ${discountedTotal.toLocaleString()}
+                    </strong>{" "}
+                    元
+                  </div>
+                  <div>
+                    總折扣金額：
+                    <strong style={{ color: "#dc3545" }}>
+                      -${totalDiscount.toLocaleString()}
+                    </strong>{" "}
+                    元
                   </div>
                 </div>
               );
@@ -425,68 +752,89 @@ export default function OrderSearch() {
           <Modal.Title>編輯訂單</Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          <table className="table text-center" style={{ fontSize: "1.2rem" }}>
-            <thead
-              className="table-light"
-              style={{
-                borderTop: "1px solid #c5c6c7",
-                position: "sticky",
-                top: 0,
-                background: "#d1ecf1",
-                zIndex: 1,
-              }}
-            >
-              <tr>
-                <th scope="col">商品名稱</th>
-                <th scope="col">出貨點</th>
-                <th scope="col">數量</th>
-                <th scope="col">單價</th>
-                <th scope="col">金額</th>
-                <th scope="col">折扣後</th>
-                <th scope="col">狀態</th>
-              </tr>
-            </thead>
-            <tbody>
-              {selectedOrder ? (
+          <div style={{ maxHeight: "50vh", overflowY: "auto" }}>
+            <table className="table text-center" style={{ fontSize: "1.2rem" }}>
+              <thead
+                className="table-light"
+                style={{
+                  borderTop: "1px solid #c5c6c7",
+                  position: "sticky",
+                  top: 0,
+                  background: "#d1ecf1",
+                  zIndex: 1,
+                }}
+              >
                 <tr>
-                  <td>{selectedOrder.product}</td>
-                  <td>{selectedOrder.store}</td>
-                  <td>{selectedOrder.totalCount}</td>
-                  <td>{selectedOrder.totalAmount}</td>
-                  <td>
-                    {(() => {
-                      const count = Number(selectedOrder.totalCount);
-                      const amount = Number(
-                        selectedOrder.totalAmount.replace(/,/g, "")
-                      );
-                      const total = count * amount;
-                      return total.toLocaleString(); // 千分位格式
-                    })()}
-                  </td>
-                  <td>
-                    {(() => {
-                      const count = Number(selectedOrder.totalCount);
-                      const amount = Number(
-                        selectedOrder.totalAmount.replace(/,/g, "")
-                      );
-                      const discounted = Math.round(count * amount * 0.9); // 四捨五入
-                      return discounted.toLocaleString();
-                    })()}
-                  </td>
-                  <td>{selectedOrder.status}</td>
+                  <th scope="col">商品名稱</th>
+                  <th scope="col">出貨點</th>
+                  <th scope="col">數量</th>
+                  <th scope="col">單價</th>
+                  <th scope="col">金額</th>
+                  <th scope="col">折扣後</th>
+                  <th scope="col">狀態</th>
                 </tr>
-              ) : (
-                <tr>
-                  <td colSpan="12">無資料</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {selectedOrder?.productDetails?.length > 0 ? (
+                  selectedOrder.productDetails.map((item, i) => {
+                    const unitPrice = Number(item.unitPrice);
+                    const quantity = Number(item.quantity);
+                    const discountedAmount = Number(item.discountedAmount ?? 0);
+                    const discountedTotal =
+                      unitPrice * quantity - discountedAmount;
+                    const discountedUnitPrice = discountedAmount
+                      ? Math.round(discountedTotal / quantity)
+                      : unitPrice;
+
+                    return (
+                      <tr key={i}>
+                        <td>{item.productName}</td>
+                        <td>{item.shippingLocation}</td>
+                        <td>{quantity}</td>
+                        <td>
+                          {discountedAmount > 0 ? (
+                            <>
+                              <div
+                                style={{
+                                  textDecoration: "line-through",
+                                  color: "#888",
+                                }}
+                              >
+                                ${unitPrice.toLocaleString()}
+                              </div>
+                              <div
+                                style={{ color: "#dc3545", fontWeight: "bold" }}
+                              >
+                                ${discountedUnitPrice.toLocaleString()}
+                              </div>
+                            </>
+                          ) : (
+                            `$${unitPrice.toLocaleString()}`
+                          )}
+                        </td>
+                        <td>${(unitPrice * quantity).toLocaleString()}</td>
+                        <td style={{ color: "#28a745", fontWeight: "bold" }}>
+                          ${discountedTotal.toLocaleString()}
+                        </td>
+                        <td>{item.status}</td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan="7">無資料</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
           {selectedOrder &&
             (() => {
               const count = Number(selectedOrder.totalCount);
               const amount = Number(
-                selectedOrder.totalAmount.replace(/,/g, "")
+                typeof selectedOrder.totalAmount === "string"
+                  ? selectedOrder.totalAmount.replace(/,/g, "")
+                  : selectedOrder.totalAmount
               );
               const total = count * amount;
               const discounted = Math.round(total * 0.9);
@@ -502,62 +850,119 @@ export default function OrderSearch() {
                         共計商品：<strong>1</strong> 項
                       </div>
                       <div className="ms-5">
-                        總計：<strong>{discounted.toLocaleString()}</strong> 元
+                        總計：
+                        <strong>
+                          {selectedOrder?.productDetails
+                            ? selectedOrder.productDetails
+                                .reduce((sum, item) => {
+                                  const unitPrice = Number(item.unitPrice);
+                                  const quantity = Number(item.quantity);
+                                  const discount = Number(
+                                    item.discountedAmount ?? 0
+                                  );
+                                  return (
+                                    sum + (unitPrice * quantity - discount)
+                                  );
+                                }, 0)
+                                .toLocaleString()
+                            : 0}
+                          元
+                        </strong>
                       </div>
                       <div className="ms-5">
-                        配送方式：<strong>機場提貨</strong>
+                        配送方式：
+                        <strong>{selectedOrder.deliveryMethod}</strong>
                       </div>
                     </div>
                     <div className="d-flex mt-1">
                       <div>
-                        經銷會員：<strong>{selectedOrder.member}</strong>
+                        經銷會員：
+                        <strong>
+                          {selectedOrder?.member}
+                          {selectedOrder?.distributorType === 1 && "（導遊）"}
+                          {selectedOrder?.distributorType === 2 && "（經銷商）"}
+                        </strong>
                       </div>
                       <div className="ms-5">
                         手機：<strong>{selectedOrder.phone}</strong>
                       </div>
                       <div className="ms-5">
-                        折扣方式：<strong>{selectedOrder.pay}</strong>
+                        付款方式：<strong>{selectedOrder?.pay || "無"}</strong>
                       </div>
                     </div>
+                    {selectedOrder?.pay === "賒帳" && (
+                      <div className="d-flex mt-1">
+                        <div>
+                          現場付款金額：
+                          <strong style={{ color: "#28a745" }}>
+                            $
+                            {Number(
+                              selectedOrder?.paymentAmount ?? 0
+                            ).toLocaleString()}{" "}
+                            元
+                          </strong>
+                        </div>
+                        <div className="ms-5">
+                          賒帳金額：
+                          <strong style={{ color: "#dc3545" }}>
+                            $
+                            {Number(
+                              selectedOrder?.creditAmount ?? 0
+                            ).toLocaleString()}{" "}
+                            元
+                          </strong>
+                        </div>
+                      </div>
+                    )}
                     <div className="d-flex mt-1">
                       <div>
-                        發票號碼：<strong>{selectedOrder.invoice}</strong>
+                        發票號碼：
+                        <strong>{selectedOrder?.invoice || "無"}</strong>
                       </div>
                       <div className="ms-5">
-                        載具編號：<strong>/RAM72C4</strong>
+                        載具編號：
+                        <strong>{selectedOrder?.carrier || "無"}</strong>
                       </div>
                     </div>
                     <div className="d-flex mt-1">
                       <div>
-                        郵寄地址：<strong>台北市松山區文化路166號</strong>
+                        郵寄地址：
+                        <strong>{selectedOrder?.address || "無"}</strong>
                       </div>
                     </div>
                     <div className="d-flex mt-1">
                       <div>
                         訂單成立：
                         <strong>
-                          {selectedOrder.startDate}
-                          <span className="ms-1">(馬公門市)</span>
+                          {selectedOrder?.createdDate || "無"}
+                          <span className="ms-1">
+                            ({selectedOrder?.store || "未知門市"})
+                          </span>
                         </strong>
                       </div>
                       <div className="ms-5">
-                        操作員：<strong>{selectedOrder.name}</strong>
+                        操作員：
+                        <strong>{selectedOrder?.operator || "無"}</strong>
                       </div>
                     </div>
                     <div className="d-flex mt-1">
                       <div>
                         取貨資訊：
                         <strong>
-                          {selectedOrder.endDate}
-                          <span className="ms-1">(機場提貨櫃台)</span>
+                          {selectedOrder?.pickupTime || "無"}
+                          {selectedOrder?.deliveryMethod &&
+                            `（${selectedOrder.deliveryMethod}）`}
                         </strong>
                       </div>
                     </div>
                     <div className="mt-3">
                       <button className="check-button fw-bold">退貨</button>
-                      <button className="delete-button mx-4 fw-bold" onClick={handleCancelOrder}>
-  作廢
-</button>
+                      <button
+                        className="delete-button mx-4 fw-bold"
+                        onClick={handleCancelOrder}
+                      >
+                        作廢
+                      </button>
                       <button
                         className="pink-button"
                         style={{ fontSize: "1rem" }}

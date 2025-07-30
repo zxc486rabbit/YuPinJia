@@ -1,73 +1,178 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import axios from "axios";
 import Cart from "./components/Cart";
 import Navbar from "./components/Navbar";
 import CardTable from "./components/CardTable";
-import Card from "./components/Card";
 import NewArrivalTable from "./components/NewArrivalTable";
 import GiftTable from "./components/GiftTable";
+import CategoryProductTable from "./components/CategoryProductTable";
 
-export default function Home({ products = [] }) {
+// API：產品資料（根據 searchType 或 categoryId）
+const fetchProductsBySearchType = async (searchType, categoryId) => {
+  const url =
+    searchType === 5
+      ? `https://yupinjia.hyjr.com.tw/api/api/t_Product?categoryId=${categoryId}`
+      : `https://yupinjia.hyjr.com.tw/api/api/t_Product?searchType=${searchType}`;
+  const res = await axios.get(url);
+  return res.data;
+};
+
+// API：分類清單
+const fetchCategories = async () => {
+  const res = await axios.get("https://yupinjia.hyjr.com.tw/api/api/t_Category");
+  return res.data;
+};
+
+export default function Home() {
   const [activeTab, setActiveTab] = useState("熱銷排行");
   const [cartItems, setCartItems] = useState([]);
   const [currentMember, setCurrentMember] = useState(null);
   const [members, setMembers] = useState([]);
-  const [highlightedProductId, setHighlightedProductId] = useState(null);
-  const [suggestions, setSuggestions] = useState([]);
-  const navigate = useNavigate();
-
+  const [searchType, setSearchType] = useState(1);
+  const [selectedCategoryId, setSelectedCategoryId] = useState(null);
+  const [isGuideSelf, setIsGuideSelf] = useState(false);
+  const [searchKeyword, setSearchKeyword] = useState("");
   const [cartSummary, setCartSummary] = useState({
     subtotal: 0,
     usedPoints: 0,
     finalTotal: 0,
   });
 
-  const [isGuideSelf, setIsGuideSelf] = useState(false);
+  const navigate = useNavigate();
 
+  // ➤ 載入 localStorage 的會員資料
+  const memberInitRef = useRef(false);
   useEffect(() => {
-    fetch("/member.json")
-      .then((res) => res.json())
-      .then((data) => {
-        if (Array.isArray(data) && data.length > 0) {
-          setMembers(data);
-          setCurrentMember(data[0]);
-        }
-      })
-      .catch((err) => {
-        console.error("載入會員資料失敗:", err);
-      });
+    if (memberInitRef.current) return;
+    const stored = localStorage.getItem("currentMember");
+    if (stored) {
+      try {
+        setCurrentMember(JSON.parse(stored));
+      } catch (e) {
+        console.error("載入會員失敗", e);
+      }
+    }
+    memberInitRef.current = true;
   }, []);
 
-  const handleSearch = (serial) => {
-    if (!serial.trim()) {
-      setHighlightedProductId(null);
-      setSuggestions([]);
-      return;
-    }
+  // ➤ 載入所有會員
+  useEffect(() => {
+  // 載入會員與導遊／經銷商，並整合
+  Promise.all([
+    axios.get("https://yupinjia.hyjr.com.tw/api/api/t_Member"),
+    axios.get("https://yupinjia.hyjr.com.tw/api/api/t_Distributor"),
+  ])
+    .then(([memberRes, distributorRes]) => {
+      const memberList = memberRes.data;
+      const distributorMap = {};
+      distributorRes.data.forEach((d) => {
+        distributorMap[d.memberId] = {
+          isDistributor: true,
+          buyerType: d.buyerType,
+        };
+      });
 
-    const matched = products.filter((p) =>
-      p.serialNumber.toLowerCase().includes(serial.trim().toLowerCase())
+      // 將 distributor 資訊合併進每位會員
+      const merged = memberList.map((m) => ({
+        ...m,
+        isDistributor: distributorMap[m.id]?.isDistributor || false,
+        buyerType: distributorMap[m.id]?.buyerType || null,
+      }));
+
+      setMembers(merged);
+    })
+    .catch((err) => console.error("載入會員與經銷資料失敗", err));
+}, []);
+
+  // ➤ 根據 tab 切換設定查詢類型
+  useEffect(() => {
+    switch (activeTab) {
+      case "熱銷排行":
+        setSearchType(1);
+        break;
+      case "新品排行":
+        setSearchType(2);
+        break;
+      case "贈送":
+        setSearchType(3);
+        break;
+      case "產品分類":
+        setSearchType(5);
+        break;
+      default:
+        setSearchType(1);
+    }
+  }, [activeTab]);
+
+  // ➤ 查詢分類資料
+  const { data: categories = [] } = useQuery({
+    queryKey: ["categories"],
+    queryFn: fetchCategories,
+  });
+
+  // ➤ 查詢產品資料
+  const {
+    data: allProducts = [],
+    isError,
+    error,
+  } = useQuery({
+    queryKey: ["products", searchType, selectedCategoryId],
+    queryFn: () => fetchProductsBySearchType(searchType, selectedCategoryId),
+    enabled:
+      searchType !== null && (searchType !== 5 || selectedCategoryId !== null),
+    keepPreviousData: true,
+    staleTime: 1000 * 60 * 5, // 5分鐘內不重抓
+  });
+
+  // ➤ 搜尋建議 (用 useMemo 取代 useEffect)
+  const filteredSuggestions = useMemo(() => {
+    if (!searchKeyword || !allProducts.length) return [];
+    const keyword = searchKeyword.toLowerCase();
+    return allProducts.filter(
+      (p) =>
+        p.name.toLowerCase().includes(keyword) ||
+        p.productNumber?.toLowerCase().includes(keyword)
     );
+  }, [searchKeyword, allProducts]);
 
-    if (
-      matched.length === 1 &&
-      matched[0].serialNumber.toLowerCase() === serial.trim().toLowerCase()
-    ) {
-      setHighlightedProductId(matched[0].id);
-      setSuggestions([]);
-    } else {
-      setHighlightedProductId(null);
-      setSuggestions(matched);
+  // ➤ 畫面上實際顯示的產品
+  const displayedProducts = useMemo(() => {
+    let filtered = [...allProducts];
+    if (searchKeyword) {
+      const keyword = searchKeyword.toLowerCase();
+      filtered = filtered.filter(
+        (p) =>
+          p.name.toLowerCase().includes(keyword) ||
+          p.productNumber?.toLowerCase().includes(keyword)
+      );
     }
+    if (activeTab === "新品排行") {
+      return [...filtered].sort(
+        (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+      );
+    }
+    return filtered;
+  }, [searchKeyword, allProducts, activeTab]);
+
+  const handleSearch = (keyword) => {
+    setSearchKeyword(keyword);
   };
 
   const addToCart = (product) => {
+    if (!currentMember) {
+      alert("請先登入會員再加入購物車");
+      return;
+    }
     const qty = product.quantity || 1;
     setCartItems((prev) => {
-      const exist = prev.find((p) => p.id === product.id);
+      const exist = prev.find((p) => p.productId === product.productId);
       if (exist) {
         return prev.map((p) =>
-          p.id === product.id ? { ...p, quantity: p.quantity + qty } : p
+          p.productId === product.productId
+            ? { ...p, quantity: p.quantity + qty }
+            : p
         );
       }
       return [
@@ -75,13 +180,7 @@ export default function Home({ products = [] }) {
         {
           ...product,
           quantity: qty,
-          unitPrice: parseFloat(
-            product.unitPrice ??
-              product.price
-                ?.toString()
-                .replace(/[^\d.]/g, "")
-                .replace(/,/g, "")
-          ),
+          unitPrice: parseFloat(product.price ?? 0),
         },
       ];
     });
@@ -89,18 +188,17 @@ export default function Home({ products = [] }) {
 
   const updateQuantity = (id, quantity, forceAdd = false, fullItem = null) => {
     if (id === "__CLEAR__") {
-      setCartItems([]); // 清空購物車
+      setCartItems([]);
       return;
     }
-
     setCartItems((prev) => {
-      const exist = prev.find((item) => item.id === id);
+      const exist = prev.find((item) => item.productId === id);
       if (quantity <= 0) {
-        return prev.filter((item) => item.id !== id);
+        return prev.filter((item) => item.productId !== id);
       }
       if (exist) {
         return prev.map((item) =>
-          item.id === id ? { ...item, quantity } : item
+          item.productId === id ? { ...item, quantity } : item
         );
       }
       if (forceAdd && fullItem) {
@@ -109,14 +207,7 @@ export default function Home({ products = [] }) {
           {
             ...fullItem,
             quantity,
-            unitPrice:
-              fullItem.unitPrice ??
-              parseFloat(
-                fullItem.price
-                  ?.toString()
-                  .replace(/[^\d.]/g, "")
-                  .replace(/,/g, "")
-              ),
+            unitPrice: parseFloat(fullItem.price ?? 0),
           },
         ];
       }
@@ -124,26 +215,23 @@ export default function Home({ products = [] }) {
     });
   };
 
-  // ⬇️ 決定要顯示哪些產品
-  const displayedProducts =
-    highlightedProductId != null
-      ? products.filter((p) => p.id === highlightedProductId)
-      : products;
-
-  // ✅ 點擊結帳 → navigate 到新頁面
   const handleCheckout = () => {
+    const normalizedMember = {
+      ...currentMember,
+      phone: currentMember?.contactPhone ?? currentMember?.phone ?? "",
+    };
     const checkoutPayload = {
       items: cartItems,
-      member: currentMember,
+      member: normalizedMember,
       subtotal: cartSummary.subtotal,
       usedPoints: cartSummary.usedPoints,
       finalTotal: cartSummary.finalTotal,
     };
-
     localStorage.setItem("checkoutData", JSON.stringify(checkoutPayload));
-
     navigate("/checkout");
   };
+
+  if (isError) return <p>錯誤：{error.message}</p>;
 
   return (
     <div className="container-fluid">
@@ -151,29 +239,31 @@ export default function Home({ products = [] }) {
         <div className="col-5">
           <Cart
             items={cartItems}
-            updateQuantity={(id, qty, forceAdd, fullItem) =>
-              updateQuantity(id, qty, forceAdd, fullItem)
-            }
+            updateQuantity={updateQuantity}
             currentMember={currentMember}
             setCurrentMember={setCurrentMember}
             members={members}
             onCheckoutClick={handleCheckout}
-            onCartSummaryChange={(summary) => setCartSummary(summary)}
-            stockMap={products.reduce((acc, p) => {
-              acc[p.id] = p.stock ?? 9999;
+            onCartSummaryChange={setCartSummary}
+            stockMap={allProducts.reduce((acc, p) => {
+              acc[p.productId] = p.nowStock ?? 9999;
               return acc;
             }, {})}
-            isGuideSelf={isGuideSelf} // ✅ 新增
-            setIsGuideSelf={setIsGuideSelf} // ✅ 新增
+            isGuideSelf={isGuideSelf}
+            setIsGuideSelf={setIsGuideSelf}
           />
         </div>
 
         <div className="col-7">
           <Navbar
             activeTab={activeTab}
-            setActiveTab={setActiveTab}
+            setActiveTab={(tab) => {
+              setActiveTab(tab);
+              setSelectedCategoryId(null);
+              setSearchKeyword("");
+            }}
             onSearch={handleSearch}
-            suggestions={suggestions}
+            suggestions={filteredSuggestions}
           />
 
           {activeTab === "熱銷排行" && (
@@ -201,12 +291,17 @@ export default function Home({ products = [] }) {
           )}
 
           {activeTab === "產品分類" && (
-            <Card
+            <CategoryProductTable
               products={displayedProducts}
               addToCart={addToCart}
+              cartItems={cartItems}
+              usedPoints={cartSummary.usedPoints}
               onCheckout={handleCheckout}
               currentMember={currentMember}
               isGuideSelf={isGuideSelf}
+              categories={categories}
+              setSelectedCategoryId={setSelectedCategoryId}
+              selectedCategoryId={selectedCategoryId}
             />
           )}
 

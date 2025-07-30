@@ -17,8 +17,9 @@ export default function QuantityControl({ defaultValue, onChange }) {
 
   const handleDecrease = () => {
   const newQty = quantity - 1;
-  setQuantity(newQty < 0 ? 0 : newQty);
-  onChange?.(newQty < 0 ? 0 : newQty);
+  const finalQty = newQty < 1 ? 1 : newQty;
+  setQuantity(finalQty);
+  onChange?.(finalQty);
 };
 
   const handleInputChange = (e) => {

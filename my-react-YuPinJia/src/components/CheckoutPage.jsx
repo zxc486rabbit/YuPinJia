@@ -6,16 +6,23 @@ export default function CheckoutPage() {
   const navigate = useNavigate();
   const [cartItems, setCartItems] = useState([]);
   const [currentMember, setCurrentMember] = useState({});
+  const [usedPoints, setUsedPoints] = useState(0);
 
-  useEffect(() => {
-    const savedData = JSON.parse(localStorage.getItem("checkoutData") || "{}");
-    if (Array.isArray(savedData.items)) {
-      setCartItems(savedData.items);
-    }
-    if (savedData.member) {
-      setCurrentMember(savedData.member);
-    }
-  }, []);
+useEffect(() => {
+  const savedData = JSON.parse(localStorage.getItem("checkoutData") || "{}");
+
+  // console.log("🚀 checkoutData:", savedData); // ✅ 觀察這邊是否有 contactPhone
+
+  if (Array.isArray(savedData.items)) {
+    setCartItems(savedData.items);
+  }
+  if (savedData.member) {
+    setCurrentMember(savedData.member); // 👈 這裡 savedData.member 應該要包含 contactPhone
+  }
+  if (typeof savedData.usedPoints === "number") {
+    setUsedPoints(savedData.usedPoints);
+  }
+}, []);
 
   return (
     <div>
@@ -38,6 +45,7 @@ export default function CheckoutPage() {
         <CheckoutFlow
           cartItems={cartItems}
           currentMember={currentMember}
+          usedPoints={usedPoints}
           onComplete={(result) => {
             navigate("/summary", { state: result });
           }}
