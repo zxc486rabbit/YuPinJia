@@ -17,6 +17,8 @@ export default function Sales() {
   const [selectedOrder, setSelectedOrder] = useState(null); //記錄選到哪筆
   const [showModal, setShowModal] = useState(false); //檢視按鈕彈出框
   const [showEditModal, setShowEditModal] = useState(false); //編輯按鈕彈出框
+  const [month, setMonth] = useState(""); // 存儲月份查詢條件
+  const [memberName, setMemberName] = useState(""); // 存儲會員名稱查詢條件
 
   const STATUS_FLOW = ["賒帳", "已付款", "已出貨", "配送中", "已完成"];
   const statusMap = {
@@ -87,18 +89,36 @@ export default function Sales() {
     return unitPrice * quantity - discount;
   };
 
-  const handleSearch = () => {
+ const handleSearch = () => {
+  // 構造搜尋條件
+  const params = {
+    orderNumber: orderId || undefined, // 當 orderId 為空時，後端會忽略此條件
+    createdAt: month ? { $regex: `^${month}` } : undefined, // 使用月份篩選
+    memberName: memberName || undefined, // 使用會員名稱篩選
+    deliveryMethod: pickupMethod !== "all" ? pickupMethod : undefined, // 當 pickupMethod 為 "all" 時，忽略此條件
+    status: status !== "all" ? Number(status) : undefined, // 當 status 為 "all" 時，忽略此條件
+  };
+
+  // 打印當前的搜尋條件
+  console.log("搜尋條件:", params);
+
+  // 更新 URL 查詢參數
+  const queryString = new URLSearchParams(params).toString();
+  window.history.pushState({}, "", `?${queryString}`);
+
+  // 打印更新後的 URL
+  console.log("當前的 URL:", window.location.href); // 打印當前的完整 URL
+
+  // 向後端發送請求
   axios
     .get("https://yupinjia.hyjr.com.tw/api/api/t_SalesOrder", {
-      params: {
-        orderNumber: orderId || undefined,
-        pickupTime: pickupTime || undefined,
-        deliveryMethod: pickupMethod !== "all" ? pickupMethod : undefined,
-        status: status !== "all" ? Number(status) : undefined,
-      },
+      params: params,
     })
     .then((res) => {
       const raw = res.data;
+      console.log("後端返回資料:", raw);
+
+      // 按照創建時間排序（從新到舊）
       raw.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
       const mapped = raw.map((order) => {
@@ -111,17 +131,13 @@ export default function Sales() {
             : ""
           : "";
 
-        const total = Number(order.totalAmount || 0);
-        const paid = Number(order.paymentAmount || 0);
-        const delivery = order.deliveryMethod ?? "";
-
         return {
           id: order.id,
           orderId: order.orderNumber,
           store: order.storeName ?? "馬公門市",
           member: `${member?.fullName || "未命名會員"} ${identity}`,
           phone: order.mobile ?? "",
-          totalAmount: total.toLocaleString(),
+          totalAmount: order.totalAmount.toLocaleString(),
           pay: order.paymentMethod ?? "現金付款",
           carrier: order.carrierNumber || "無",
           invoice: order.invoiceNumber || "無",
@@ -132,10 +148,7 @@ export default function Sales() {
             "",
           pickupTime: order.pickupInfo?.match(/時間:(.*)/)?.[1] ?? "無",
           operator: order.operatorName ?? "操作員A",
-          deliveryMethod: delivery,
           createdDate: order.createdAt?.split("T")[0] ?? "",
-          paymentAmount: paid,
-          creditAmount: total - paid,
           status: statusMap[order.status] ?? "未知",
         };
       });
@@ -150,95 +163,99 @@ export default function Sales() {
 };
 
   // 檢視訂單彈出框
-const handleView = async (order) => {
-  try {
-    setSelectedOrder({ ...order, productDetails: [] }); // 先打開空的彈出框
-    setShowModal(true);
+  const handleView = async (order) => {
+    try {
+      setSelectedOrder({ ...order, productDetails: [] }); // 先打開空的彈出框
+      setShowModal(true);
 
-    const res = await axios.get(
-      `https://yupinjia.hyjr.com.tw/api/api/t_SalesOrderItem/${order.id}`
-    );
+      const res = await axios.get(
+        `https://yupinjia.hyjr.com.tw/api/api/t_SalesOrderItem/${order.id}`
+      );
 
-    // 因為是單筆資料，所以包成陣列後再處理
-    const productDetails = [res.data].map((item) => ({
-      productName: item.productName,
-      quantity: item.quantity,
-      unitPrice: item.unitPrice,
-      discountedAmount: item.discountedAmount ?? 0,
-    }));
+      // 因為是單筆資料，所以包成陣列後再處理
+      const productDetails = [res.data].map((item) => ({
+        productName: item.productName,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        discountedAmount: item.discountedAmount ?? 0,
+      }));
 
-    setSelectedOrder((prev) => ({
-      ...prev,
-      productDetails,
-    }));
-  } catch (error) {
-    console.error("取得商品明細失敗", error);
-    Swal.fire("錯誤", "載入商品明細失敗", "error");
-  }
-};
+      setSelectedOrder((prev) => ({
+        ...prev,
+        productDetails,
+      }));
+    } catch (error) {
+      console.error("取得商品明細失敗", error);
+      Swal.fire("錯誤", "載入商品明細失敗", "error");
+    }
+  };
 
   // 編輯訂單彈出框
   const handleEdit = async (order) => {
-  // Step 1: 先開彈出框（視覺上更即時）
-  setSelectedOrder({
-    ...order,
-    productDetails: [],
-    totalAmount: 0,
-    paymentAmount: order.paymentAmount ?? 0,
-    creditAmount: 0,
-  });
-  setShowEditModal(true);
+    // Step 1: 先開彈出框（視覺上更即時）
+    setSelectedOrder({
+      ...order,
+      productDetails: [],
+      totalAmount: 0,
+      paymentAmount: order.paymentAmount ?? 0,
+      creditAmount: 0,
+    });
+    setShowEditModal(true);
 
-  try {
-    // Step 2: 同步抓商品明細與最新主表
-    const [itemRes, mainOrderRes] = await Promise.all([
-      axios.get(`https://yupinjia.hyjr.com.tw/api/api/t_SalesOrderItem/${order.id}`),
-      axios.get(`https://yupinjia.hyjr.com.tw/api/api/t_SalesOrder/${order.id}`),
-    ]);
+    try {
+      // Step 2: 同步抓商品明細與最新主表
+      const [itemRes, mainOrderRes] = await Promise.all([
+        axios.get(
+          `https://yupinjia.hyjr.com.tw/api/api/t_SalesOrderItem/${order.id}`
+        ),
+        axios.get(
+          `https://yupinjia.hyjr.com.tw/api/api/t_SalesOrder/${order.id}`
+        ),
+      ]);
 
-    // Step 3: 商品明細處理
-    const item = itemRes.data;
-    const productDetails = Array.isArray(item) ? item : [item]; // 保險寫法
-    const parsedDetails = productDetails.map((p) => ({
-      productName: p.productName,
-      shippingLocation: p.shippingLocation ?? "",
-      quantity: p.quantity,
-      unitPrice: p.unitPrice,
-      discountedAmount: p.discountedAmount ?? 0,
-      status: p.status ?? "",
-    }));
+      // Step 3: 商品明細處理
+      const item = itemRes.data;
+      const productDetails = Array.isArray(item) ? item : [item]; // 保險寫法
+      const parsedDetails = productDetails.map((p) => ({
+        productName: p.productName,
+        shippingLocation: p.shippingLocation ?? "",
+        quantity: p.quantity,
+        unitPrice: p.unitPrice,
+        discountedAmount: p.discountedAmount ?? 0,
+        status: p.status ?? "",
+      }));
 
-    const totalAmount = parsedDetails.reduce((sum, item) => {
-      return sum + item.unitPrice * item.quantity - item.discountedAmount;
-    }, 0);
+      const totalAmount = parsedDetails.reduce((sum, item) => {
+        return sum + item.unitPrice * item.quantity - item.discountedAmount;
+      }, 0);
 
-    const paidAmount = Number(mainOrderRes.data.paymentAmount || 0);
-    const newStatus = paidAmount < totalAmount ? "賒帳" : "已付款";
+      const paidAmount = Number(mainOrderRes.data.paymentAmount || 0);
+      const newStatus = paidAmount < totalAmount ? "賒帳" : "已付款";
 
-    // Step 4: 更新主表資料
-    await axios.put(
-      `https://yupinjia.hyjr.com.tw/api/api/t_SalesOrder/${order.id}`,
-      {
-        ...mainOrderRes.data,
-        totalAmount: totalAmount,
-        status: statusMap[newStatus],
-      }
-    );
+      // Step 4: 更新主表資料
+      await axios.put(
+        `https://yupinjia.hyjr.com.tw/api/api/t_SalesOrder/${order.id}`,
+        {
+          ...mainOrderRes.data,
+          totalAmount: totalAmount,
+          status: statusMap[newStatus],
+        }
+      );
 
-    // Step 5: 更新彈出框資料
-    setSelectedOrder((prev) => ({
-      ...prev,
-      totalAmount,
-      paymentAmount: paidAmount,
-      creditAmount: totalAmount - paidAmount,
-      status: newStatus,
-      productDetails: parsedDetails,
-    }));
-  } catch (error) {
-    console.error("載入或更新主表失敗", error);
-    Swal.fire("錯誤", "無法載入訂單明細或更新主表", "error");
-  }
-};
+      // Step 5: 更新彈出框資料
+      setSelectedOrder((prev) => ({
+        ...prev,
+        totalAmount,
+        paymentAmount: paidAmount,
+        creditAmount: totalAmount - paidAmount,
+        status: newStatus,
+        productDetails: parsedDetails,
+      }));
+    } catch (error) {
+      console.error("載入或更新主表失敗", error);
+      Swal.fire("錯誤", "無法載入訂單明細或更新主表", "error");
+    }
+  };
   // 關閉彈出框
   const closeModal = () => {
     setShowModal(false);
@@ -420,6 +437,7 @@ const handleView = async (order) => {
             status: statusMap[order.status] ?? "未知", // ✅ 直接用後端數字映射中文
           };
         });
+        console.log("Mapped Data:", mapped); // 檢查映射後的資料
         setOriginalData(mapped); // 🔹 保留原始
         setTableData(mapped); // 🔹 顯示用
       })
@@ -429,84 +447,96 @@ const handleView = async (order) => {
   }, [memberMap]); // ⬅️ 等會員對照表有了再跑訂單轉換
 
   useEffect(() => {
-    if (selectedOrder) {
-      console.log("會員對照表", memberMap);
-      console.log("🟢 selectedOrder 更新：", selectedOrder);
-      console.log("配送方式：", selectedOrder.deliveryMethod);
-      console.log("經銷會員：", selectedOrder.member);
-      console.log("手機：", selectedOrder.phone);
-      console.log("發票號碼：", selectedOrder.invoice);
-      console.log("載具編號：", selectedOrder.carrier);
-      console.log("地址：", selectedOrder.address);
-      console.log("成立時間：", selectedOrder.createdDate);
-      console.log("操作員：", selectedOrder.operator);
-      console.log("取貨資訊：", selectedOrder.pickupTime);
-    }
-  }, [selectedOrder]);
+  // 從 URL 查詢參數中讀取搜尋條件
+  const queryParams = new URLSearchParams(window.location.search);
+
+  setOrderId(queryParams.get("orderNumber") || "");
+  setPickupTime(queryParams.get("pickupTime") || "");
+  setPickupMethod(queryParams.get("deliveryMethod") || "all");
+  setStatus(queryParams.get("status") || "all");
+  setMonth(queryParams.get("createdAt") || "");
+  setMemberName(queryParams.get("memberName") || "");
+}, []);
 
   return (
     <>
-      <div className="search-container d-flex flex-wrap gap-3 px-4 py-3 rounded">
-        <SearchField
-          label="訂單編號"
-          type="text"
-          value={orderId}
-          onChange={(e) => setOrderId(e.target.value)}
-        />
-        <SearchField
-          label="取貨時間"
-          type="date"
-          value={pickupTime}
-          onChange={(e) => setPickupTime(e.target.value)}
-        />
-        <SearchField
-          label="取貨方式"
-          type="select"
-          value={pickupMethod}
-          onChange={(e) => setPickupMethod(e.target.value)}
-          options={[
-            { value: "all", label: "全部" },
-    { value: "現場帶走", label: "現場帶走" },
-    { value: "機場提貨", label: "機場提貨" },
-    { value: "碼頭提貨", label: "碼頭提貨" },
-    { value: "宅配到府", label: "宅配到府" },
-    { value: "店到店", label: "店到店" },
-    { value: "訂單自取", label: "訂單自取" },
-          ]}
-        />
-        <SearchField
-          label="狀態"
-          type="select"
-          value={status}
-          onChange={(e) => setStatus(e.target.value)}
-          options={[
-             { value: "all", label: "全部" },
-    { value: "0", label: "未付款" },
-    { value: "1", label: "賒帳" },
-    { value: "2", label: "已付款" },
-    { value: "3", label: "已出貨" },
-    { value: "4", label: "配送中" },
-    { value: "5", label: "已完成" },
-          ]}
-        />
+       <div className="search-container d-flex flex-wrap gap-3 px-4 py-3 rounded">
+    {/* 訂單編號 */}
+    <SearchField
+      label="訂單編號"
+      type="text"
+      value={orderId}
+      onChange={(e) => setOrderId(e.target.value)}
+    />
 
-        {/* 搜尋按鈕 */}
-        <button onClick={handleSearch} className="search-button">
-          搜尋
-        </button>
-        <button
-          className="btn btn-outline-secondary"
-          onClick={() => {
-            setOrderId("");
-            setPickupTime("");
-            setPickupMethod("all");
-            setStatus("all");
-            setTableData(originalData); // ✅ 還原表格
-          }}
-        >
-          清除搜尋
-        </button>
-      </div>
+    {/* 訂單成立月份 */}
+    <SearchField
+      label="訂單成立月份"
+      type="month"
+      value={month}
+      onChange={(e) => setMonth(e.target.value)}
+    />
+
+    {/* 會員名稱查詢 */}
+    <SearchField
+      label="會員名稱"
+      type="text"
+      value={memberName}
+      onChange={(e) => setMemberName(e.target.value)}
+    />
+
+    {/* 取貨方式 */}
+    <SearchField
+      label="取貨方式"
+      type="select"
+      value={pickupMethod}
+      onChange={(e) => setPickupMethod(e.target.value)}
+      options={[
+        { value: "all", label: "全部" },
+        { value: "現場帶走", label: "現場帶走" },
+        { value: "機場提貨", label: "機場提貨" },
+        { value: "碼頭提貨", label: "碼頭提貨" },
+        { value: "宅配到府", label: "宅配到府" },
+        { value: "店到店", label: "店到店" },
+        { value: "訂單自取", label: "訂單自取" },
+      ]}
+    />
+
+    {/* 訂單狀態 */}
+    <SearchField
+      label="狀態"
+      type="select"
+      value={status}
+      onChange={(e) => setStatus(e.target.value)}
+      options={[
+        { value: "all", label: "全部" },
+        { value: "0", label: "未付款" },
+        { value: "1", label: "賒帳" },
+        { value: "2", label: "已付款" },
+        { value: "3", label: "已出貨" },
+        { value: "4", label: "配送中" },
+        { value: "5", label: "已完成" },
+      ]}
+    />
+
+    {/* 搜尋按鈕 */}
+    <button onClick={handleSearch} className="search-button">
+      搜尋
+    </button>
+    <button
+      className="btn btn-outline-secondary"
+      onClick={() => {
+        setOrderId("");
+        setMonth("");
+        setMemberName("");
+        setPickupMethod("all");
+        setStatus("all");
+        setTableData(originalData); // 還原表格
+      }}
+    >
+      清除搜尋
+    </button>
+  </div>
       {/* 表格 */}
       <div
         className="table-container"

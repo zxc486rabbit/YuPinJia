@@ -21,7 +21,9 @@ const fetchProductsBySearchType = async (searchType, categoryId) => {
 
 // API：分類清單
 const fetchCategories = async () => {
-  const res = await axios.get("https://yupinjia.hyjr.com.tw/api/api/t_Category");
+  const res = await axios.get(
+    "https://yupinjia.hyjr.com.tw/api/api/t_Category"
+  );
   return res.data;
 };
 
@@ -59,31 +61,31 @@ export default function Home() {
 
   // ➤ 載入所有會員
   useEffect(() => {
-  // 載入會員與導遊／經銷商，並整合
-  Promise.all([
-    axios.get("https://yupinjia.hyjr.com.tw/api/api/t_Member"),
-    axios.get("https://yupinjia.hyjr.com.tw/api/api/t_Distributor"),
-  ])
-    .then(([memberRes, distributorRes]) => {
-      const memberList = memberRes.data;
-      const distributorMap = {};
-      distributorRes.data.forEach((d) => {
-        distributorMap[d.memberId] = {
-          isDistributor: true,
-          buyerType: d.buyerType,
-        };
-      });
+    // 載入會員與導遊／經銷商，並整合
+    Promise.all([
+      axios.get("https://yupinjia.hyjr.com.tw/api/api/t_Member"),
+      axios.get("https://yupinjia.hyjr.com.tw/api/api/t_Distributor"),
+    ])
+      .then(([memberRes, distributorRes]) => {
+        const memberList = memberRes.data;
+        const distributorMap = {};
+        distributorRes.data.forEach((d) => {
+          distributorMap[d.memberId] = {
+            isDistributor: true,
+            buyerType: d.buyerType,
+          };
+        });
 
-      // 將 distributor 資訊合併進每位會員
-      const merged = memberList.map((m) => ({
-        ...m,
-        isDistributor: distributorMap[m.id]?.isDistributor || false,
-        buyerType: distributorMap[m.id]?.buyerType || null,
-      }));
+        // 將 distributor 資訊合併進每位會員
+        const merged = memberList.map((m) => ({
+          ...m,
+          isDistributor: distributorMap[m.id]?.isDistributor || false,
+          buyerType: distributorMap[m.id]?.buyerType || null,
+        }));
 
-      setMembers(merged);
-    })
-    .catch((err) => console.error("載入會員與經銷資料失敗", err));
+        setMembers(merged);  // 更新會員資料
+      })
+      .catch((err) => console.error("載入會員與經銷資料失敗", err));
 }, []);
 
   // ➤ 根據 tab 切換設定查詢類型
