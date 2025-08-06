@@ -9,53 +9,47 @@ export default function CardTable({
   currentMember,
   isGuideSelf = false,
 }) {
- const handleAddToCart = (item) => {
-  const product = {
-    ...item,
-    productId: item.productId ?? item.id, // ⬅️ 統一用 productId 作為 key
-    quantity: 1,
+  const handleAddToCart = (product) => {  // 修改為 'product'
+    const newProduct = {
+      ...product,
+      productId: product.productId ?? product.id, // 統一用 productId 作為 key
+      quantity: 1,
+    };
+    addToCart(newProduct);
   };
-  addToCart(product);
-};
 
-const parsePrice = (str) => {
-  return typeof str === "number"
-    ? str
-    : parseFloat(String(str ?? "0").replace(/[^\d.]/g, "")) || 0;
-};
+  const parsePrice = (str) => {
+    return typeof str === "number"
+      ? str
+      : parseFloat(String(str ?? "0").replace(/[^\d.]/g, "")) || 0;
+  };
 
+  // 根據會員類型計算價格
   const getMemberPrice = (basePrice) => {
-    const discountRate =
-      isGuideSelf || currentMember?.subType === "廠商"
-        ? (currentMember?.discountRate ?? 1)
-        : 1;
-
-    if (currentMember?.type === "VIP") {
-      return Math.round(basePrice * discountRate);
-    }
-    return basePrice;
-  };
+  if (!currentMember) return basePrice;
+  return Math.round(basePrice * (currentMember?.discountRate ?? 1));
+};
 
   const checkoutWithDiscount = () => {
     if (!onCheckout) return;
 
     const totalQuantity = cartItems.reduce(
-      (sum, item) => sum + item.quantity,
+      (sum, product) => sum + product.quantity,  // 修改為 'product'
       0
     );
 
-    const subtotal = cartItems.reduce((sum, item) => {
-      const price = Number(item.unitPrice ?? 0);
+    const subtotal = cartItems.reduce((sum, product) => {  // 修改為 'product'
+      const price = Number(product.unitPrice ?? 0);
       const discountRate =
         isGuideSelf || currentMember?.subType === "廠商"
-          ? (currentMember?.discountRate ?? 1)
+          ? (currentMember?.discountRate ?? 1) // 導遊或廠商享有折扣
           : 1;
-      const finalPrice = Math.round(price * discountRate);
+      const finalPrice = Math.round(price * discountRate); // 折扣後價格
 
-      return sum + finalPrice * item.quantity;
+      return sum + finalPrice * product.quantity;  // 修改為 'product'
     }, 0);
 
-    const finalTotal = subtotal - usedPoints;
+    const finalTotal = subtotal - usedPoints; // 扣除點數
 
     onCheckout?.({
       items: cartItems,
@@ -84,17 +78,16 @@ const parsePrice = (str) => {
           }}
         >
           {products.length > 0 ? (
-            products.map((item) => {
-              const originalPrice = parsePrice(item.price);
-              const discountedPrice = getMemberPrice(originalPrice);
-              const isDiscounted =
-                currentMember?.type === "VIP" &&
-                (isGuideSelf || currentMember?.subType === "廠商") &&
-                discountedPrice !== originalPrice;
+            products.map((product) => {  // 修改為 'product'
+              const originalPrice = parsePrice(product.price); // 解析原價
+              const discountedPrice = getMemberPrice(originalPrice); // 計算折扣後價格
+             const isDiscounted =
+  (currentMember?.discountRate ?? 1) < 1 &&
+  discountedPrice !== originalPrice;
 
               return (
                 <div
-                  key={item.id}
+                  key={product.id}  // 修改為 'product'
                   style={{
                     height: "140px",
                     border: "1px solid #dee2e6",
@@ -108,7 +101,7 @@ const parsePrice = (str) => {
                     padding: "10px",
                     transition: "all 0.2s",
                   }}
-                  onClick={() => handleAddToCart(item)}
+                  onClick={() => handleAddToCart(product)}  // 修改為 'product'
                   onMouseEnter={(e) => {
                     e.currentTarget.style.transform = "scale(1.03)";
                     e.currentTarget.style.boxShadow =
@@ -134,7 +127,7 @@ const parsePrice = (str) => {
                       textAlign: "center",
                     }}
                   >
-                    {item.name}
+                    {product.name}  {/* 修改為 'product' */}
                   </div>
 
                   <div
@@ -149,13 +142,13 @@ const parsePrice = (str) => {
                       style={{
                         fontSize: "0.75rem",
                         backgroundColor:
-                          item.nowStock  > 0 ? "#d4edda" : "#f8d7da",
-                        color: item.nowStock  > 0 ? "#155724" : "#721c24",
+                          product.nowStock > 0 ? "#d4edda" : "#f8d7da",
+                        color: product.nowStock > 0 ? "#155724" : "#721c24",
                         padding: "2px 4px",
                         borderRadius: "4px",
                       }}
                     >
-                      {item.nowStock  > 0 ? `庫存 ${item.nowStock }` : "缺貨"}
+                      {product.nowStock > 0 ? `庫存 ${product.nowStock}` : "缺貨"}
                     </span>
 
                     <div style={{ textAlign: "right" }}>

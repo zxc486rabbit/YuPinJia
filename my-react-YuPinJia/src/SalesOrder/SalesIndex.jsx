@@ -14,7 +14,7 @@ export default function SalesIndex() {
         <div className="d-flex">
           <NavbarItem text="訂單總覽" active={activeTab === "訂單總覽"} onClick={() => setActiveTab("訂單總覽")}/>
           <NavbarItem text="退貨總覽" active={activeTab === "退貨總覽"} onClick={() => setActiveTab("退貨總覽")} />
-          <NavbarItem text="匯款紀錄" active={activeTab === "匯款紀錄"} onClick={() => setActiveTab("匯款紀錄")}/>
+          <NavbarItem text="還款紀錄" active={activeTab === "還款紀錄"} onClick={() => setActiveTab("還款紀錄")}/>
           <NavbarItem text="贈送紀錄" active={activeTab === "贈送紀錄"} onClick={() => setActiveTab("贈送紀錄")}/>
         </div>
       </div>
@@ -22,7 +22,7 @@ export default function SalesIndex() {
       <div className="content-container" style={{height: "89vh"}}>
         {activeTab === "訂單總覽" && <Sales />}
         {activeTab === "退貨總覽" && <ReturnGoods />}
-        {activeTab === "匯款紀錄" && <TransPay />}
+        {activeTab === "還款紀錄" && <TransPay />}
         {activeTab === "贈送紀錄" && <Give />}
       </div>
     </>

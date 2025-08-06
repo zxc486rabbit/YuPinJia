@@ -1,17 +1,52 @@
 import { useState, useEffect } from "react";
-import { Modal, Button, Form } from "react-bootstrap"; // 加入 bootstrap 元件
-import "../components/Search.css"; // 引入 搜尋框 的 CSS 來調整樣式
-import SearchField from "../components/SearchField"; // 引入 搜尋框 模組
+import { Modal, Button, Form } from "react-bootstrap";
+import axios from "axios";
+import "../components/Search.css";
+import SearchField from "../components/SearchField";
 
 export default function Give() {
-  const [orderId, setOrderId] = useState("");
-  const [pickupTime, setPickupTime] = useState("");
+  const [product, setProduct] = useState("");
+  const [recipient, setRecipient] = useState("");
+  const [operator, setOperator] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
 
-  const [tableData, setTableData] = useState([]); // 存放表格資料
+  const [tableData, setTableData] = useState([]);
   const [showModal, setShowModal] = useState(false);
-  const [editItem, setEditItem] = useState(null); // 儲存目前編輯的項目
+  const [editItem, setEditItem] = useState(null);
 
-  // 編輯按鈕開啟彈出框
+  // 頁面進來先載全部資料
+  useEffect(() => {
+    fetchGiftRecords();
+  }, []);
+
+  // 呼叫 API 取得資料
+  const fetchGiftRecords = async (params = {}) => {
+    try {
+      const query = new URLSearchParams(params).toString();
+      const url = `https://yupinjia.hyjr.com.tw/api/api/t_SalesOrderItem/GetGiftRecord${
+        query ? `?${query}` : ""
+      }`;
+
+      const res = await axios.get(url);
+      console.log("贈送紀錄 API 回傳：", res.data);
+      setTableData(res.data || []);
+    } catch (err) {
+      console.error("載入失敗:", err);
+    }
+  };
+
+  // 搜尋
+  const handleSearch = () => {
+    const params = {};
+    if (product) params.productName = product;
+    if (recipient) params.fullName = recipient;
+    if (operator) params.operatorName = operator;
+    if (startDate) params.startDate = startDate;
+    if (endDate) params.endDate = endDate;
+    fetchGiftRecords(params);
+  };
+
   const handleEditClick = (item) => {
     setEditItem(item);
     setShowModal(true);
@@ -22,61 +57,56 @@ export default function Give() {
     setEditItem(null);
   };
 
-  const handleSearch = () => {
-    console.log("搜尋條件：", { orderId, pickupTime });
+  const formatDate = (dateStr) => {
+    if (!dateStr) return "";
+    return new Date(dateStr).toLocaleDateString("zh-TW");
   };
-
-  useEffect(() => {
-    fetch("/SalesTable.json") // 從 public 目錄讀取 JSON
-      .then((response) => response.json())
-      .then((data) => setTableData(data))
-      .catch((error) => console.error("載入失敗:", error));
-  }, []);
 
   return (
     <>
+      {/* 搜尋區 */}
       <div className="search-container d-flex flex-wrap gap-3 px-4 py-3 rounded">
         <SearchField
           label="商品"
           type="text"
-          value={orderId}
-          onChange={(e) => setOrderId(e.target.value)}
+          value={product}
+          onChange={(e) => setProduct(e.target.value)}
         />
         <SearchField
           label="受贈人"
-          type="number"
-          value={orderId}
-          onChange={(e) => setOrderId(e.target.value)}
+          type="text"
+          value={recipient}
+          onChange={(e) => setRecipient(e.target.value)}
         />
         <SearchField
           label="操作人"
-          type="number"
-          value={orderId}
-          onChange={(e) => setOrderId(e.target.value)}
+          type="text"
+          value={operator}
+          onChange={(e) => setOperator(e.target.value)}
         />
         <SearchField
           label="起"
           type="date"
-          value={pickupTime}
-          onChange={(e) => setPickupTime(e.target.value)}
+          value={startDate}
+          onChange={(e) => setStartDate(e.target.value)}
         />
         <SearchField
           label="迄"
           type="date"
-          value={pickupTime}
-          onChange={(e) => setPickupTime(e.target.value)}
+          value={endDate}
+          onChange={(e) => setEndDate(e.target.value)}
         />
 
-        {/* 搜尋按鈕 */}
-        {/* <button onClick={handleSearch} className="search-button">
+        <button onClick={handleSearch} className="search-button">
           搜尋
-        </button> */}
+        </button>
       </div>
+
       {/* 表格 */}
       <div
         className="table-container"
         style={{
-          maxHeight: "82vh", // 根據你想要的高度調整
+          maxHeight: "82vh",
           overflowY: "auto",
         }}
       >
@@ -92,29 +122,29 @@ export default function Give() {
             }}
           >
             <tr>
-              <th scope="col">商品</th>
-              <th scope="col">日期</th>
-              <th scope="col">數量</th>
-              <th scope="col">銷售價格</th>
-              <th scope="col">合計</th>
-              <th scope="col">受贈人</th>
-              <th scope="col">手機/用戶名</th>
-              <th scope="col">操作人</th>
-              <th scope="col">操作</th>
+              <th>訂單編號</th>
+              <th>日期</th>
+              <th>商品名稱</th>
+              <th>單價</th>
+              <th>數量</th>
+              <th>合計</th>
+              <th>受贈人</th>
+              <th>操作人</th>
+              <th>操作</th>
             </tr>
           </thead>
           <tbody>
             {tableData.length > 0 ? (
-              tableData.map((item, index) => (
-                <tr key={index}>
-                  <td>{item.product}</td>
-                  <td>{item.startDate}</td>
-                  <td>2</td>
-                  <td>1,234</td>
-                  <td>2,468</td>
-                  <td>{item.member}</td>
-                  <td>0988-588-147</td>
-                  <td>{item.name}</td>
+              tableData.map((item) => (
+                <tr key={item.id}>
+                  <td>{item.salesOrderId}</td>
+                  <td>{formatDate(item.createdAt)}</td>
+                  <td>{item.productName}</td>
+                  <td>{item.unitPrice}</td>
+                  <td>{item.quantity}</td>
+                  <td>{item.subtotal}</td>
+                  <td>{item.fullName}</td>
+                  <td>{item.operatorName}</td>
                   <td>
                     <button
                       className="edit-button"
@@ -127,13 +157,14 @@ export default function Give() {
               ))
             ) : (
               <tr>
-                <td colSpan="12">無資料</td>
+                <td colSpan="9">無資料</td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
 
+      {/* 編輯彈出框 */}
       <Modal show={showModal} onHide={handleModalClose} centered>
         <Modal.Header
           closeButton
@@ -141,37 +172,38 @@ export default function Give() {
           style={{ backgroundColor: "#3D7EA6", color: "white" }}
         >
           <Modal.Title>贈送紀錄</Modal.Title>
-          {/* 強制讓 close button 白色 */}
           <style>
             {`
-      .give-modal-header .btn-close {
-        filter: invert(1);
-      }
-    `}
+              .give-modal-header .btn-close {
+                filter: invert(1);
+              }
+            `}
           </style>
         </Modal.Header>
         <Modal.Body>
           {editItem && (
             <div style={{ fontSize: "1.2rem", lineHeight: "2" }}>
-              <div>商品：{editItem.product}</div>
-              <div>日期：{editItem.startDate}</div>
+              <div>商品：{editItem.productName}</div>
+              <div>日期：{formatDate(editItem.createdAt)}</div>
               <div>
                 數量：
-                <Form.Control type="number" defaultValue="1" className="my-1" />
+                <Form.Control
+                  type="number"
+                  defaultValue={editItem.quantity}
+                  className="my-1"
+                />
               </div>
               <div>
                 銷售價格：
                 <Form.Control
                   type="number"
-                  defaultValue="350"
+                  defaultValue={editItem.unitPrice}
                   className="my-1"
                 />
               </div>
-              <div>合計：350</div>
-              <div>受贈人：{editItem.member}</div>
-              <div>手機/用戶名：0987-987-987</div>
-              <div>剩餘額度：$500</div>
-              <div>操作人：{editItem.name}</div>
+              <div>合計：{editItem.subtotal}</div>
+              <div>受贈人：{editItem.fullName}</div>
+              <div>操作人：{editItem.operatorName}</div>
             </div>
           )}
         </Modal.Body>

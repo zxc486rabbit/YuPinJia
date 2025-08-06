@@ -1,8 +1,7 @@
 export const getMemberPrice = (basePrice, member) => {
-  if (member?.type === "VIP" && member?.subType === "廠商") {
-    return Math.round(basePrice * 0.9);
-  }
-  return basePrice;
+  if (!member) return basePrice;
+  // 直接依 discountRate 計算
+  return Math.round(basePrice * (member.discountRate ?? 1));
 };
 
 export const isDealer = (member) =>

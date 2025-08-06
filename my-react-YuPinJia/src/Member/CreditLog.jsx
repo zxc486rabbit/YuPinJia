@@ -3,6 +3,8 @@ import "../components/Search.css";
 import SearchField from "../components/SearchField";
 import Swal from "sweetalert2";
 import { Modal, Button, Form } from "react-bootstrap";
+import axios from "axios";
+import CreditSettleModal from "./CreditSettleModal";
 
 export default function CreditLog() {
   const [orderId, setOrderId] = useState("");
@@ -12,9 +14,11 @@ export default function CreditLog() {
   const [checkedOrders, setCheckedOrders] = useState([]);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  const [showSettleModal, setShowSettleModal] = useState(false);
 
   const [settleAmount, setSettleAmount] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState("現金");
+  
 
   // 付款相關額外欄位
   const [bankName, setBankName] = useState("");
@@ -23,25 +27,36 @@ export default function CreditLog() {
   const [chequeNumber, setChequeNumber] = useState("");
   const [chequeDate, setChequeDate] = useState("");
 
+  // 取得賒帳資料並更新 tableData
+  useEffect(() => {
+    axios
+      .get("https://yupinjia.hyjr.com.tw/api/api/t_CreditRecord")
+      .then((response) => {
+        const data = response.data;
+
+        // 將 API 資料處理並轉換為適合表格顯示的格式
+        const updatedData = data.map((item) => ({
+          orderId: item.id, // 假設 API 返回的 id 對應到訂單 ID
+          member: `會員 ${item.memberId}`, // 假設使用 memberId 显示會員名稱
+          name: `會員 ${item.memberId}`, // 假設顯示會員名稱
+          billingDate: item.billingDate,
+          totalAmount: item.creditAmount, // 將 creditAmount 顯示為總金額
+          unpaidAmount: item.creditAmount, // 顯示未結清金額
+          repaymentDate: item.lastRepaymentDate, // 最後還款日期
+          status: item.reminderCount > 0 ? "未還款" : "已還款", // 根據提醒次數決定狀態
+          remindCount: item.reminderCount, // 顯示提醒次數
+        }));
+        setTableData(updatedData);
+      })
+      .catch((error) => {
+        console.error("載入資料失敗:", error);
+        Swal.fire("資料載入失敗", "", "error");
+      });
+  }, []);
+
   const handleSearch = () => {
     console.log("搜尋條件：", { orderId, status, pickupTime });
   };
-
-  useEffect(() => {
-    fetch("/SalesTable.json")
-      .then((response) => response.json())
-      .then((data) => {
-        const updated = data.map((item) => ({
-          ...item,
-          unpaidAmount: Number(item.totalAmount.replace(/,/g, "")),
-          repaymentDate: "",
-          paymentMethod: "",
-          remindCount: 0,
-        }));
-        setTableData(updated);
-      })
-      .catch((error) => console.error("載入失敗:", error));
-  }, []);
 
   const toggleCheck = (order) => {
     setCheckedOrders((prev) =>
@@ -51,17 +66,11 @@ export default function CreditLog() {
     );
   };
 
-  const openSettleModal = (order) => {
-    setSelectedOrder(order);
-    setSettleAmount(order.unpaidAmount);
-    setPaymentMethod("現金");
-    setBankName("");
-    setAccountLast5("");
-    setRemitDate("");
-    setChequeNumber("");
-    setChequeDate("");
-    setShowModal(true);
-  };
+ // 打開結清彈窗
+const openSettleModal = (order) => {
+  setSelectedOrder(order);
+  setShowSettleModal(true);
+};
 
   const closeModal = () => {
     setShowModal(false);
@@ -116,7 +125,6 @@ export default function CreditLog() {
       return;
     }
 
-    // 生成列印內容
     const printWindow = window.open("", "_blank");
     const content = `
       <html>
@@ -247,7 +255,7 @@ export default function CreditLog() {
                   <td>{item.orderId}</td>
                   <td>{item.member}</td>
                   <td>{item.name}</td>
-                  <td>2025-04-18</td>
+                  <td>{item.billingDate}</td>
                   <td>{item.orderId}</td>
                   <td>{item.totalAmount}</td>
                   <td>{item.unpaidAmount}</td>
@@ -289,100 +297,12 @@ export default function CreditLog() {
         </button>
       </div>
 
-      <Modal show={showModal} onHide={closeModal} centered>
-        <Modal.Header closeButton>
-          <Modal.Title>結清金額</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          <Form.Group>
-            <Form.Label>結清金額</Form.Label>
-            <Form.Control
-              type="number"
-              min={1}
-              max={selectedOrder?.unpaidAmount || 0}
-              value={settleAmount}
-              onChange={(e) => setSettleAmount(Number(e.target.value))}
-            />
-          </Form.Group>
-          <Form.Group className="mt-3">
-            <Form.Label>付款方式</Form.Label>
-            <Form.Select
-              value={paymentMethod}
-              onChange={(e) => setPaymentMethod(e.target.value)}
-            >
-              <option>現金</option>
-              <option>匯款</option>
-              <option>支票</option>
-            </Form.Select>
-          </Form.Group>
-
-          {paymentMethod === "匯款" && (
-            <>
-              <Form.Group className="mt-3">
-                <Form.Label>銀行名稱</Form.Label>
-                <Form.Control
-                  type="text"
-                  value={bankName}
-                  onChange={(e) => setBankName(e.target.value)}
-                />
-              </Form.Group>
-              <Form.Group className="mt-3">
-                <Form.Label>帳號後五碼</Form.Label>
-                <Form.Control
-                  type="text"
-                  value={accountLast5}
-                  onChange={(e) => setAccountLast5(e.target.value)}
-                />
-              </Form.Group>
-              <Form.Group className="mt-3">
-                <Form.Label>匯款日期</Form.Label>
-                <Form.Control
-                  type="date"
-                  value={remitDate}
-                  onChange={(e) => setRemitDate(e.target.value)}
-                />
-              </Form.Group>
-            </>
-          )}
-
-          {paymentMethod === "支票" && (
-            <>
-              <Form.Group className="mt-3">
-                <Form.Label>銀行名稱</Form.Label>
-                <Form.Control
-                  type="text"
-                  value={bankName}
-                  onChange={(e) => setBankName(e.target.value)}
-                />
-              </Form.Group>
-              <Form.Group className="mt-3">
-                <Form.Label>支票號碼</Form.Label>
-                <Form.Control
-                  type="text"
-                  value={chequeNumber}
-                  onChange={(e) => setChequeNumber(e.target.value)}
-                />
-              </Form.Group>
-              <Form.Group className="mt-3">
-                <Form.Label>支票日期</Form.Label>
-                <Form.Control
-                  type="date"
-                  value={chequeDate}
-                  onChange={(e) => setChequeDate(e.target.value)}
-                />
-              </Form.Group>
-            </>
-          )}
-        </Modal.Body>
-        <Modal.Footer>
-          <Button variant="secondary" onClick={closeModal}>
-            取消
-          </Button>
-          <Button variant="success" onClick={handleSettle}>
-            確認結清
-          </Button>
-        </Modal.Footer>
-      </Modal>
+      {/* 結清 Modal */}
+      <CreditSettleModal
+  show={showSettleModal}
+  onClose={() => setShowSettleModal(false)}
+  creditRecordId={selectedOrder?.orderId}
+/>
     </>
   );
 }

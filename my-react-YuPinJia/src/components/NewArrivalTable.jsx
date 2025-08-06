@@ -10,27 +10,20 @@ export default function NewArrivalTable({
   isGuideSelf = false,
 }) {
   const handleAddToCart = (item) => {
-  const product = {
-    ...item,
-    productId: item.productId ?? item.id, // ⬅️ 統一用 productId 作為 key
-    quantity: 1,
+    const product = {
+      ...item,
+      productId: item.productId ?? item.id, // ⬅️ 統一用 productId 作為 key
+      quantity: 1,
+    };
+    addToCart(product);
   };
-  addToCart(product);
-};
 
   const parsePrice = (val) =>
     typeof val === "number" ? val : Number(String(val).replace(/[^0-9.]/g, ""));
 
   const getMemberPrice = (basePrice) => {
-    const discountRate =
-      isGuideSelf || currentMember?.subType === "廠商"
-        ? currentMember?.discountRate ?? 1
-        : 1;
-
-    if (currentMember?.type === "VIP") {
-      return Math.round(basePrice * discountRate);
-    }
-    return basePrice;
+    if (!currentMember) return basePrice;
+    return Math.round(basePrice * (currentMember?.discountRate ?? 1));
   };
 
   const checkoutWithDiscount = () => {
@@ -81,8 +74,7 @@ export default function NewArrivalTable({
               const originalPrice = parsePrice(item.price);
               const discountedPrice = getMemberPrice(originalPrice);
               const isDiscounted =
-                currentMember?.type === "VIP" &&
-                (isGuideSelf || currentMember?.subType === "廠商") &&
+                (currentMember?.discountRate ?? 1) < 1 &&
                 discountedPrice !== originalPrice;
 
               return (

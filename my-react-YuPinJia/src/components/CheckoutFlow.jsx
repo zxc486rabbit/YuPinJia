@@ -29,6 +29,8 @@ export default function CheckoutFlow({
   );
   const [pickupLocation, setPickupLocation] = useState("");
   const [cashReceived, setCashReceived] = useState("");
+  const [paymentAmount, setPaymentAmount] = useState(""); // 用來記錄匯款、支票輸入的金額
+const [creditCardInfo, setCreditCardInfo] = useState(""); // 用來記錄刷卡信息
   const [pickupTime, setPickupTime] = useState(
     new Date().toISOString().slice(0, 16)
   ); // 預設現在時間
@@ -43,7 +45,7 @@ export default function CheckoutFlow({
     { label: "訂單自取", icon: <FaClipboard size={36} /> },
   ];
 
-  const paymentOptions = ["現金", "匯款", "支票", "賒帳"];
+  const paymentOptions = ["現金", "匯款", "支票", "刷卡"];
   const carrierOptions = ["紙本發票", "手機載具", "自然人憑證", "統一編號"];
 
   const needExtraInfo = [
@@ -54,131 +56,160 @@ export default function CheckoutFlow({
     "訂單自取",
   ].includes(delivery);
 
-  const handleFinish = async () => {
-    if (payment === "現金" && Number(cashReceived) < finalTotal) {
-      alert("現金金額不足，請重新輸入。");
-      return;
-    }
+  // 付款方式選擇邏輯
+const handlePaymentMethodChange = (method) => {
+  if (method === "現金" && Number(cashReceived) < finalTotal) {
+    setPayment("賒帳");  // 若現金金額不足，將付款方式設為賒帳
+  } else {
+    setPayment(method);  // 其他情況，設定為選擇的付款方式
+  }
+};
 
-    setPrinting(true);
+const handleFinish = async () => {
+  // 如果現金金額不足，將付款方式設為賒帳並繼續處理訂單
+  if (payment === "現金" && Number(cashReceived) < finalTotal) {
+    setPayment("賒帳");
+    alert("現金金額不足，已自動轉為賒帳付款。");
+  }
 
-    const orderPayload = {
-      orderNumber: "SO" + Date.now(), // 可根據實際格式調整
-      orderDetails: cartItems.map((item) => ({
-        productId: item.id,
-        productName: item.name,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        subtotal: item.unitPrice * item.quantity,
-      })),
-      storeId: 1, // ← 若有分店邏輯請換成實際值
-      memberId: currentMember?.id ?? 0,
-      totalAmount: finalTotal,
-      totalQuantity: cartItems.reduce((sum, i) => sum + i.quantity, 0),
-      status: 1, // 假設 1 是「已成立」
-      unifiedBusinessNumber: invoiceTaxId,
-      invoiceNumber: "", // 若你有發票號邏輯可補上
-      note,
-      deliveryMethod: delivery,
-      dealerMemberId:
-        currentMember?.subType === "導遊客人" ? currentMember?.id : 0,
-      paymentMethod: payment,
-      carrierNumber: carrier,
-      createdAt: new Date().toISOString(),
-      operatorName: "操作員A", // ← 可用登入者名稱
-      pickupInfo: needExtraInfo
-        ? `收件人:${customerName}, 電話:${customerPhone}, 地點:${pickupLocation}, 時間:${pickupTime}`
-        : "",
-      signature: "", // 若有簽名可補上
-      mobile: customerPhone,
+  // 驗證匯款與支票金額
+  if ((payment === "匯款" || payment === "支票") && (!paymentAmount || Number(paymentAmount) <= 0)) {
+    alert("請輸入正確的金額。");
+    return;
+  }
+
+  setPrinting(true);
+
+  // 處理 cartItems，保留原價，並計算折扣價格
+  const updatedCartItems = cartItems.map((item) => {
+    const discountedPrice = hasDiscount
+      ? calcDiscountPrice(item.unitPrice)
+      : item.unitPrice; // 如果有折扣則計算折扣價格，否則使用原價
+
+    return {
+      ...item,
+      originalPrice: item.unitPrice,  // 保留原價
+      unitPrice: item.isGift ? 0 : discountedPrice,  // 設置贈品為免費，其他商品則使用折扣後價格
+      isGift: item.isGift || false, // 確保贈品標記為 isGift: true
     };
+  });
 
-    try {
-      const res = await fetch(
-        "https://yupinjia.hyjr.com.tw/api/api/t_SalesOrder",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(orderPayload),
-        }
-      );
+  // 根據付款方式與取貨方式設置訂單狀態
+  let orderStatus = 1; // 預設狀態為賒帳 (1)
+  let paymentAmountValue = 0;
+let creditAmountValue = 0;
 
-      if (!res.ok) throw new Error("儲存訂單失敗");
+  // 現金
+if (payment === "現金") {
+  paymentAmountValue = Number(cashReceived) || 0;
+  if (paymentAmountValue < finalTotal) {
+    creditAmountValue = finalTotal - paymentAmountValue; // 不足的部分記為賒帳
+  }
+}
+// 匯款 / 支票
+else if (payment === "匯款" || payment === "支票") {
+  paymentAmountValue = Number(paymentAmount) || 0;
+}
+// 刷卡
+else if (payment === "刷卡") {
+  paymentAmountValue = finalTotal; // 刷卡一次付清
+}
 
-      const result = await res.json(); // 假設 result.id 是主訂單 id
-      // console.log("✅ 主訂單建立完成，回傳 ID：", result.id);
+const orderPayload = {
+  orderNumber: "SO" + Date.now(),
+  storeId: 0,
+  memberId: currentMember?.id ?? 0,
+  totalAmount: finalTotal,
+  paymentAmount: paymentAmountValue, // 實收金額
+  creditAmount: creditAmountValue,   // 賒帳金額
+  totalQuantity: updatedCartItems.reduce((sum, i) => sum + i.quantity, 0),
+  status: orderStatus,               // 依你的付款邏輯計算的狀態
+  unifiedBusinessNumber: "",
+  invoiceNumber: "",
+  note,
+  deliveryMethod: delivery,
+  dealerMemberId: 0,                  // 如果有導遊/廠商才帶
+  paymentMethod:
+    payment === "現金" ? 0 :
+    payment === "匯款" ? 1 :
+    payment === "支票" ? 2 :
+    payment === "刷卡" ? 3 : 0,
+  carrierNumber: carrier,
+  createdAt: new Date().toISOString(),
+  operatorName: "操作員A",
+  pickupInfo: pickupLocation || "",
+  signature: "",
+  mobile: customerPhone,
+  shippingAddress: "",
+};
 
-      // ⬇️ 傳送每一筆商品明細
-      const detailResponses = await Promise.all(
-  cartItems.map(async (item) => {
-    const payload = {
-      salesOrderId: result.id,
-      productId: item.id,
-      productName: item.name,
-      shippingLocation: pickupLocation || "",
-      quantity: Number(item.quantity),
-      unitPrice: Number(item.unitPrice),
-      subtotal: Math.round(item.unitPrice * item.quantity),
-      discountedAmount: hasDiscount
-        ? Math.round(item.unitPrice * item.quantity * 0.1)
-        : 0,
-      status: "正常",
-    };
+  console.log("訂單 Payload:", orderPayload);
+  console.log("商品明細 Payload:", updatedCartItems);
 
-    console.log("🚀 傳送商品明細 payload：", payload);
-
-    try {
-      const res = await fetch("https://yupinjia.hyjr.com.tw/api/api/t_SalesOrderItem", {
+  try {
+    const res = await fetch(
+      "https://yupinjia.hyjr.com.tw/api/api/t_SalesOrder",
+      {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      const text = await res.text();
-      try {
-        const json = JSON.parse(text);
-        console.log("✅ 明細回應：", json);
-      } catch {
-        console.warn("⚠️ 明細回應不是 JSON：", text);
+        body: JSON.stringify(orderPayload),
       }
+    );
 
-      if (!res.ok) {
-        console.error("❌ 明細 API 錯誤：", res.status, text);
-      }
+    if (!res.ok) throw new Error("儲存訂單失敗");
 
-      return res;
-    } catch (err) {
-      console.error("❌ 明細傳送錯誤：", err);
-      return { ok: false };
-    }
-  })
-);
+    const result = await res.json(); // 假設 result.id 是主訂單 id
 
-      // 檢查是否有失敗
-      const failed = detailResponses.find((r) => !r.ok);
-      if (failed) throw new Error("部分商品明細儲存失敗");
+    const detailResponses = await Promise.all(
+      updatedCartItems.map(async (item) => {
+        const payload = {
+          salesOrderId: result.id,
+          productId: item.id,
+          productName: item.name,
+          shippingLocation: pickupLocation || "",
+          quantity: Number(item.quantity),
+          unitPrice: Number(item.unitPrice),  // 使用折扣後的 unitPrice
+          originalPrice: Number(item.originalPrice),  // 傳送原價
+          subtotal: Math.round(item.unitPrice * item.quantity),
+          discountedAmount: Math.round(item.originalPrice - item.unitPrice) * item.quantity,  // 計算折扣金額
+          status: "正常",
+          isGift: item.isGift || false,
+        };
 
-      setTimeout(() => {
-        setPrinting(false);
-        onComplete?.({
-          delivery,
-          payment,
-          carrier,
-          customerName,
-          customerPhone,
-          pickupLocation,
-          pickupTime,
-          note,
-          usedPoints,
-          finalTotal,
+        const res = await fetch("https://yupinjia.hyjr.com.tw/api/api/t_SalesOrderItem", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
         });
-        navigate("/");
-      }, 1200);
-    } catch (err) {
+
+        return res;
+      })
+    );
+
+    const failed = detailResponses.find((r) => !r.ok);
+    if (failed) throw new Error("部分商品明細儲存失敗");
+
+    setTimeout(() => {
       setPrinting(false);
-      alert("訂單儲存失敗：" + err.message);
-    }
-  };
+      onComplete?.({
+        delivery,
+        payment,
+        carrier,
+        customerName,
+        customerPhone,
+        pickupLocation,
+        pickupTime,
+        note,
+        usedPoints,
+        finalTotal,
+      });
+      navigate("/"); // 導向首頁或其他頁面
+    }, 1200);
+  } catch (err) {
+    setPrinting(false);
+    alert("訂單儲存失敗：" + err.message);
+  }
+};
 
   const hasDiscount =
     currentMember?.type === "VIP" &&
@@ -201,6 +232,7 @@ export default function CheckoutFlow({
   const couponDiscount = Number(usedPoints ?? 0);
 
   const finalTotal = Math.max(0, totalDiscounted - couponDiscount);
+  
 
   const discountAmount = totalOriginal - totalDiscounted;
 
@@ -217,6 +249,7 @@ export default function CheckoutFlow({
       {step === 1 && (
         <>
           <h2 style={styles.title}>確認商品明細</h2>
+          <div style={styles.tableContainer}>
           <table style={styles.table}>
             <thead>
               <tr>
@@ -234,6 +267,7 @@ export default function CheckoutFlow({
                 </tr>
               ) : (
                 cartItems.map((item) => (
+                  
                   <tr key={item.id}>
                     <td style={styles.td}>{item.name}</td>
                     <td style={styles.td}>{item.quantity}</td>
@@ -262,6 +296,7 @@ export default function CheckoutFlow({
               )}
             </tbody>
           </table>
+          </div>
           <div style={{ marginTop: "20px", textAlign: "right" }}>
             <p>
               原價總計:{" "}
@@ -442,147 +477,91 @@ export default function CheckoutFlow({
             ))}
           </div>
 
-          {/* 如果選現金 */}
-          {payment === "現金" && (
-            <div style={styles.cashSection}>
-              <label style={styles.label}>收現金額</label>
-              <input
-                style={styles.input}
-                type="number"
-                min="0"
-                placeholder="請輸入收現金額"
-                value={cashReceived}
-                onChange={(e) => setCashReceived(e.target.value)}
-              />
-              <p style={{ marginTop: "5px", color: "#555" }}>
-                {Number(cashReceived) >= finalTotal ? (
-                  <>
-                    找零:{" "}
-                    <span style={{ fontWeight: "bold", color: "#28a745" }}>
-                      NT$ {(Number(cashReceived) - finalTotal).toLocaleString()}
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    差額:{" "}
-                    <span style={{ fontWeight: "bold", color: "#dc3545" }}>
-                      NT${" "}
-                      {(
-                        Number(cashReceived || 0) - finalTotal
-                      ).toLocaleString()}
-                    </span>
-                  </>
-                )}
-              </p>
-            </div>
-          )}
-          {/* 如果是匯款 */}
-          {payment === "匯款" && (
-            <div style={styles.cashSection}>
-              <label style={styles.label}>匯款帳戶末五碼</label>
-              <input
-                style={styles.input}
-                placeholder="請輸入帳戶末五碼"
-                maxLength={5}
-                value={cashReceived}
-                onChange={(e) => setCashReceived(e.target.value)}
-              />
-              <label style={styles.label}>匯款人姓名</label>
-              <input
-                style={styles.input}
-                placeholder="請輸入匯款人姓名"
-                value={customerName}
-                onChange={(e) => setCustomerName(e.target.value)}
-              />
-            </div>
-          )}
-
-          {/* 如果是支票 */}
-          {payment === "支票" && (
-            <div style={styles.cashSection}>
-              <label style={styles.label}>支票號碼</label>
-              <input
-                style={styles.input}
-                placeholder="請輸入支票號碼"
-                value={cashReceived}
-                onChange={(e) => setCashReceived(e.target.value)}
-              />
-              <label style={styles.label}>開票人</label>
-              <input
-                style={styles.input}
-                placeholder="請輸入開票人姓名"
-                value={customerName}
-                onChange={(e) => setCustomerName(e.target.value)}
-              />
-            </div>
-          )}
-          {payment === "賒帳" && (
-            <div style={styles.cashSection}>
-              <label style={styles.label}>已付金額</label>
-              <input
-                style={styles.input}
-                type="number"
-                min="0"
-                placeholder="請輸入付款金額"
-                value={cashReceived}
-                onChange={(e) => setCashReceived(e.target.value)}
-              />
-              <p style={{ marginTop: "5px", color: "#555" }}>
-                賒帳:{" "}
+          {/* 顯示金額輸入框 */}
+        {(payment === "現金" || payment === "刷卡") && (
+          <div style={styles.cashSection}>
+            <label style={styles.label}>收現金額</label>
+            <input
+              style={styles.input}
+              type="number"
+              min="0"
+              placeholder="請輸入收現金額"
+              value={cashReceived}
+              onChange={(e) => setCashReceived(e.target.value)}
+            />
+            <p style={{ marginTop: "5px", color: "#555" }}>
+              {Number(cashReceived) >= finalTotal ? (
+                <span style={{ fontWeight: "bold", color: "#28a745" }}>
+                  找零: NT$ {(Number(cashReceived) - finalTotal).toLocaleString()}
+                </span>
+              ) : (
                 <span style={{ fontWeight: "bold", color: "#dc3545" }}>
-                  NT${" "}
+                  賒帳: NT${" "}
                   {(Number(cashReceived || 0) - finalTotal).toLocaleString()}
                 </span>
-              </p>
-            </div>
-          )}
-
-          <h4 style={styles.subtitle}>發票資訊</h4>
-          <div style={styles.invoiceRow}>
-            <div style={styles.invoiceItem}>
-              <label style={styles.label}>載具號碼</label>
-              <input
-                style={styles.input}
-                placeholder="/請輸入載具號碼"
-                value={carrier}
-                onChange={(e) =>
-                  setCarrier(
-                    e.target.value.startsWith("/")
-                      ? e.target.value
-                      : "/" + e.target.value
-                  )
-                }
-              />
-            </div>
-            <div style={styles.invoiceItem}>
-              <label style={styles.label}>統一編號</label>
-              <input
-                style={styles.input}
-                placeholder="請輸入8碼統編"
-                maxLength={8}
-                value={invoiceTaxId}
-                onChange={(e) => setCustomerPhone(e.target.value)}
-              />
-            </div>
+              )}
+            </p>
           </div>
+        )}
 
-          <button
-            style={{ ...styles.primaryBtn, background: "#28a745" }}
-            disabled={
-              !payment || // 尚未選擇付款方式
-              (payment === "現金" && Number(cashReceived) < finalTotal) // 若為現金，且金額不足
-            }
-            onClick={handleFinish}
-          >
-            確認結帳
-          </button>
-        </>
-      )}
-      {printing && (
-        <div style={styles.printingOverlay}>
-          <div style={styles.printingContent}>
-            <div style={styles.spinner}></div>
-            <p>列印發票中…</p>
+        {/* 如果是匯款或支票 */}
+        {(payment === "匯款" || payment === "支票") && (
+          <div style={styles.cashSection}>
+            <label style={styles.label}>付款金額</label>
+            <input
+              style={styles.input}
+              type="number"
+              min="0"
+              placeholder="請輸入付款金額"
+              value={paymentAmount}
+              onChange={(e) => setPaymentAmount(e.target.value)}
+            />
+          </div>
+        )}
+
+        {/* 發票資訊 */}
+        <h4 style={styles.subtitle}>發票資訊</h4>
+        <div style={styles.invoiceRow}>
+          <div style={styles.invoiceItem}>
+            <label style={styles.label}>載具號碼</label>
+            <input
+              style={styles.input}
+              placeholder="請輸入載具號碼"
+              value={carrier}
+              onChange={(e) =>
+                setCarrier(
+                  e.target.value.startsWith("/")
+                    ? e.target.value
+                    : "/" + e.target.value
+                )
+              }
+            />
+          </div>
+          <div style={styles.invoiceItem}>
+            <label style={styles.label}>統一編號</label>
+            <input
+              style={styles.input}
+              placeholder="請輸入8碼統編"
+              maxLength={8}
+              value={invoiceTaxId}
+              onChange={(e) => setCustomerPhone(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <button
+          style={{ ...styles.primaryBtn, background: "#28a745" }}
+          onClick={handleFinish}
+        >
+          確認結帳
+        </button>
+      </>
+    )}
+    {printing && (
+      <div style={styles.printingOverlay}>
+        <div style={styles.printingContent}>
+          <div style={styles.spinner}></div>
+          <p>列印發票中…</p>
           </div>
         </div>
       )}
@@ -754,5 +733,9 @@ const styles = {
     borderRadius: "50%",
     animation: "spin 1s linear infinite",
     margin: "0 auto 15px",
+  },
+  tableContainer: {
+    maxHeight: "50vh",  // 設定最大高度
+    overflowY: "auto",   // 開啟垂直滾動
   },
 };

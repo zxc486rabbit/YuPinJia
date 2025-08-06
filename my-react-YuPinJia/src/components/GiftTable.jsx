@@ -11,6 +11,8 @@ export default function GiftTable({
     ...item,
     productId: item.productId ?? item.id, // ⬅️ 統一用 productId 作為 key
     quantity: 1,
+    unitPrice: 0,   // 贈品的價格設為 0
+    isGift: true,   // 設置 isGift 為 true
   };
   addToCart(product);
 };

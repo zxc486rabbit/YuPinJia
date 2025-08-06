@@ -1,27 +1,28 @@
 import { useState, useEffect } from "react";
-import "../components/Search.css"; // 引入 搜尋框 的 CSS 來調整樣式
-import SearchField from "../components/SearchField"; // 引入 搜尋框 模組
+import "../components/Search.css"; // 引入搜尋框的 CSS 來調整樣式
+import SearchField from "../components/SearchField"; // 引入搜尋框模組
 import { FaSearch } from "react-icons/fa";
 
 export default function Stock() {
   const [orderId, setOrderId] = useState("");
   const [tableData, setTableData] = useState([]); // 存放表格資料
 
-  const handleSearch = () => {
-    console.log("搜尋條件：", { orderId });
-  };
-
+  // 從 API 取得資料
   useEffect(() => {
-    fetch("/SalesTable.json") // 從 public 目錄讀取 JSON
+    fetch("https://yupinjia.hyjr.com.tw/api/api/t_Stock")
       .then((response) => response.json())
       .then((data) => setTableData(data))
       .catch((error) => console.error("載入失敗:", error));
   }, []);
 
-  // noSafeData是預警產品
+  // noSafeData 是預警產品
   const noSafeData = tableData.filter((v) => {
-    return v.storeStock < v.safe;
+    return v.quantity < v.product.safetyStock;
   });
+
+  const handleSearch = () => {
+    console.log("搜尋條件：", { orderId });
+  };
 
   return (
     <>
@@ -40,57 +41,10 @@ export default function Stock() {
                 { value: "5", label: "澎湖海產(乾貨)類" },
               ]}
             />
-            {/* <SearchField
-              type="select"
-              value={orderId}
-              onChange={(e) => setOrderId(e.target.value)}
-              options={[
-                { value: "none", label: "請選擇包裝" },
-                { value: "all", label: "三大順有限公司" },
-                { value: "store", label: "志貴企業有限公司" },
-                { value: "delivery", label: "岱洋股份有限公司" },
-                { value: "5", label: "原祥塑膠工業有限公司" },
-              ]}
-            />
-            <SearchField
-              type="select"
-              value={orderId}
-              onChange={(e) => setOrderId(e.target.value)}
-              options={[
-                { value: "none", label: "請選擇外包裝" },
-                { value: "all", label: "真納視覺文化股份有限公司" },
-                { value: "store", label: "合泰紙器商行" },
-              ]}
-            />
-            <SearchField
-              type="select"
-              value={orderId}
-              onChange={(e) => setOrderId(e.target.value)}
-              options={[
-                { value: "none", label: "請選擇原料" },
-                { value: "all", label: "小罐廠商" },
-                { value: "store", label: "拓南化學原料有限公司" },
-                { value: "delivery", label: "大通商行" },
-                { value: "5", label: "海菜批發" },
-              ]}
-            />
-            <SearchField
-              type="select"
-              value={orderId}
-              onChange={(e) => setOrderId(e.target.value)}
-              options={[
-                { value: "none", label: "其他" },
-                { value: "all", label: "早安" },
-                { value: "store", label: "午安" },
-                { value: "delivery", label: "晚安" },
-              ]}
-            /> */}
-
             <div className="search-bar">
               <FaSearch className="search-icon" />
               <input type="text" placeholder="搜尋..." />
             </div>
-            {/* 搜尋按鈕 */}
             <button onClick={handleSearch} className="search-button">
               搜尋
             </button>
@@ -98,7 +52,6 @@ export default function Stock() {
 
           {/* 左邊 */}
           <div className="col-7">
-            {/* 表格 */}
             <div
               style={{
                 height: "75vh",
@@ -139,23 +92,25 @@ export default function Stock() {
                     tableData.map((item, index) => (
                       <tr key={index}>
                         <td
-                          title={item.product}
+                          title={item.product.name}
                           style={{
                             whiteSpace: "nowrap",
                             overflow: "hidden",
                             textOverflow: "ellipsis",
                           }}
                         >
-                          {item.product}
+                          {item.product.name}
                         </td>
-                        <td>{item.stock}</td>
+                        <td>{item.quantity}</td>
                         <td
                           style={{
                             color:
-                              item.storeStock < item.safe ? "red" : "inherit",
+                              item.quantity < item.product.safetyStock
+                                ? "red"
+                                : "inherit",
                           }}
                         >
-                          {item.storeStock}
+                          {item.quantity}
                         </td>
                         <td>3</td>
                       </tr>
@@ -169,10 +124,10 @@ export default function Stock() {
               </table>
             </div>
           </div>
+
           {/* 右邊 */}
           <div className="col-5">
             <div style={{ height: "79vh", overflow: "auto" }}>
-              {/* 表格 */}
               <h5 className="no-safe-text mt-1 mb-0 py-2">預警產品</h5>
               <table
                 className="table text-center"
@@ -192,9 +147,9 @@ export default function Stock() {
                   {noSafeData.length > 0 ? (
                     noSafeData.map((item, index) => (
                       <tr key={index}>
-                        <td>{item.product}</td>
-                        <td style={{color: "red"}} >{item.storeStock}</td>
-                        <td>{item.safe}</td>
+                        <td>{item.product.name}</td>
+                        <td style={{ color: "red" }}>{item.quantity}</td>
+                        <td>{item.product.safetyStock}</td>
                       </tr>
                     ))
                   ) : (

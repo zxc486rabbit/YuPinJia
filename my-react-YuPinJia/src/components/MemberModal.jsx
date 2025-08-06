@@ -3,12 +3,13 @@ import { Modal, Button, Form, ListGroup, Spinner } from "react-bootstrap";
 import axios from "axios";
 
 export default function MemberModal({ show, onHide, onSelect }) {
-  const [input, setInput] = useState("");
-  const [members, setMembers] = useState([]);
-  const [suggestions, setSuggestions] = useState([]);
-  const [selected, setSelected] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [input, setInput] = useState(""); // 用戶輸入
+  const [members, setMembers] = useState([]); // 所有會員資料
+  const [suggestions, setSuggestions] = useState([]); // 搜尋建議
+  const [selected, setSelected] = useState(null); // 當前選擇的會員
+  const [loading, setLoading] = useState(false); // 載入狀態
 
+  // 載入會員資料
   useEffect(() => {
     if (!show) return;
     setLoading(true);
@@ -25,10 +26,10 @@ export default function MemberModal({ show, onHide, onSelect }) {
   const handleInputChange = (e) => {
     const keyword = e.target.value.trim();
     setInput(keyword);
-    setSelected(null);
+    setSelected(null); // 清空已選擇會員
 
     if (keyword.length === 0) {
-      setSuggestions([]);
+      setSuggestions([]); // 當輸入為空時清空建議
       return;
     }
 
@@ -38,13 +39,13 @@ export default function MemberModal({ show, onHide, onSelect }) {
         m.contactPhone?.toLowerCase().includes(lower) ||
         m.fullName?.toLowerCase().includes(lower)
     );
-    setSuggestions(filtered.slice(0, 10));
+    setSuggestions(filtered.slice(0, 10)); // 限制顯示最多 10 條建議
   };
 
   const handleSelect = (member) => {
     setInput(`${member.fullName} (${member.contactPhone})`);
     setSelected(member);
-    setSuggestions([]);
+    setSuggestions([]); // 清空建議列表
   };
 
   const handleSubmit = () => {
@@ -54,7 +55,7 @@ export default function MemberModal({ show, onHide, onSelect }) {
     }
 
     const normalized = {
-      ...selected, // ✅ 保留所有 API 欄位
+      ...selected,
       type: selected.isDistributor ? "VIP" : "一般",
       level: `LV${selected.memberLevel ?? 0}`,
       discountRate: selected.isDistributor ? 0.9 : 1,
@@ -62,8 +63,8 @@ export default function MemberModal({ show, onHide, onSelect }) {
     };
 
     onSelect(normalized);
-    setInput("");
-    setSelected(null);
+    setInput(""); // 清空輸入框
+    setSelected(null); // 清空選擇
     onHide();
   };
 
@@ -103,7 +104,7 @@ export default function MemberModal({ show, onHide, onSelect }) {
         <Button variant="secondary" onClick={onHide}>
           取消
         </Button>
-        <Button variant="primary" onClick={handleSubmit}>
+        <Button variant="primary" onClick={handleSubmit} disabled={!selected}>
           確認
         </Button>
       </Modal.Footer>
