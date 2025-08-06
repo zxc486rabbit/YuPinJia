@@ -107,12 +107,12 @@ export default function CreateMember() {
 };
 
   return (
-    <div className="container mt-2">
+    <div className="container mt-1">
       <div
         className={`card shadow rounded-4 ${memberType === 0 ? "col-md-6 mx-auto" : ""}`}
         style={{
           background: "#fff",
-          padding: "15px 20px",
+          padding: "20px 20px",
           borderRadius: "15px",
           border: "1px solid #e0e0e0",
         }}
