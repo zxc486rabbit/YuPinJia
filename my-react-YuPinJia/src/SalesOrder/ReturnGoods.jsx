@@ -18,7 +18,7 @@ export default function ReturnGoods() {
   const [showProcessModal, setShowProcessModal] = useState(false); // 處理流程彈出框
   const [showEditModal, setShowEditModal] = useState(false);
   const [editedOrder, setEditedOrder] = useState({});
-  
+
   // 測試圖片與備註
   const images = [
     { src: "/low.png", remark: "內裡包裝破損" },
@@ -67,7 +67,7 @@ export default function ReturnGoods() {
         const raw = res.data;
 
         // 印出獲取到的資料
-      console.log("API 返回的資料：", raw);
+        console.log("API 返回的資料：", raw);
 
         // 假設 API 回傳的資料是以 orderId 為唯一標識
         const mapped = raw.map((order) => ({
@@ -75,8 +75,8 @@ export default function ReturnGoods() {
           orderId: order.orderNumber,
           store: order.store || "林園門市",
           invoice: order.invoiceNumber || "無",
-          startDate: order.pickupTime || "無",
-          endDate: order.returnTime || "無",
+          startDate: order.pickupTime ? order.pickupTime.split("T")[0] : "無",
+          endDate: order.returnTime ? order.returnTime.split("T")[0] : "無",
           pay: order.returnMethod || "無",
           reason: order.reason || "無",
         }));
@@ -89,9 +89,17 @@ export default function ReturnGoods() {
       });
   }, [orderId, pickupTime]); // 依據搜尋條件觸發更新
 
-  const handleView = (order) => {
-    setSelectedOrder(order);// 設定選中的訂單
-    setShowModal(true);// 顯示 Modal
+  const handleView = async (order) => {
+    try {
+      const res = await axios.get(
+        `https://yupinjia.hyjr.com.tw/api/api/t_ReturnOrder/${order.id}`
+      );
+      setSelectedOrder(res.data);
+      setShowModal(true);
+    } catch (error) {
+      console.error("載入退貨明細失敗:", error);
+      Swal.fire("錯誤", "載入退貨明細失敗", "error");
+    }
   };
 
   const closeModal = () => {
@@ -287,136 +295,95 @@ export default function ReturnGoods() {
           <Modal.Title>退貨明細</Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          <table className="table text-center" style={{ fontSize: "1.2rem" }}>
-            <thead
-              className="table-light"
-              style={{
-                borderTop: "1px solid #c5c6c7",
-                position: "sticky",
-                top: 0,
-                background: "#d1ecf1",
-                zIndex: 1,
-              }}
-            >
-              <tr>
-                <th scope="col">商品名稱</th>
-                <th scope="col">數量</th>
-                <th scope="col">單價</th>
-                <th scope="col">金額</th>
-                <th scope="col">折扣後</th>
-                <th scope="col" style={{ color: "#CD0000" }}>
-                  退貨數量
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {selectedOrder ? (
-                <tr>
-                  <td>{selectedOrder.product}</td>
-                  <td>{selectedOrder.totalCount}</td>
-                  <td>{selectedOrder.totalAmount}</td>
-                  <td>
-                    {(() => {
-                      const count = Number(selectedOrder.totalCount);
-                      const amount = Number(
-                        selectedOrder.totalAmount.replace(/,/g, "")
-                      );
-                      const total = count * amount;
-                      return total.toLocaleString(); // 千分位格式
-                    })()}
-                  </td>
-                  <td>
-                    {(() => {
-                      const count = Number(selectedOrder.totalCount);
-                      const amount = Number(
-                        selectedOrder.totalAmount.replace(/,/g, "")
-                      );
-                      const discounted = Math.round(count * amount * 0.9); // 四捨五入
-                      return discounted.toLocaleString();
-                    })()}
-                  </td>
-                  <td style={{ color: "#CD0000" }}>1</td>
-                </tr>
-              ) : (
-                <tr>
-                  <td colSpan="12">無資料</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-          {selectedOrder &&
-            (() => {
-              const count = Number(selectedOrder.totalCount);
-              const amount = Number(
-                selectedOrder.totalAmount.replace(/,/g, "")
-              );
-              const total = count * amount;
-
-              return (
-                <div
-                  className="mt-3 p-3  bg-light border rounded "
-                  style={{ fontSize: "1rem" , lineHeight: "1.7" }}
+          {selectedOrder ? (
+            <>
+              <table
+                className="table text-center"
+                style={{ fontSize: "1.2rem" }}
+              >
+                <thead
+                  className="table-light"
+                  style={{ position: "sticky", top: 0, background: "#d1ecf1" }}
                 >
-                  <div className="d-flex">
-                    <div>
-                      共計：<strong>1</strong> 項
-                    </div>
-                    <div className="mx-5">
-                      總計：<strong>{total.toLocaleString()}</strong> 元
-                    </div>
-                    <div>
-                      支付方式：<strong>{selectedOrder.pay}</strong>
-                    </div>
+                  <tr>
+                    <th>商品名稱</th>
+                    <th>數量</th>
+                    <th>單價</th>
+                    <th>金額</th>
+                    <th>折扣後</th>
+                    <th style={{ color: "#CD0000" }}>退貨數量</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedOrder.orderItem.length > 0 ? (
+                    selectedOrder.orderItem.map((item, idx) => (
+                      <tr key={idx}>
+                        <td>{item.productName}</td>
+                        <td>{item.quantity}</td>
+                        <td>{item.unitPrice}</td>
+                        <td>{item.totalPrice}</td>
+                        <td>{item.discountedPrice}</td>
+                        <td style={{ color: "#CD0000" }}>
+                          {item.returnQuantity}
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan="6">無資料</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+
+              {/* 明細資訊 */}
+              <div
+                className="mt-3 p-3 bg-light border rounded"
+                style={{ fontSize: "1rem", lineHeight: "1.7" }}
+              >
+                <div className="d-flex">
+                  <div>
+                    共計：<strong>{selectedOrder.quantitySum}</strong> 項
                   </div>
-                  <div className="d-flex mt-1">
-                    <div>
-                      發票寄出方式：<strong>郵寄</strong>
-                    </div>
-                    <div className="ms-5">
-                      郵寄地址：<strong>高雄市鳳山區瑞隆路7巷27號</strong>
-                    </div>
+                  <div className="mx-5">
+                    總計：<strong>{selectedOrder.returnSum}</strong> 元
                   </div>
-                  <div className="d-flex mt-1">
-                    <div>
-                      取貨：<strong>{selectedOrder.startDate}</strong>
-                    </div>
-                    <div className="ms-5">
-                      退貨：
-                      <strong>
-                        {selectedOrder.endDate}
-                        <span className="ms-1" style={{ color: "#E20000" }}>
-                          (3天 1時 5分)
-                        </span>
-                      </strong>
-                    </div>
-                  </div>
-                  {/* 紅字 */}
-                  <div
-                    className="d-flex align-items-center mt-2"
-                    style={{ color: "#E20000" }}
-                  >
-                    <div>
-                      退貨共計：<strong>1</strong> 項
-                    </div>
-                    <div className="mx-5">
-                      退款方式：<strong>現金</strong>
-                    </div>
-                    <div>
-                      退貨原因：<strong>內裡包裝破損</strong>
-                      <BiImage
-                        size={26}
-                        style={{
-                          color: "#666",
-                          marginLeft: "10px",
-                          cursor: "pointer",
-                        }}
-                        onClick={() => setShowImage(true)}
-                      />
-                    </div>
+                  <div>
+                    退款方式：<strong>{selectedOrder.refundMethod}</strong>
                   </div>
                 </div>
-              );
-            })()}
+                <div className="d-flex mt-1">
+                  <div>
+                    發票寄出方式：
+                    <strong>{selectedOrder.invoiceSendMethod}</strong>
+                  </div>
+                  <div className="ms-5">
+                    郵寄地址：<strong>{selectedOrder.mailingAddress}</strong>
+                  </div>
+                </div>
+                <div className="d-flex mt-1">
+                  <div>
+                    取貨：
+                    <strong>{selectedOrder.pickupTime?.split("T")[0]}</strong>
+                  </div>
+                  <div className="ms-5">
+                    退貨：
+                    <strong>{selectedOrder.returnTime?.split("T")[0]}</strong>
+                  </div>
+                </div>
+                <div
+                  className="d-flex align-items-center mt-2"
+                  style={{ color: "#E20000" }}
+                >
+                  <div>
+                    退貨原因：<strong>{selectedOrder.reason}</strong>
+                  </div>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div>載入中...</div>
+          )}
         </Modal.Body>
         <Modal.Footer>
           <Button

@@ -68,6 +68,14 @@ export default function Sales() {
     }
   };
 
+  const calculatedCreditAmount =
+  (selectedOrder?.productDetails?.reduce((sum, item) => {
+    const unitPrice = Number(item.unitPrice) || 0;
+    const quantity = Number(item.quantity) || 0;
+    const discount = Number(item.discountedAmount ?? 0) || 0;
+    return sum + (unitPrice * quantity - discount);
+  }, 0) || 0) - Number(selectedOrder?.paymentAmount || 0);
+
   // 當前狀態（數字）必須轉換為數字，避免傳入 NaN
   const getNextStepLabel = (status) => {
     const numericStatus = Number(status); // 確保 status 是數字
@@ -187,62 +195,64 @@ export default function Sales() {
 
   // 編輯訂單彈出框
   const handleEdit = async (order) => {
-    // 確保初始化 selectedOrder 並保留所有資料
-    setSelectedOrder({
-      ...order,
-      productDetails: [], // 初始化為空的商品明細
-      totalAmount:
-        order.totalAmount && !isNaN(order.totalAmount) ? order.totalAmount : 0, // 確保 totalAmount 是有效的數字
-      paymentAmount: order.paymentAmount ?? 0, // 如果 paymentAmount 是 null 則設為 0
-      creditAmount:
-        order.creditAmount && !isNaN(order.creditAmount)
-          ? order.creditAmount
-          : 0, // 確保 creditAmount 是有效的數字
-      orderNumber: order.orderId || "", // 確保訂單編號存在
-      store: order.store || "未知門市", // 確保門市名稱存在
-      member: order.member || "未命名會員", // 確保會員名稱存在
-      phone: order.phone || "", // 確保電話號碼存在
-      invoice: order.invoice || "無", // 確保發票號碼存在
-      taxId: order.taxId || "無", // 確保統一編號存在
-      status: Number(order.status) || 0, // 確保 status 被轉換為數字，如果是 null 或 undefined 設為 0（已作廢）
-    });
+  setSelectedOrder({
+    ...order,
+    productDetails: [],
+    totalAmount: order.totalAmount || 0,
+    paymentAmount: order.paymentAmount || 0,
+    creditAmount: order.creditAmount || 0,
+  });
 
-    setShowEditModal(true); // 顯示編輯視窗
+  setShowEditModal(true);
 
-    try {
-      // 確保獲取訂單資料和商品明細
-      const mainOrderRes = await axios.get(
-        `https://yupinjia.hyjr.com.tw/api/api/t_SalesOrder/${order.id}`
-      );
+  try {
+    const res = await axios.get(
+      `https://yupinjia.hyjr.com.tw/api/api/t_SalesOrder/${order.id}`
+    );
 
-      console.log(mainOrderRes.data); // 檢查回應資料
+    const data = res.data;
 
-      if (mainOrderRes.data) {
-        const { orderItems, totalAmount } = mainOrderRes.data; // 解構出商品明細與總金額
+    // 把 API 回傳的欄位全部放入 selectedOrder
+    setSelectedOrder((prev) => ({
+      ...prev,
+      id: data.id,
+      orderId: data.orderNumber,
+      store: data.storeName || "未知門市",
+      member: data.memberName || "未命名會員",
+      totalAmount: data.totalAmount || 0,
+      paymentAmount: data.paymentAmount || 0,
+      creditAmount: data.creditAmount || 0,
+      paymentMethod: data.paymentMethod || "現金付款",
+      totalQuantity: data.totalQuantity || 0,
+      status: data.status || 0,
+      unifiedBusinessNumber: data.unifiedBusinessNumber || "",
+      invoiceNumber: data.invoiceNumber || "",
+      note: data.note || "",
+      deliveryMethod: data.deliveryMethod || "",
+      carrierNumber: data.carrierNumber || "",
+      createdAt: data.createdAt || "",
+      operatorName: data.operatorName || "",
+      pickupInfo: data.pickupInfo || "",
+      signature: data.signature || "",
+      mobile: data.mobile || "",
+      shippingAddress: data.shippingAddress || "",
 
-        // 更新 selectedOrder
-        setSelectedOrder((prev) => ({
-          ...prev,
-          totalAmount: totalAmount || 0,
-          productDetails: orderItems.map((item) => ({
-            productName: item.productName || "未命名商品", // 商品名稱
-            quantity: item.quantity || 0, // 數量
-            unitPrice: item.unitPrice || 0, // 單價
-            discountedAmount: item.discountedAmount || 0, // 折扣金額
-            discountedTotal:
-              item.quantity * item.unitPrice - (item.discountedAmount || 0), // 折扣後總金額
-          })),
-        }));
-      } else {
-        console.error("資料錯誤或缺失");
-        // 顯示錯誤訊息給使用者
-        Swal.fire("錯誤", "無法載入訂單明細", "error");
-      }
-    } catch (error) {
-      console.error("載入或更新主表失敗", error);
-      Swal.fire("錯誤", "無法載入訂單明細或更新主表", "error");
-    }
-  };
+      // 商品明細
+      productDetails: data.orderItems.map((item) => ({
+        productName: item.productName || "未命名商品",
+        quantity: item.quantity || 0,
+        unitPrice: item.unitPrice || 0,
+        discountedAmount: item.discountedAmount || 0,
+        discountedTotal:
+          (item.unitPrice || 0) * (item.quantity || 0) -
+          (item.discountedAmount || 0),
+      })),
+    }));
+  } catch (error) {
+    console.error("載入訂單資料失敗", error);
+    Swal.fire("錯誤", "無法載入訂單資料", "error");
+  }
+};
   useEffect(() => {
     // 當 selectedOrder 更新時觸發這個 effect
     if (selectedOrder) {
@@ -871,179 +881,205 @@ export default function Sales() {
   </table>
           </div>
           {selectedOrder &&
-            (() => {
-              const count = Number(selectedOrder.totalQuantity) || 0; // 確保是數字，若非數字則為 0
-              const amount = Number(selectedOrder.totalAmount ?? 0) || 0; // 確保是數字，若非數字則為 0
-              const total = count * amount;
-              const discounted = Math.round(total * 0.9);
+  (() => {
+    const count = Number(selectedOrder.totalQuantity) || 0;
+    const amount = Number(selectedOrder.totalAmount ?? 0) || 0;
+    const total = count * amount;
+    const discounted = Math.round(total * 0.9);
 
-              return (
-                <div
-                  className="mt-3 p-3 d-flex justify-content-between bg-light border rounded"
-                  style={{ fontSize: "1rem", lineHeight: "1.7" }}
-                >
-                  <div>
-                    <div className="d-flex">
-                      <div>
-                        共計商品：
-                        <strong>
-                          {selectedOrder?.productDetails?.length ?? 0} 項
-                        </strong>
-                      </div>
-                      <div className="ms-5">
-                        總計：
-                        <strong>
-                          {selectedOrder?.productDetails
-                            ? selectedOrder.productDetails
-                                .reduce((sum, item) => {
-                                  const unitPrice = Number(item.unitPrice) || 0; // 確保是數字
-                                  const quantity = Number(item.quantity) || 0; // 確保是數字
-                                  const discount =
-                                    Number(item.discountedAmount ?? 0) || 0; // 確保是數字
-                                  return (
-                                    sum + (unitPrice * quantity - discount)
-                                  );
-                                }, 0)
-                                .toLocaleString()
-                            : 0}
-                          元
-                        </strong>
-                      </div>
-                      <div className="ms-5">
-                        配送方式：
-                        <strong>{selectedOrder?.deliveryMethod}</strong>
-                      </div>
-                    </div>
-                    <div className="d-flex mt-1">
-                      <div>
-                        會員：
-                        <strong>{selectedOrder?.member || "未命名會員"}</strong>
-                      </div>
-                      <div className="ms-5">
-                        手機：<strong>{selectedOrder?.phone}</strong>
-                      </div>
-                      <div className="ms-5">
-                        付款方式：
-                        <strong>{selectedOrder?.pay || "無"}</strong>
-                      </div>
-                    </div>
-                    {selectedOrder?.paymentAmount > 0 && (
-                      <div className="d-flex mt-1">
-                        <div>
-                          現場付款金額：
-                          <strong style={{ color: "#28a745" }}>
-                            $
-                            {Number(
-                              selectedOrder?.paymentAmount
-                            ).toLocaleString()}{" "}
-                            元
-                          </strong>
-                        </div>
-                      </div>
-                    )}
+    return (
+      <div
+        className="mt-3 p-3 d-flex justify-content-between bg-light border rounded"
+        style={{ fontSize: "1rem", lineHeight: "1.7" }}
+      >
+        <div>
+          {/* ==== 總計區塊（已調整賒帳金額位置） ==== */}
+          <div className="d-flex">
+  <div>
+    共計商品：
+    <strong>
+      {selectedOrder?.productDetails?.length ?? 0} 項
+    </strong>
+  </div>
+  <div className="ms-5">
+    總計：
+    <strong>
+      {selectedOrder?.productDetails
+        ? selectedOrder.productDetails
+            .reduce((sum, item) => {
+              const unitPrice = Number(item.unitPrice) || 0;
+              const quantity = Number(item.quantity) || 0;
+              const discount = Number(item.discountedAmount ?? 0) || 0;
+              return sum + (unitPrice * quantity - discount);
+            }, 0)
+            .toLocaleString()
+        : 0}
+      元
+    </strong>
+  </div>
+  
+  <div className="ms-5">
+    付款方式：
+    <strong>{selectedOrder?.pay || "無"}</strong>
+  </div>
 
-                    {selectedOrder?.creditAmount > 0 && (
-                      <div className="ms-5">
-                        賒帳金額：
-                        <strong style={{ color: "#dc3545" }}>
-                          $
-                          {Number(selectedOrder?.creditAmount).toLocaleString()}{" "}
-                          元
-                        </strong>
-                      </div>
-                    )}
-                    <div className="d-flex mt-1">
-                      <div>
-                        發票號碼：
-                        <strong>{selectedOrder?.invoice || "無"}</strong>
-                      </div>
-                      <div className="ms-5">
-                        載具編號：
-                        <strong>{selectedOrder?.carrier || "無"}</strong>
-                      </div>
-                    </div>
-                    <div className="d-flex mt-1">
-                      <div>
-                        郵寄地址：
-                        <strong>
-                          {selectedOrder?.shippingAddress || "無"}
-                        </strong>
-                      </div>
-                    </div>
-                    <div className="d-flex mt-1">
-                      <div>
-                        訂單成立：
-                        <strong>
-                          {selectedOrder?.createdDate?.split("T")[0] || "無"}
-                          <span className="ms-1">
-                            ({selectedOrder?.store || "未知門市"})
-                          </span>
-                        </strong>
-                      </div>
-                      <div className="ms-5">
-                        操作員：
-                        <strong>{selectedOrder?.operator || "無"}</strong>
-                      </div>
-                    </div>
-                    <div className="d-flex mt-1">
-                      <div>
-                        取貨資訊：
-                        <strong>
-                          {selectedOrder?.taxId || "無"}
-                          {selectedOrder?.deliveryMethod &&
-                            `（${selectedOrder.deliveryMethod}）`}
-                        </strong>
-                      </div>
-                    </div>
-                    <div className="mt-3">
-                      <button
-                        className="check-button fw-bold"
-                        onClick={() => handleReturnClick(selectedOrder)} // 直接調用 handleReturn
-                      >
-                        退貨
-                      </button>
-                      <button
-                        className="delete-button mx-4 fw-bold"
-                        onClick={handleCancelOrder}
-                      >
-                        作廢
-                      </button>
-                      <button
-                        className="pink-button"
-                        style={{ fontSize: "1rem" }}
-                      >
-                        列印明細
-                      </button>
-                      <Button
-                        variant="success"
-                        className="fw-bold ms-4"
-                        onClick={handleCompleteOrder}
-                        disabled={
-                          selectedOrder?.status === 0 ||
-                          selectedOrder?.status === 5
-                        } // 如果是已作廢或已完成，禁用按鈕
-                      >
-                        {getNextStepLabel(selectedOrder?.status)}
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="signature-container p-3 border rounded d-flex align-items-center">
-                    <span className="me-2">簽名紀錄：</span>
-                    <div className="signature-box border rounded overflow-hidden">
-                      <img
-                        src="/sign.png"
-                        alt="簽名圖片"
-                        style={{
-                          width: "100%",
-                          height: "100%",
-                          objectFit: "contain",
-                        }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              );
-            })()}
+  {/* 賒帳金額 */}
+  {calculatedCreditAmount > 0 && (
+  <div className="ms-5">
+    賒帳金額：
+    <strong style={{ color: "#dc3545" }}>
+      ${calculatedCreditAmount.toLocaleString()} 元
+    </strong>
+  </div>
+)}
+</div>
+
+{/* 第二行 */}
+<div className="d-flex mt-1">
+  <div>
+    會員：
+    <strong>{selectedOrder?.member || "未命名會員"}</strong>
+  </div>
+  <div className="ms-5">
+    手機：<strong>{selectedOrder?.phone}</strong>
+  </div>
+  <div className="ms-5">
+    配送方式：
+    <strong>{selectedOrder?.deliveryMethod}</strong>
+  </div>
+</div>
+
+{/* 第三行 - 付款金額與找零 / 餘額 */}
+{selectedOrder?.paymentAmount > 0 && (
+  <div className="d-flex mt-1">
+    <div>
+      付款金額：
+      <strong style={{ color: "#28a745" }}>
+        ${Number(selectedOrder?.paymentAmount).toLocaleString()} 元
+      </strong>
+    </div>
+    <div className="ms-5">
+      {selectedOrder?.pay === "現金付款"
+        ? `找零：$${(
+            Number(selectedOrder?.paymentAmount) -
+            (selectedOrder?.productDetails?.reduce((sum, item) => {
+              const unitPrice = Number(item.unitPrice) || 0;
+              const quantity = Number(item.quantity) || 0;
+              const discount = Number(item.discountedAmount ?? 0) || 0;
+              return sum + (unitPrice * quantity - discount);
+            }, 0) || 0)
+          ).toLocaleString()} 元`
+        : selectedOrder?.pay === "匯款" || selectedOrder?.pay === "支票"
+        ? `餘額：$${(
+            (selectedOrder?.productDetails?.reduce((sum, item) => {
+              const unitPrice = Number(item.unitPrice) || 0;
+              const quantity = Number(item.quantity) || 0;
+              const discount = Number(item.discountedAmount ?? 0) || 0;
+              return sum + (unitPrice * quantity - discount);
+            }, 0) || 0) -
+            Number(selectedOrder?.paymentAmount)
+          ).toLocaleString()} 元`
+        : ""}
+    </div>
+  </div>
+)}
+
+          {/* 其他欄位保持原樣 */}
+        
+
+          <div className="d-flex mt-1">
+            <div>
+              發票號碼：
+              <strong>{selectedOrder?.invoice || "無"}</strong>
+            </div>
+            <div className="ms-5">
+              載具編號：
+              <strong>{selectedOrder?.carrier || "無"}</strong>
+            </div>
+          </div>
+          <div className="d-flex mt-1">
+            <div>
+              郵寄地址：
+              <strong>
+                {selectedOrder?.shippingAddress || "無"}
+              </strong>
+            </div>
+          </div>
+          <div className="d-flex mt-1">
+            <div>
+              訂單成立：
+              <strong>
+                {selectedOrder?.createdDate?.split("T")[0] || "無"}
+                <span className="ms-1">
+                  ({selectedOrder?.store || "未知門市"})
+                </span>
+              </strong>
+            </div>
+            <div className="ms-5">
+              操作員：
+              <strong>{selectedOrder?.operator || "無"}</strong>
+            </div>
+          </div>
+          <div className="d-flex mt-1">
+            <div>
+              取貨資訊：
+              <strong>
+                {selectedOrder?.taxId || "無"}
+                {selectedOrder?.deliveryMethod &&
+                  `（${selectedOrder.deliveryMethod}）`}
+              </strong>
+            </div>
+          </div>
+          <div className="mt-3">
+            <button
+              className="check-button fw-bold"
+              onClick={() => handleReturnClick(selectedOrder)}
+            >
+              退貨
+            </button>
+            <button
+              className="delete-button mx-4 fw-bold"
+              onClick={handleCancelOrder}
+            >
+              作廢
+            </button>
+            <button
+              className="pink-button"
+              style={{ fontSize: "1rem" }}
+            >
+              列印明細
+            </button>
+            <Button
+              variant="success"
+              className="fw-bold ms-4"
+              onClick={handleCompleteOrder}
+              disabled={
+                selectedOrder?.status === 0 || selectedOrder?.status === 5
+              }
+            >
+              {getNextStepLabel(selectedOrder?.status)}
+            </Button>
+          </div>
+        </div>
+
+        {/* 簽名紀錄區 */}
+        <div className="signature-container p-3 border rounded d-flex align-items-center">
+          <span className="me-2">簽名紀錄：</span>
+          <div className="signature-box border rounded overflow-hidden">
+            <img
+              src="/sign.png"
+              alt="簽名圖片"
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "contain",
+              }}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  })()}
           {/* 渲染時查看資料 */}
         </Modal.Body>
         <Modal.Footer>

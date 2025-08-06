@@ -211,12 +211,12 @@ const handleEditMember = (member) => {
                 <th>會員編號</th>
                 <th>會員名稱</th>
                 <th>聯絡電話</th>
-                <th>地址</th>
-                <th>建立日期</th>
+                <th>會員類型</th>
+                {/* <th>建立日期</th> */}
                 <th>等級</th>
                 <th>點數</th>
+                <th>餘額</th>
                 <th>消費情形</th>
-                <th>會員類型</th>
                 <th>操作</th>
               </tr>
             </thead>
@@ -227,11 +227,18 @@ const handleEditMember = (member) => {
                     <td>{item.memberNo}</td>
                     <td>{item.fullName}</td>
                     <td>{item.contactPhone}</td>
-                    <td>{item.contactAddress}</td>
-                    <td>{new Date(item.createdAt).toLocaleDateString()}</td>
+                    <td>
+                      {item.memberType === "一般會員"
+                        ? "一般會員"
+                        : item.memberType === "導遊"
+                        ? "導遊"
+                        : "廠商"}
+                    </td>
+                    {/* <td>{new Date(item.createdAt).toLocaleDateString()}</td> */}
                     <td>{item.memberLevel}</td>
                     <td>{item.rewardPoints}</td>
-                    <td>
+                    <td>{item.accountBalance}</td>
+                     <td>
                       <button
                         className="check-button"
                         onClick={() => {
@@ -241,13 +248,6 @@ const handleEditMember = (member) => {
                       >
                         檢視
                       </button>
-                    </td>
-                    <td>
-                      {item.memberType === "一般會員"
-                        ? "一般會員"
-                        : item.memberType === "導遊"
-                        ? "導遊"
-                        : "廠商"}
                     </td>
                     <td>
                       <button

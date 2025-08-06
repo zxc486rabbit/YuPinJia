@@ -18,7 +18,7 @@ export default function GiftTable({
 };
 
   // 贈送邏輯：庫存 <= 5
-  const giftProducts = products.filter((item) => item.nowStock <= 5);
+  const giftProducts = products;
 
   return (
     <div className="content-container w-100">

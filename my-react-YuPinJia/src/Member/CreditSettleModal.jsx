@@ -5,24 +5,28 @@ import Swal from "sweetalert2";
 
 export default function CreditSettleModal({ show, onClose, creditRecordId }) {
   const [salesOrders, setSalesOrders] = useState([]);
-  const [totalSettledAmount, setTotalSettledAmount] = useState(0); // 本次預結清金額
+  const [totalSettledAmount, setTotalSettledAmount] = useState(0);
   const [selectedOrders, setSelectedOrders] = useState([]);
 
   const [repaymentAmount, setRepaymentAmount] = useState("");
   const [repaymentMethod, setRepaymentMethod] = useState(0);
   const [memberId, setMemberId] = useState(0);
   const [creditAmount, setCreditAmount] = useState(0);
+  const [balance, setBalance] = useState(0);
 
-  // 共用欄位（匯款 / 支票）
   const [accountOrNumber, setAccountOrNumber] = useState("");
   const [payer, setPayer] = useState("");
   const [payDate, setPayDate] = useState("");
   const [paymentImage, setPaymentImage] = useState(null);
 
-  // 餘額計算 = 儲值金額 - 本次預結清金額
-  const remainingBalance = (Number(repaymentAmount) || 0) - totalSettledAmount;
+  // 新增：會員餘額
+  const [memberBalance, setMemberBalance] = useState(0);
 
-  // 取得 API 資料
+  const remainingBalance =
+    (Number(balance) || 0) +
+    (Number(repaymentAmount) || 0) -
+    totalSettledAmount;
+
   useEffect(() => {
     if (show && creditRecordId) {
       axios
@@ -32,8 +36,9 @@ export default function CreditSettleModal({ show, onClose, creditRecordId }) {
         .then((res) => {
           const data = res.data;
           setSalesOrders(data.salesOrders || []);
-          setMemberId(data.memberId || 0); // 保存會員 ID
-          setCreditAmount(data.creditAmount || 0); // 保存賒帳總額
+          setMemberId(data.memberId || 0);
+          setCreditAmount(data.creditAmount || 0);
+          setBalance(data.balance || 0);
           setTotalSettledAmount(0);
           setSelectedOrders([]);
           setRepaymentAmount("");
@@ -44,7 +49,25 @@ export default function CreditSettleModal({ show, onClose, creditRecordId }) {
     }
   }, [show, creditRecordId]);
 
-  // 勾選訂單
+ // 當付款方式改為餘額支付時，自動抓會員餘額
+useEffect(() => {
+  if (repaymentMethod === 3 && memberId) {
+    axios
+      .get(`https://yupinjia.hyjr.com.tw/api/api/t_Member/${memberId}`)
+      .then((res) => {
+        const accountBalance = res.data.accountBalance || 0;
+        setMemberBalance(accountBalance);
+        setRepaymentAmount(accountBalance); // 自動帶入儲值金額
+      })
+      .catch((err) => {
+        console.error("抓取會員餘額失敗", err);
+      });
+  } else {
+    // 不是餘額支付 → 清空金額
+    setRepaymentAmount("");
+  }
+}, [repaymentMethod, memberId]);
+
   const toggleSelectOrder = (orderId, creditAmount) => {
     setSelectedOrders((prev) => {
       let updated;
@@ -53,41 +76,44 @@ export default function CreditSettleModal({ show, onClose, creditRecordId }) {
       } else {
         updated = [...prev, { orderId, creditAmount }];
       }
-      // 計算本次預結清金額（累加 creditAmount）
       const sum = updated.reduce((acc, cur) => acc + cur.creditAmount, 0);
       setTotalSettledAmount(sum);
       return updated;
     });
   };
 
-  // 確認結清
   const handleConfirmSettle = async () => {
     if (Number(repaymentAmount) < totalSettledAmount) {
       Swal.fire("金額不足", "需要少勾一筆訂單，否則金額不足結清", "warning");
       return;
     }
 
+    const newBalance =
+      (Number(balance) || 0) +
+      (Number(repaymentAmount) || 0) -
+      totalSettledAmount;
+
     const payload = {
       id: creditRecordId,
       memberId,
       salesOrderIds: selectedOrders.map((o) => o.orderId),
-      salesOrders: [], // 可以傳空陣列，後端不會用
+      salesOrders: [],
       settledAmount: totalSettledAmount,
       creditAmount,
       repaymentMethod,
       repaymentAmount: Number(repaymentAmount),
-      balance: remainingBalance,
+      balance: newBalance,
       bankCode: 0,
       remittanceAccount: accountOrNumber || "",
       remitter: payer || "",
       remittanceDate: payDate || "",
-      remittanceImage: paymentImage ? paymentImage.name : "", // 如果需要 base64 要額外轉換
+      remittanceImage: paymentImage ? paymentImage.name : "",
     };
 
     try {
       await axios.put(
         `https://yupinjia.hyjr.com.tw/api/api/t_CreditRecord/${creditRecordId}`,
-        payload // ✅ 不要包 recordDto
+        payload
       );
       Swal.fire("成功", "結清完成", "success");
       onClose();
@@ -119,7 +145,6 @@ export default function CreditSettleModal({ show, onClose, creditRecordId }) {
           <Modal.Title>結清賒帳</Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          {/* 賒帳相關訂單 */}
           <h5 className="mb-3">賒帳相關訂單</h5>
           <Table bordered size="sm" className="mb-2 text-center align-middle">
             <thead className="table-light">
@@ -132,26 +157,24 @@ export default function CreditSettleModal({ show, onClose, creditRecordId }) {
             </thead>
             <tbody>
               {salesOrders.length > 0 ? (
-                salesOrders.map((order) => {
-                  return (
-                    <tr key={order.id}>
-                      <td>{order.orderNumber}</td>
-                      <td>{new Date(order.createdAt).toLocaleDateString()}</td>
-                      <td>{order.creditAmount.toLocaleString()}</td>
-                      <td>
-                        <input
-                          type="checkbox"
-                          checked={selectedOrders.some(
-                            (o) => o.orderId === order.id
-                          )}
-                          onChange={() =>
-                            toggleSelectOrder(order.id, order.creditAmount)
-                          }
-                        />
-                      </td>
-                    </tr>
-                  );
-                })
+                salesOrders.map((order) => (
+                  <tr key={order.id}>
+                    <td>{order.orderNumber}</td>
+                    <td>{new Date(order.createdAt).toLocaleDateString()}</td>
+                    <td>{order.creditAmount.toLocaleString()}</td>
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={selectedOrders.some(
+                          (o) => o.orderId === order.id
+                        )}
+                        onChange={() =>
+                          toggleSelectOrder(order.id, order.creditAmount)
+                        }
+                      />
+                    </td>
+                  </tr>
+                ))
               ) : (
                 <tr>
                   <td colSpan={4}>無相關訂單</td>
@@ -160,15 +183,13 @@ export default function CreditSettleModal({ show, onClose, creditRecordId }) {
             </tbody>
           </Table>
 
-          {/* 金額顯示 */}
           <Row className="mb-4">
             <Col md={6}>
-              <strong>本次預結清金額：</strong>{" "}
+              <strong>本次欲結清金額：</strong>{" "}
               {totalSettledAmount.toLocaleString()} 元
             </Col>
           </Row>
 
-          {/* 表單區 */}
           <Form>
             <Row className="g-3">
               <Col md={6}>
@@ -178,6 +199,7 @@ export default function CreditSettleModal({ show, onClose, creditRecordId }) {
                     type="number"
                     value={repaymentAmount}
                     onChange={(e) => setRepaymentAmount(e.target.value)}
+                    readOnly={repaymentMethod === 3} // 餘額支付時不能改
                   />
                 </Form.Group>
               </Col>
@@ -209,7 +231,6 @@ export default function CreditSettleModal({ show, onClose, creditRecordId }) {
                 </Form.Group>
               </Col>
 
-              {/* 匯款 / 支票 共用欄位 */}
               {(repaymentMethod === 1 || repaymentMethod === 2) && (
                 <>
                   <Col md={6}>

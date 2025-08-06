@@ -18,7 +18,6 @@ export default function CreditLog() {
 
   const [settleAmount, setSettleAmount] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState("現金");
-  
 
   // 付款相關額外欄位
   const [bankName, setBankName] = useState("");
@@ -32,19 +31,19 @@ export default function CreditLog() {
     axios
       .get("https://yupinjia.hyjr.com.tw/api/api/t_CreditRecord")
       .then((response) => {
-        const data = response.data;
-
-        // 將 API 資料處理並轉換為適合表格顯示的格式
-        const updatedData = data.map((item) => ({
-          orderId: item.id, // 假設 API 返回的 id 對應到訂單 ID
-          member: `會員 ${item.memberId}`, // 假設使用 memberId 显示會員名稱
-          name: `會員 ${item.memberId}`, // 假設顯示會員名稱
-          billingDate: item.billingDate,
-          totalAmount: item.creditAmount, // 將 creditAmount 顯示為總金額
-          unpaidAmount: item.creditAmount, // 顯示未結清金額
-          repaymentDate: item.lastRepaymentDate, // 最後還款日期
-          status: item.reminderCount > 0 ? "未還款" : "已還款", // 根據提醒次數決定狀態
-          remindCount: item.reminderCount, // 顯示提醒次數
+        const updatedData = response.data.map((item) => ({
+          id: item.id, // 賒帳紀錄 ID
+          memberId: item.memberId, // 會員 ID
+          memberNo: item.memberNo || "-", // 會員編號 (可能為 null)
+          fullName: item.fullName || "-", // 會員名稱
+          billingDate: item.billingDate?.split("T")[0] || "-", // 帳單日期
+          creditAmount: item.creditAmount || 0, // 賒帳金額
+          unpaidAmount: item.creditAmount || 0, // 未結清金額 (先等於賒帳金額)
+          repaymentDate: item.lastRepaymentDate
+            ? item.lastRepaymentDate.split("T")[0]
+            : "-", // 最後還款日期
+          status: item.reminderCount > 0 ? "未還款" : "已還款", // 狀態
+          reminderCount: item.reminderCount || 0, // 提醒次數
         }));
         setTableData(updatedData);
       })
@@ -60,17 +59,15 @@ export default function CreditLog() {
 
   const toggleCheck = (order) => {
     setCheckedOrders((prev) =>
-      prev.includes(order)
-        ? prev.filter((o) => o !== order)
-        : [...prev, order]
+      prev.includes(order) ? prev.filter((o) => o !== order) : [...prev, order]
     );
   };
 
- // 打開結清彈窗
-const openSettleModal = (order) => {
-  setSelectedOrder(order);
-  setShowSettleModal(true);
-};
+  // 打開結清彈窗
+  const openSettleModal = (order) => {
+    setSelectedOrder(order);
+    setShowSettleModal(true);
+  };
 
   const closeModal = () => {
     setShowModal(false);
@@ -109,15 +106,30 @@ const openSettleModal = (order) => {
   };
 
   const handleRemind = (order) => {
-    setTableData((prev) =>
-      prev.map((item) =>
-        item.orderId === order.orderId
-          ? { ...item, remindCount: (item.remindCount || 0) + 1 }
-          : item
-      )
-    );
-    Swal.fire("已發送提醒", "", "success");
-  };
+  const newCount = (order.reminderCount || 0) + 1;
+
+  // 更新後端 reminderCount
+  axios
+    .put(`https://yupinjia.hyjr.com.tw/api/api/t_CreditRecord/${order.id}`, {
+      ...order, // 把原本資料帶上（避免後端要求完整物件）
+      reminderCount: newCount,
+    })
+    .then(() => {
+      // 前端更新
+      setTableData((prev) =>
+        prev.map((item) =>
+          item.id === order.id
+            ? { ...item, reminderCount: newCount }
+            : item
+        )
+      );
+      Swal.fire("已發送提醒", "", "success");
+    })
+    .catch((error) => {
+      console.error("更新提醒次數失敗:", error);
+      Swal.fire("提醒失敗", "", "error");
+    });
+};
 
   const handlePrint = () => {
     if (checkedOrders.length === 0) {
@@ -232,11 +244,7 @@ const openSettleModal = (order) => {
               <th>會員名稱</th>
               <th>聯絡人</th>
               <th>帳單日期</th>
-              <th>訂單編號</th>
               <th>賒帳金額</th>
-              <th>未結清金額</th>
-              <th>還款日期</th>
-              <th>狀態</th>
               <th>提醒次數</th>
               <th>操作</th>
             </tr>
@@ -252,16 +260,12 @@ const openSettleModal = (order) => {
                       onChange={() => toggleCheck(item)}
                     />
                   </td>
-                  <td>{item.orderId}</td>
-                  <td>{item.member}</td>
-                  <td>{item.name}</td>
+                  <td>{item.memberNo}</td>
+                  <td>{item.fullName}</td>
+                  <td>{item.memberId}</td>
                   <td>{item.billingDate}</td>
-                  <td>{item.orderId}</td>
-                  <td>{item.totalAmount}</td>
-                  <td>{item.unpaidAmount}</td>
-                  <td>{item.repaymentDate}</td>
-                  <td>{item.status || "未還款"}</td>
-                  <td>{item.remindCount}</td>
+                  <td>{item.creditAmount}</td>
+                  <td>{item.reminderCount}</td>
                   <td>
                     <button
                       className="edit-button me-2"
@@ -299,10 +303,10 @@ const openSettleModal = (order) => {
 
       {/* 結清 Modal */}
       <CreditSettleModal
-  show={showSettleModal}
-  onClose={() => setShowSettleModal(false)}
-  creditRecordId={selectedOrder?.orderId}
-/>
+        show={showSettleModal}
+        onClose={() => setShowSettleModal(false)}
+        creditRecordId={selectedOrder?.id}
+      />
     </>
   );
 }
