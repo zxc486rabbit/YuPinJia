@@ -54,64 +54,62 @@ export default function CreateMember() {
 
   // 送出
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      // 1. 建立會員
-      const memberData = {
-        memberNo: `M-${Date.now()}`,
-        ...memberForm,
-        memberLevel: 0,
-        totalSpent: 0,
-        rewardPoints: 0,
-        accountBalance: 0,
-        status: 0,
-        memberType,
-        isDistributor: memberType === 1 || memberType === 2,
+  e.preventDefault();
+  try {
+    // 1. 建立會員
+    const memberData = {
+      memberNo: `M-${Date.now()}`,
+      ...memberForm,
+      memberLevel: 0,
+      totalSpent: 0,
+      rewardPoints: 0,
+      accountBalance: 0,
+      status: 0,
+      memberType,
+      isDistributor: memberType === 1 || memberType === 2,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const memberRes = await axios.post(
+      "https://yupinjia.hyjr.com.tw/api/api/t_Member",
+      memberData
+    );
+
+    // ✅ 先檢查回傳資料
+    console.log("建立會員回傳資料:", memberRes.data);
+
+    // 2. 如果是導遊或廠商，建立經銷商
+    if (memberType === 1 || memberType === 2) {
+      const distributorData = {
+        distributorNo: `D-${Date.now()}`,
+        memberId: memberRes.data.id,
+        t_Member: memberRes.data, // ✅ 傳完整會員物件
+        buyerType: memberType,
+        ...distributorForm,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
 
-      const memberRes = await axios.post(
-        "https://yupinjia.hyjr.com.tw/api/api/t_Member",
-        memberData
+      console.log("送出的 distributorData:", distributorData);
+
+      await axios.post(
+        "https://yupinjia.hyjr.com.tw/api/api/t_Distributor",
+        distributorData
       );
-
-      // ✅ 先檢查回傳資料
-      console.log("建立會員回傳資料:", memberRes.data);
-
-      // 2. 如果是導遊或廠商，建立經銷商
-      if (memberType === 1 || memberType === 2) {
-        const distributorData = {
-          distributorNo: `D-${Date.now()}`,
-          memberId: memberRes.data.id,
-          t_Member: memberRes.data, // ✅ 傳完整會員物件
-          buyerType: memberType,
-          ...distributorForm,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-
-        console.log("送出的 distributorData:", distributorData);
-
-        await axios.post(
-          "https://yupinjia.hyjr.com.tw/api/api/t_Distributor",
-          distributorData
-        );
-      }
-
-      Swal.fire("成功", "會員已建立！", "success");
-    } catch (err) {
-      console.error("建立失敗：", err.response?.data || err);
-      Swal.fire("錯誤", "建立失敗，請稍後再試", "error");
     }
-  };
+
+    Swal.fire("成功", "會員已建立！", "success");
+  } catch (err) {
+    console.error("建立失敗：", err.response?.data || err);
+    Swal.fire("錯誤", "建立失敗，請稍後再試", "error");
+  }
+};
 
   return (
     <div className="container mt-3">
       <div
-        className={`card shadow rounded-4 ${
-          memberType === 0 ? "col-md-6 mx-auto" : ""
-        }`}
+        className={`card shadow rounded-4 ${memberType === 0 ? "col-md-6 mx-auto" : ""}`}
         style={{
           background: "#fff",
           padding: "20px",
@@ -128,13 +126,14 @@ export default function CreateMember() {
           <form onSubmit={handleSubmit}>
             <div className="row">
               {/* 左邊：會員表單 */}
-              <div
-                className={
-                  memberType === 1 || memberType === 2
-                    ? "col-md-6 pe-4 border-end"
-                    : "col-12 pe-4"
-                }
-              >
+  <div
+  className={
+    memberType === 1 || memberType === 2
+      ? "col-md-6 pe-4 border-end"
+      : "col-12 pe-4"
+  }
+>
+              
                 <h5 className="fw-bold">會員基本資料</h5>
                 <div>
                   <label className="form-label fw-bold">姓名</label>
@@ -313,20 +312,17 @@ export default function CreateMember() {
                     />
                   </div>
                   <div>
-                    <label className="form-label fw-bold">銀行帳號持有人</label>
-                    <input
-                      type="text"
-                      className="form-control rounded-3"
-                      value={distributorForm.bankAccountHolder}
-                      onChange={(e) =>
-                        handleDistributorChange(
-                          "bankAccountHolder",
-                          e.target.value
-                        )
-                      }
-                      required
-                    />
-                  </div>
+  <label className="form-label fw-bold">銀行帳號持有人</label>
+  <input
+    type="text"
+    className="form-control rounded-3"
+    value={distributorForm.bankAccountHolder}
+    onChange={(e) =>
+      handleDistributorChange("bankAccountHolder", e.target.value)
+    }
+    required
+  />
+</div>
                 </div>
               ) : null}
             </div>
