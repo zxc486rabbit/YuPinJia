@@ -269,8 +269,9 @@ export default function Cart({
               </div>
             )}
           </div>
+          <div className="d-flex flex-column align-items-end ms-3" style={{ gap: "0.5rem" }}>
           <button
-            className="change-button ms-3 py-1"
+            className="change-button py-1 w-100"
             onClick={() => setShowModal(true)}
           >
             <FaExchangeAlt className="me-1" /> 切換會員
@@ -278,12 +279,13 @@ export default function Cart({
 
           {currentMember?.subType === "導遊" && (
             <button
-              className="btn btn-outline-secondary ms-2 py-1"
+              className="btn btn-outline-secondary py-1 w-100"
               onClick={() => handleSwitchByInput(currentMember)}
             >
               <FaSyncAlt className="me-1" /> 切換結帳身份
             </button>
           )}
+          </div>
 
           {/* <button
             className="btn btn-outline-danger ms-2"
