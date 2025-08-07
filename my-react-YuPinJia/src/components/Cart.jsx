@@ -285,7 +285,7 @@ export default function Cart({
             </button>
           )}
 
-          <button
+          {/* <button
             className="btn btn-outline-danger ms-2"
             onClick={() =>
               Swal.fire({
@@ -307,7 +307,7 @@ export default function Cart({
             }
           >
             清空購物車
-          </button>
+          </button> */}
         </div>
 
         <div className="no-scrollbar mt-3" style={{ height: "57vh" }}>
