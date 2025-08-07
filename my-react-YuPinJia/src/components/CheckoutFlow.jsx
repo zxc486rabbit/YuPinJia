@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import Swal from "sweetalert2";
 import {
   FaStore,
   FaPlane,
@@ -66,18 +67,27 @@ const handlePaymentMethodChange = (method) => {
 };
 
 const handleFinish = async () => {
-  // 如果現金金額不足，將付款方式設為賒帳並繼續處理訂單
-  if (payment === "現金" && Number(cashReceived) < finalTotal) {
-    setPayment("賒帳");
-    alert("現金金額不足，已自動轉為賒帳付款。");
-  }
+ // 如果現金金額不足，將付款方式設為賒帳並繼續處理訂單
+if (payment === "現金" && Number(cashReceived) < finalTotal) {
+  setPayment("賒帳");
+  await Swal.fire({
+    icon: "info",
+    title: "現金金額不足",
+    text: "已自動轉為賒帳付款方式。",
+    confirmButtonText: "確定",
+  });
+}
 
-  // 驗證匯款與支票金額
-  if ((payment === "匯款" || payment === "支票") && (!paymentAmount || Number(paymentAmount) <= 0)) {
-    alert("請輸入正確的金額。");
-    return;
-  }
-
+// 驗證匯款與支票金額
+if ((payment === "匯款" || payment === "支票") && (!paymentAmount || Number(paymentAmount) <= 0)) {
+  await Swal.fire({
+    icon: "warning",
+    title: "金額錯誤",
+    text: "請輸入正確的匯款或支票金額。",
+    confirmButtonText: "確定",
+  });
+  return;
+}
   setPrinting(true);
 
   // 處理 cartItems，保留原價，並計算折扣價格
