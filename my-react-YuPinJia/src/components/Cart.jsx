@@ -310,7 +310,7 @@ export default function Cart({
           </button> */}
         </div>
 
-        <div className="no-scrollbar mt-3" style={{ height: "57vh" }}>
+        <div className="no-scrollbar mt-3" style={{ height: "56vh" }}>
           <CartTable
             items={items}
             updateQuantity={updateQuantity}
