@@ -950,7 +950,7 @@ export default function Sales() {
 </div>
 
 {/* 第三行 - 付款金額與找零 / 餘額 */}
-{selectedOrder?.paymentAmount > 0 && (
+{selectedOrder?.paymentAmount > 0 && selectedOrder?.status !== 1 && (
   <div className="d-flex mt-1">
     <div>
       付款金額：
