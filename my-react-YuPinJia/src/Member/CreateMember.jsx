@@ -279,16 +279,17 @@ export default function CreateMember() {
                     />
                   </div>
                   <div>
-                    <label className="form-label fw-bold">統一編號</label>
-                    <input
-                      type="text"
-                      className="form-control rounded-3"
-                      value={distributorForm.taxID}
-                      onChange={(e) =>
-                        handleDistributorChange("taxID", e.target.value)
-                      }
-                    />
-                  </div>
+  <label className="form-label fw-bold">統一編號</label>
+  <input
+    type="text"
+    className="form-control rounded-3"
+    value={distributorForm.taxID}
+    onChange={(e) =>
+      handleDistributorChange("taxID", e.target.value)
+    }
+    required={memberType === 1 || memberType === 2} // ✅ 導遊與廠商必填
+  />
+</div>
                   <div>
                     <label className="form-label fw-bold">銀行名稱</label>
                     <input
