@@ -217,7 +217,7 @@ export default function Sales() {
       ...prev,
       id: data.id,
       orderId: data.orderNumber,
-      store: data.storeName || "未知門市",
+      store: data.storeName || "林園門市",
       member: data.memberName || "未命名會員",
        phone: data.mobile || "",
       totalAmount: data.totalAmount || 0,
