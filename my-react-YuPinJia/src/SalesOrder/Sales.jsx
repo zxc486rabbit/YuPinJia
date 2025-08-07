@@ -219,6 +219,7 @@ export default function Sales() {
       orderId: data.orderNumber,
       store: data.storeName || "未知門市",
       member: data.memberName || "未命名會員",
+       phone: data.mobile || "",
       totalAmount: data.totalAmount || 0,
       paymentAmount: data.paymentAmount || 0,
       creditAmount: data.creditAmount || 0,
