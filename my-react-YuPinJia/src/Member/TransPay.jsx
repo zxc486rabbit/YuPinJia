@@ -141,7 +141,7 @@ export default function TransPay() {
                   <td>{item.repaymentAccount.slice(-5)}</td> {/* 取匯款帳號後五碼 */}
                   <td>
                     <button className="check-button">圖片</button>
-                    <button className="edit-button mx-2">提醒</button>
+                    {/* <button className="edit-button mx-2">提醒</button> */}
                     <button className="delete-button">刪除</button>
                   </td>
                 </tr>
