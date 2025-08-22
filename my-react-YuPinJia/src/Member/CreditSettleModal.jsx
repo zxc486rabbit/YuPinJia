@@ -1,9 +1,10 @@
-import { Modal, Button, Form, Row, Col, Table } from "react-bootstrap";
+import { Modal, Button, Form, Row, Col, Table, Spinner } from "react-bootstrap";
 import { useState, useEffect } from "react";
 import axios from "axios";
 import Swal from "sweetalert2";
 
-export default function CreditSettleModal({ show, onClose, creditRecordId }) {
+export default function CreditSettleModal({ show, onClose, creditRecordId, onSettled }) {
+  const [loading, setLoading] = useState(false);
   const [salesOrders, setSalesOrders] = useState([]);
   const [totalSettledAmount, setTotalSettledAmount] = useState(0);
   const [selectedOrders, setSelectedOrders] = useState([]);
@@ -19,67 +20,175 @@ export default function CreditSettleModal({ show, onClose, creditRecordId }) {
   const [payDate, setPayDate] = useState("");
   const [paymentImage, setPaymentImage] = useState(null);
 
-  // 新增：會員餘額
+  // ★ 查詢條件（變動即自動查）
+  const [inputFrom, setInputFrom] = useState(""); // yyyy-mm-dd
+  const [inputTo, setInputTo] = useState(""); // yyyy-mm-dd
+  const [payerFilter, setPayerFilter] = useState("0"); // ""=全部, "0"=本人, "1"=客人
+
+  // ★ 回扣點數設定
+  const CASHBACK_RATE = 0.01;
+  const [cashbackPoint, setCashbackPoint] = useState(0);
+
+  // 勾選總金額即時重算
+  useEffect(() => {
+    setTotalSettledAmount(
+      selectedOrders.reduce((a, c) => a + Number(c.creditAmount || 0), 0)
+    );
+  }, [selectedOrders]);
+
+  // ★ 客人結帳才計算回扣點數
+  useEffect(() => {
+    if (payerFilter === "1") {
+      const earned = Math.floor(
+        Number(totalSettledAmount || 0) * CASHBACK_RATE
+      );
+      setCashbackPoint(earned);
+    } else {
+      setCashbackPoint(0);
+    }
+  }, [totalSettledAmount, payerFilter]);
+
+  // ★ 自動查詢（400ms debounce + AbortController）
+  useEffect(() => {
+    if (!show || !creditRecordId) return;
+
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      try {
+        setLoading(true);
+        const params = new URLSearchParams();
+        if (inputFrom) params.set("startDate", inputFrom);
+        if (inputTo) params.set("endDate", inputTo);
+        if (payerFilter !== "") params.set("payer", payerFilter); // 0=本人 1=客人
+
+        const url = `https://yupinjia.hyjr.com.tw/api/api/t_CreditRecord/${creditRecordId}${
+          params.toString() ? `?${params.toString()}` : ""
+        }`;
+
+        const res = await axios.get(url, { signal: controller.signal });
+        const data = res.data;
+
+        setSalesOrders(data.salesOrders || []);
+        setMemberId(data.memberId || 0);
+        setCreditAmount(data.creditAmount || 0);
+        setBalance(data.balance || 0);
+
+        // 新結果 → 清空勾選與金額
+        setSelectedOrders([]);
+        setTotalSettledAmount(0);
+      } catch (err) {
+        // 被中止就不報錯
+        if (err.name !== "CanceledError") {
+          console.error("自動查詢失敗", err);
+        }
+      } finally {
+        setLoading(false);
+      }
+    }, 400);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [inputFrom, inputTo, payerFilter, show, creditRecordId]);
+
+  // 補抓 invoiceNumber（若單筆缺）
+  useEffect(() => {
+    if (!show || !creditRecordId) return;
+    const needFetch = (salesOrders || []).some(
+      (o) => o.invoiceNumber === undefined
+    );
+    if (!needFetch) return;
+
+    (async () => {
+      try {
+        const enriched = await Promise.all(
+          (salesOrders || []).map(async (o) => {
+            if (o.invoiceNumber !== undefined) return o;
+            try {
+              const det = await axios.get(
+                `https://yupinjia.hyjr.com.tw/api/api/t_SalesOrder/${o.id}`
+              );
+              return { ...o, invoiceNumber: det.data?.invoiceNumber || "" };
+            } catch {
+              return { ...o, invoiceNumber: "" };
+            }
+          })
+        );
+        setSalesOrders(enriched);
+      } catch (e) {
+        console.error("補抓發票資訊失敗", e);
+      }
+    })();
+  }, [show, creditRecordId, salesOrders]);
+
+  // 會員餘額（儲值→餘額支付）
   const [memberBalance, setMemberBalance] = useState(0);
+  useEffect(() => {
+    if (repaymentMethod === 3 && memberId) {
+      axios
+        .get(`https://yupinjia.hyjr.com.tw/api/api/t_Member/${memberId}`)
+        .then((res) => {
+          const accountBalance = res.data.accountBalance || 0;
+          setMemberBalance(accountBalance);
+          setRepaymentAmount(accountBalance);
+        })
+        .catch((err) => {
+          console.error("抓取會員餘額失敗", err);
+        });
+    } else {
+      setRepaymentAmount("");
+    }
+  }, [repaymentMethod, memberId]);
+
+  // 勾/取消單筆
+  const toggleSelectOrder = (orderId, creditAmount) => {
+    setSelectedOrders((prev) => {
+      if (prev.some((o) => o.orderId === orderId)) {
+        return prev.filter((o) => o.orderId !== orderId);
+      }
+      return [...prev, { orderId, creditAmount: Number(creditAmount || 0) }];
+    });
+  };
+
+  // ★ 全選/取消全選：直接針對目前列表（salesOrders）
+  const allChecked =
+    salesOrders.length > 0 &&
+    salesOrders.every((o) => selectedOrders.some((s) => s.orderId === o.id));
+
+  const toggleSelectAll = () => {
+    const allSelected = salesOrders.every((o) =>
+      selectedOrders.some((s) => s.orderId === o.id)
+    );
+    if (allSelected) {
+      setSelectedOrders((prev) =>
+        prev.filter((s) => !salesOrders.some((o) => o.id === s.orderId))
+      );
+    } else {
+      setSelectedOrders((prev) => {
+        const toAdd = salesOrders
+          .filter((o) => !prev.some((s) => s.orderId === o.id))
+          .map((o) => ({
+            orderId: o.id,
+            creditAmount: Number(o.creditAmount || 0),
+          }));
+        return [...prev, ...toAdd];
+      });
+    }
+  };
 
   const remainingBalance =
     (Number(balance) || 0) +
     (Number(repaymentAmount) || 0) -
     totalSettledAmount;
 
-  useEffect(() => {
-    if (show && creditRecordId) {
-      axios
-        .get(
-          `https://yupinjia.hyjr.com.tw/api/api/t_CreditRecord/${creditRecordId}`
-        )
-        .then((res) => {
-          const data = res.data;
-          setSalesOrders(data.salesOrders || []);
-          setMemberId(data.memberId || 0);
-          setCreditAmount(data.creditAmount || 0);
-          setBalance(data.balance || 0);
-          setTotalSettledAmount(0);
-          setSelectedOrders([]);
-          setRepaymentAmount("");
-        })
-        .catch((err) => {
-          console.error("載入賒帳紀錄失敗", err);
-        });
-    }
-  }, [show, creditRecordId]);
-
- // 當付款方式改為餘額支付時，自動抓會員餘額
-useEffect(() => {
-  if (repaymentMethod === 3 && memberId) {
-    axios
-      .get(`https://yupinjia.hyjr.com.tw/api/api/t_Member/${memberId}`)
-      .then((res) => {
-        const accountBalance = res.data.accountBalance || 0;
-        setMemberBalance(accountBalance);
-        setRepaymentAmount(accountBalance); // 自動帶入儲值金額
-      })
-      .catch((err) => {
-        console.error("抓取會員餘額失敗", err);
-      });
-  } else {
-    // 不是餘額支付 → 清空金額
-    setRepaymentAmount("");
-  }
-}, [repaymentMethod, memberId]);
-
-  const toggleSelectOrder = (orderId, creditAmount) => {
-    setSelectedOrders((prev) => {
-      let updated;
-      if (prev.some((o) => o.orderId === orderId)) {
-        updated = prev.filter((o) => o.orderId !== orderId);
-      } else {
-        updated = [...prev, { orderId, creditAmount }];
-      }
-      const sum = updated.reduce((acc, cur) => acc + cur.creditAmount, 0);
-      setTotalSettledAmount(sum);
-      return updated;
-    });
+  const handleResetClick = () => {
+    setInputFrom("");
+    setInputTo("");
+    setPayerFilter(""); // 全部
+    setSelectedOrders([]);
+    setTotalSettledAmount(0);
+    // 不用再手動查，清空後會自動觸發 useEffect 查詢
   };
 
   const handleConfirmSettle = async () => {
@@ -108,32 +217,40 @@ useEffect(() => {
       remitter: payer || "",
       remittanceDate: payDate || "",
       remittanceImage: paymentImage ? paymentImage.name : "",
+      cashbackPoint: Number(cashbackPoint || 0), // ★ 回扣點數
     };
 
     try {
+      setLoading(true);
       await axios.put(
         `https://yupinjia.hyjr.com.tw/api/api/t_CreditRecord/${creditRecordId}`,
         payload
       );
       Swal.fire("成功", "結清完成", "success");
-      onClose();
+      // ★ 告知父層重抓主表
+    if (typeof onSettled === "function") onSettled();
+    onClose();
     } catch (error) {
       console.error("結清失敗", error);
       Swal.fire("錯誤", "結清失敗，請稍後再試", "error");
+    }finally {
+    setLoading(false);
     }
   };
 
   return (
     <>
-      {/* 這段 style 只影響這個 Modal */}
-      <style>
-        {`
-          .return-order-modal .row > * {
-            padding-left: 0.75rem;
-            padding-right: 0.75rem;
-          }
-        `}
-      </style>
+      <style>{`
+        .return-order-modal .row > * { padding-left: .75rem; padding-right: .75rem; }
+        .scroll-table thead th { position: sticky; top: 0; background: #f8f9fa; z-index: 1; }
+        .loading-overlay {
+         position: absolute; inset: 0;
+         background: rgba(255,255,255,.6);
+         display: flex; align-items: center; justify-content: center;
+         z-index: 5; backdrop-filter: blur(1px);
+       }
+      `}</style>
+
       <Modal
         show={show}
         onHide={onClose}
@@ -144,44 +261,140 @@ useEffect(() => {
         <Modal.Header closeButton>
           <Modal.Title>結清賒帳</Modal.Title>
         </Modal.Header>
+
         <Modal.Body>
-          <h5 className="mb-3">賒帳相關訂單</h5>
-          <Table bordered size="sm" className="mb-2 text-center align-middle">
-            <thead className="table-light">
-              <tr>
-                <th>訂單編號</th>
-                <th>訂單日期</th>
-                <th>賒帳金額</th>
-                <th>選擇</th>
-              </tr>
-            </thead>
-            <tbody>
-              {salesOrders.length > 0 ? (
-                salesOrders.map((order) => (
-                  <tr key={order.id}>
-                    <td>{order.orderNumber}</td>
-                    <td>{new Date(order.createdAt).toLocaleDateString()}</td>
-                    <td>{order.creditAmount.toLocaleString()}</td>
-                    <td>
-                      <input
-                        type="checkbox"
-                        checked={selectedOrders.some(
-                          (o) => o.orderId === order.id
-                        )}
-                        onChange={() =>
-                          toggleSelectOrder(order.id, order.creditAmount)
-                        }
-                      />
-                    </td>
-                  </tr>
-                ))
-              ) : (
+          {/* 標題 + 查詢列（輸入即查） */}
+          <div className="d-flex align-items-center justify-content-between mb-2">
+            <h5 className="mb-0">賒帳訂單</h5>
+            <div className="d-flex align-items-end gap-2">
+              <Form.Control
+                type="date"
+                value={inputFrom}
+                onChange={(e) => setInputFrom(e.target.value)}
+                style={{ width: 170 }}
+              />
+              <div className="pb-2">~</div>
+              <Form.Control
+                type="date"
+                value={inputTo}
+                onChange={(e) => setInputTo(e.target.value)}
+                style={{ width: 170 }}
+              />
+              <Form.Select
+                value={payerFilter}
+                onChange={(e) => setPayerFilter(e.target.value)}
+                style={{ width: 160 }}
+                title="結帳身份"
+              >
+                <option value="0">導遊本人</option>
+                <option value="1">客人結帳</option>
+              </Form.Select>
+
+              <Button variant="outline-secondary" onClick={handleResetClick}>
+                清除
+              </Button>
+            </div>
+          </div>
+
+          {/* 表格（限制高度，內部滾動） */}
+          <div
+            style={{
+              maxHeight: 290,
+              overflowY: "auto",
+              border: "1px solid #dee2e6",
+              borderRadius: 6,
+              position: "relative",
+            }}
+          >
+            {loading && (
+              <div className="loading-overlay">
+                <div className="d-flex flex-column align-items-center">
+                  <Spinner animation="border" role="status" />
+                  <div className="mt-2 text-muted small">查詢中…</div>
+                </div>
+              </div>
+            )}
+            <Table bordered size="sm" className="mb-2 text-center align-middle">
+              <thead className="table-light">
                 <tr>
-                  <td colSpan={4}>無相關訂單</td>
+                  <th style={{ width: 72 }}>
+                    <Form.Check
+                      type="checkbox"
+                      checked={allChecked}
+                      disabled={salesOrders.length === 0}
+                      onChange={toggleSelectAll}
+                      label="全選"
+                    />
+                  </th>
+                  <th>訂單編號</th>
+                  <th>訂單日期</th>
+                  <th>發票</th>
+                  <th>賒帳金額</th>
+                  <th>選擇</th>
                 </tr>
-              )}
-            </tbody>
-          </Table>
+              </thead>
+              <tbody>
+                {salesOrders.length > 0 ? (
+                  salesOrders.map((order) => {
+                    const checked = selectedOrders.some(
+                      (o) => o.orderId === order.id
+                    );
+                    const invoiceLabel = order.invoiceNumber
+                      ? `已開立 (${order.invoiceNumber})`
+                      : "未開立";
+                    return (
+                      <tr key={order.id}>
+                        <td>
+                          <Form.Check
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() =>
+                              toggleSelectOrder(order.id, order.creditAmount)
+                            }
+                          />
+                        </td>
+                        <td>{order.orderNumber}</td>
+                        <td>
+                          {new Date(order.createdAt).toLocaleDateString()}
+                        </td>
+                        <td>
+                          <span
+                            className={
+                              order.invoiceNumber
+                                ? "badge bg-success"
+                                : "badge bg-secondary"
+                            }
+                          >
+                            {invoiceLabel}
+                          </span>
+                        </td>
+                        <td>
+                          {Number(order.creditAmount || 0).toLocaleString()}
+                        </td>
+                        <td>
+                          <Button
+                            size="sm"
+                            variant={
+                              checked ? "outline-danger" : "outline-primary"
+                            }
+                            onClick={() =>
+                              toggleSelectOrder(order.id, order.creditAmount)
+                            }
+                          >
+                            {checked ? "取消" : "選取"}
+                          </Button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan={6}>無相關訂單</td>
+                  </tr>
+                )}
+              </tbody>
+            </Table>
+          </div>
 
           <Row className="mb-4">
             <Col md={6}>
@@ -190,23 +403,24 @@ useEffect(() => {
             </Col>
           </Row>
 
+          {/* 收款/憑證 + 回扣點數（客人） */}
           <Form>
             <Row className="g-3">
               <Col md={6}>
                 <Form.Group>
-                  <Form.Label>本次儲值金額 (RepaymentAmount)</Form.Label>
+                  <Form.Label>本次儲值金額</Form.Label>
                   <Form.Control
                     type="number"
                     value={repaymentAmount}
                     onChange={(e) => setRepaymentAmount(e.target.value)}
-                    readOnly={repaymentMethod === 3} // 餘額支付時不能改
+                    readOnly={repaymentMethod === 3}
                   />
                 </Form.Group>
               </Col>
 
               <Col md={6}>
                 <Form.Group>
-                  <Form.Label>儲值方式 (RepaymentMethod)</Form.Label>
+                  <Form.Label>儲值方式</Form.Label>
                   <Form.Select
                     value={repaymentMethod}
                     onChange={(e) => setRepaymentMethod(Number(e.target.value))}
@@ -222,7 +436,7 @@ useEffect(() => {
 
               <Col md={12}>
                 <Form.Group>
-                  <Form.Label>餘額 (Balance)</Form.Label>
+                  <Form.Label>餘額</Form.Label>
                   <Form.Control
                     type="text"
                     value={`${remainingBalance.toLocaleString()} 元`}
@@ -230,6 +444,25 @@ useEffect(() => {
                   />
                 </Form.Group>
               </Col>
+
+              {/* ★ 客人結帳才顯示回扣點數 */}
+              {payerFilter === "1" && (
+                <Col md={12}>
+                  <Form.Group>
+                    <Form.Label>
+                      點數（回扣金）
+                      <span className="ms-2 text-muted small">
+                        （目前比率 {CASHBACK_RATE * 100}%）
+                      </span>
+                    </Form.Label>
+                    <Form.Control
+                      type="text"
+                      value={`${cashbackPoint.toLocaleString()} 點`}
+                      readOnly
+                    />
+                  </Form.Group>
+                </Col>
+              )}
 
               {(repaymentMethod === 1 || repaymentMethod === 2) && (
                 <>
@@ -293,7 +526,11 @@ useEffect(() => {
           <Button variant="secondary" onClick={onClose}>
             取消
           </Button>
-          <Button variant="success" onClick={handleConfirmSettle}>
+          <Button
+            variant="success"
+            onClick={handleConfirmSettle}
+            disabled={loading}
+          >
             確認結清
           </Button>
         </Modal.Footer>

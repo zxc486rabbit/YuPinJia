@@ -1,105 +1,311 @@
-import { useState, useEffect } from "react";
-import { Modal, Button, Form, ListGroup, Spinner } from "react-bootstrap";
+// MemberModal.jsx
+import { useEffect, useRef, useState, useMemo } from "react";
+import {
+  Modal,
+  Button,
+  Form,
+  ListGroup,
+  Spinner,
+  Row,
+  Col,
+} from "react-bootstrap";
 import axios from "axios";
 
-export default function MemberModal({ show, onHide, onSelect }) {
-  const [input, setInput] = useState(""); // 用戶輸入
-  const [members, setMembers] = useState([]); // 所有會員資料
-  const [suggestions, setSuggestions] = useState([]); // 搜尋建議
-  const [selected, setSelected] = useState(null); // 當前選擇的會員
-  const [loading, setLoading] = useState(false); // 載入狀態
+const API_BASE = "https://yupinjia.hyjr.com.tw/api/api";
+const MAX_SUGGESTIONS = 10;
 
-  // 載入會員資料
+const MEMBER_TYPES = [
+  { label: "全部", value: "" }, // 不帶參數
+  { label: "一般", value: 0 }, // 0=一般
+  { label: "導遊", value: 1 }, // 1=導遊
+  { label: "廠商", value: 2 }, // 2=廠商
+];
+
+export default function MemberModal({ show, onHide, onSelect }) {
+  const [input, setInput] = useState("");
+  const [memberType, setMemberType] = useState(""); // "", 0, 1, 2
+  const [suggestions, setSuggestions] = useState([]);
+  const [selected, setSelected] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const abortRef = useRef(null);
+  const debounceRef = useRef(null);
+
+  // 關閉時重置
   useEffect(() => {
-    if (!show) return;
-    setLoading(true);
-    axios
-      .get("https://yupinjia.hyjr.com.tw/api/api/t_Member")
-      .then((res) => setMembers(res.data))
-      .catch((err) => {
-        alert("無法載入會員資料");
-        console.error(err);
-      })
-      .finally(() => setLoading(false));
+    if (!show) {
+      setInput("");
+      setSuggestions([]);
+      setSelected(null);
+      setLoading(false);
+      setMemberType("");
+    }
   }, [show]);
 
-  const handleInputChange = (e) => {
-    const keyword = e.target.value.trim();
-    setInput(keyword);
-    setSelected(null); // 清空已選擇會員
+  // 是否像電話（純數字且長度>=2）
+  const looksLikePhone = useMemo(() => /^\d{2,}$/.test(input.trim()), [input]);
+  // 是否像會員編號（含字母或以 MB 等字母開頭）
+  const looksLikeMemberNo = useMemo(
+    () => /^[A-Za-z].*|.*[A-Za-z].*/.test(input.trim()),
+    [input]
+  );
 
-    if (keyword.length === 0) {
-      setSuggestions([]); // 當輸入為空時清空建議
+  // 後端查會員（支援同時以 memberNo、contactPhone 各打一輪，再合併）
+  async function searchMembersBackend(keyword, typeValue, signal) {
+    const paramsCommon = {};
+    if (typeValue !== "" && typeValue !== null && typeValue !== undefined) {
+      paramsCommon.memberType = typeValue; // 0/1/2
+    }
+
+    // 決定要打哪些請求
+    const tasks = [];
+    const kw = keyword.trim();
+
+    if (kw.length < 2) return [];
+
+    // 如果像電話
+    if (looksLikePhone) {
+      tasks.push(
+        axios.get(`${API_BASE}/t_Member`, {
+          params: { ...paramsCommon, contactPhone: kw },
+          signal,
+        })
+      );
+    }
+
+    // 如果像會員編號（或不是純數字，就也嘗試 memberNo 查）
+    if (looksLikeMemberNo || !looksLikePhone) {
+      tasks.push(
+        axios.get(`${API_BASE}/t_Member`, {
+          params: { ...paramsCommon, fullName: kw },
+          signal,
+        })
+      );
+    }
+
+    // 若兩者都沒被命中（極端情況），保險同時各打一個
+    if (tasks.length === 0) {
+      tasks.push(
+        axios.get(`${API_BASE}/t_Member`, {
+          params: { ...paramsCommon, contactPhone: kw },
+          signal,
+        })
+      );
+      tasks.push(
+        axios.get(`${API_BASE}/t_Member`, {
+          params: { ...paramsCommon, fullName: kw },
+          signal,
+        })
+      );
+    }
+
+    const settled = await Promise.allSettled(tasks);
+    const list = [];
+    for (const r of settled) {
+      if (r.status === "fulfilled") {
+        const d = r.value?.data;
+        if (Array.isArray(d)) list.push(...d);
+        else if (d && typeof d === "object") list.push(d);
+      }
+    }
+
+    // 去重（以 id 或 memberId 去重）
+    const map = new Map();
+    for (const m of list) {
+      const k = m?.id ?? m?.memberId ?? JSON.stringify(m);
+      if (!map.has(k)) map.set(k, m);
+    }
+    return Array.from(map.values());
+  }
+
+  // 依輸入字串做搜尋（debounce + 取消上一請求）
+  useEffect(() => {
+    if (!show) return;
+
+    const kw = input.trim();
+    setSelected(null);
+
+    if (kw.length < 2) {
+      setSuggestions([]);
       return;
     }
 
-    const lower = keyword.toLowerCase();
-    const filtered = members.filter(
-      (m) =>
-        m.contactPhone?.toLowerCase().includes(lower) ||
-        m.fullName?.toLowerCase().includes(lower)
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      abortRef.current?.abort?.();
+      abortRef.current = new AbortController();
+
+      try {
+        setLoading(true);
+        const rows = await searchMembersBackend(
+          kw,
+          memberType,
+          abortRef.current.signal
+        );
+        setSuggestions(rows.slice(0, MAX_SUGGESTIONS));
+      } catch (err) {
+        if (err.name !== "CanceledError" && err.name !== "AbortError") {
+          console.error("查詢會員失敗", err);
+        }
+      } finally {
+        setLoading(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(debounceRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [show, input, memberType]);
+
+  function handleSelectRow(m) {
+    setSelected(m);
+    setInput(
+      `${m.fullName ?? m.name ?? ""} (${
+        m.contactPhone ?? m.phone ?? m.mobile ?? ""
+      })`
     );
-    setSuggestions(filtered.slice(0, 10)); // 限制顯示最多 10 條建議
-  };
+    setSuggestions([]);
+  }
 
-  const handleSelect = (member) => {
-    setInput(`${member.fullName} (${member.contactPhone})`);
-    setSelected(member);
-    setSuggestions([]); // 清空建議列表
-  };
+  async function fetchDistributorByMemberId(memberId) {
+    try {
+      const { data } = await axios.get(`${API_BASE}/t_Distributor`, {
+        params: { memberId },
+      });
+      if (Array.isArray(data))
+        return data.find((d) => d.memberId === memberId) || null;
+      return data?.memberId === memberId ? data : null;
+    } catch (e) {
+      return null;
+    }
+  }
 
-  const handleSubmit = () => {
+  function normalizeMember(base, dist) {
+    const id = base?.id ?? base?.memberId;
+    const buyerType = dist?.buyerType ?? null; // 1=導遊, 2=廠商
+    const isDistributor = !!dist;
+
+    const subType =
+      buyerType === 1
+        ? "導遊"
+        : buyerType === 2
+        ? "廠商"
+        : base?.memberType === 1
+        ? "導遊"
+        : base?.memberType === 2
+        ? "廠商"
+        : base?.memberType === 0
+        ? "一般"
+        : "";
+
+    const discountRate = isDistributor
+      ? Number(dist?.discountRate ?? 1)
+      : Number(base?.discountRate ?? 1);
+
+    // ⚠ 你說後端點數欄位用 cashbackPoint（若有就優先）
+    const point = Number(
+      base?.cashbackPoint ?? base?.rewardPoints ?? base?.points ?? 0
+    );
+
+    return {
+      ...base,
+      id,
+      memberId: id,
+      fullName: base?.fullName ?? base?.name ?? "未命名會員",
+      contactPhone: base?.contactPhone ?? base?.phone ?? base?.mobile ?? "",
+      memberLevel: base?.memberLevel ?? 0,
+
+      cashbackPoint: point,
+      rewardPoints: point, // 相容舊程式
+
+      isDistributor,
+      buyerType,
+      subType,
+      discountRate: Number(discountRate || 1),
+
+      type: isDistributor ? "VIP" : subType || "一般",
+      level: `LV${base?.memberLevel ?? 0}`,
+    };
+  }
+
+  async function handleSubmit() {
     if (!selected) {
       alert("請先選取會員");
       return;
     }
-
-    const normalized = {
-      ...selected,
-      type: selected.isDistributor ? "VIP" : "一般",
-      level: `LV${selected.memberLevel ?? 0}`,
-      discountRate: selected.isDistributor ? 0.9 : 1,
-      subType: selected.isDistributor ? "廠商" : "",
-    };
+    const memberId = selected?.id ?? selected?.memberId;
+    const dist = await fetchDistributorByMemberId(memberId);
+    const normalized = normalizeMember(selected, dist);
 
     onSelect(normalized);
-    setInput(""); // 清空輸入框
-    setSelected(null); // 清空選擇
+    setSelected(null);
+    setInput("");
     onHide();
-  };
+  }
 
   return (
     <Modal show={show} onHide={onHide} centered>
       <Modal.Header closeButton>
         <Modal.Title>切換會員</Modal.Title>
       </Modal.Header>
+
       <Modal.Body>
-        <Form.Control
-          placeholder="輸入手機號碼或姓名"
-          value={input}
-          onChange={handleInputChange}
-          disabled={loading}
-        />
+        <Row className="g-2 align-items-center">
+          <Col>
+            <Form.Control
+              autoFocus
+              placeholder="輸入手機或會員編號（至少 2 個字）"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              disabled={loading}
+            />
+          </Col>
+          <Col xs="auto">
+            <Form.Select
+              value={memberType}
+              onChange={(e) =>
+                setMemberType(
+                  e.target.value === "" ? "" : Number(e.target.value)
+                )
+              }
+              disabled={loading}
+            >
+              {MEMBER_TYPES.map((t) => (
+                <option key={String(t.value)} value={t.value}>
+                  {t.label}
+                </option>
+              ))}
+            </Form.Select>
+          </Col>
+        </Row>
+
         {loading && (
           <div className="text-center mt-2">
             <Spinner animation="border" size="sm" />
           </div>
         )}
+
         {suggestions.length > 0 && (
-          <ListGroup className="mt-2" style={{ maxHeight: "200px", overflowY: "auto" }}>
+          <ListGroup
+            className="mt-2"
+            style={{ maxHeight: 240, overflowY: "auto" }}
+          >
             {suggestions.map((m) => (
               <ListGroup.Item
-                key={m.id}
+                key={m.id ?? m.memberId}
                 action
-                active={selected?.id === m.id}
-                onClick={() => handleSelect(m)}
+                active={
+                  (selected?.id ?? selected?.memberId) === (m.id ?? m.memberId)
+                }
+                onClick={() => handleSelectRow(m)}
               >
-                {m.fullName} ({m.contactPhone})
+                {(m.fullName ?? m.name) || "未命名"}（
+                {m.contactPhone ?? m.phone ?? m.mobile ?? "無電話"}）
               </ListGroup.Item>
             ))}
           </ListGroup>
         )}
       </Modal.Body>
+
       <Modal.Footer>
         <Button variant="secondary" onClick={onHide}>
           取消

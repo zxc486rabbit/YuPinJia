@@ -9,7 +9,8 @@ export default function CardTable({
   currentMember,
   isGuideSelf = false,
 }) {
-  const handleAddToCart = (product) => {  // 修改為 'product'
+  const handleAddToCart = (product) => {
+    // 修改為 'product'
     const newProduct = {
       ...product,
       productId: product.productId ?? product.id, // 統一用 productId 作為 key
@@ -26,27 +27,28 @@ export default function CardTable({
 
   // 根據會員類型計算價格
   const getMemberPrice = (basePrice) => {
-  if (!currentMember) return basePrice;
-  return Math.round(basePrice * (currentMember?.discountRate ?? 1));
-};
+    if (!currentMember) return basePrice;
+    return Math.round(basePrice * (currentMember?.discountRate ?? 1));
+  };
 
   const checkoutWithDiscount = () => {
     if (!onCheckout) return;
 
     const totalQuantity = cartItems.reduce(
-      (sum, product) => sum + product.quantity,  // 修改為 'product'
+      (sum, product) => sum + product.quantity, // 修改為 'product'
       0
     );
 
-    const subtotal = cartItems.reduce((sum, product) => {  // 修改為 'product'
+    const subtotal = cartItems.reduce((sum, product) => {
+      // 修改為 'product'
       const price = Number(product.unitPrice ?? 0);
       const discountRate =
         isGuideSelf || currentMember?.subType === "廠商"
-          ? (currentMember?.discountRate ?? 1) // 導遊或廠商享有折扣
+          ? currentMember?.discountRate ?? 1 // 導遊或廠商享有折扣
           : 1;
       const finalPrice = Math.round(price * discountRate); // 折扣後價格
 
-      return sum + finalPrice * product.quantity;  // 修改為 'product'
+      return sum + finalPrice * product.quantity; // 修改為 'product'
     }, 0);
 
     const finalTotal = subtotal - usedPoints; // 扣除點數
@@ -78,16 +80,17 @@ export default function CardTable({
           }}
         >
           {products.length > 0 ? (
-            products.map((product) => {  // 修改為 'product'
+            products.map((product) => {
+              // 修改為 'product'
               const originalPrice = parsePrice(product.price); // 解析原價
               const discountedPrice = getMemberPrice(originalPrice); // 計算折扣後價格
-             const isDiscounted =
-  (currentMember?.discountRate ?? 1) < 1 &&
-  discountedPrice !== originalPrice;
+              const isDiscounted =
+                (currentMember?.discountRate ?? 1) < 1 &&
+                discountedPrice !== originalPrice;
 
               return (
                 <div
-                  key={product.id}  // 修改為 'product'
+                  key={product.id} // 修改為 'product'
                   style={{
                     height: "140px",
                     border: "1px solid #dee2e6",
@@ -101,7 +104,7 @@ export default function CardTable({
                     padding: "10px",
                     transition: "all 0.2s",
                   }}
-                  onClick={() => handleAddToCart(product)}  // 修改為 'product'
+                  onClick={() => handleAddToCart(product)} // 修改為 'product'
                   onMouseEnter={(e) => {
                     e.currentTarget.style.transform = "scale(1.03)";
                     e.currentTarget.style.boxShadow =
@@ -127,7 +130,7 @@ export default function CardTable({
                       textAlign: "center",
                     }}
                   >
-                    {product.name}  {/* 修改為 'product' */}
+                    {product.name} {/* 修改為 'product' */}
                   </div>
 
                   <div
@@ -148,7 +151,9 @@ export default function CardTable({
                         borderRadius: "4px",
                       }}
                     >
-                      {product.nowStock > 0 ? `庫存 ${product.nowStock}` : "缺貨"}
+                      {product.nowStock > 0
+                        ? `庫存 ${product.nowStock}`
+                        : "缺貨"}
                     </span>
 
                     <div style={{ textAlign: "right" }}>

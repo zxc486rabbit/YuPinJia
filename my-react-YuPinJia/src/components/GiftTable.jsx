@@ -1,4 +1,5 @@
 import React from "react";
+import { useEmployee } from "../utils/EmployeeContext"; // ← 依你的路徑調整
 
 export default function GiftTable({
   products = [],
@@ -6,26 +7,103 @@ export default function GiftTable({
   cartItems = [],
   onCheckout,
 }) {
-  const handleAddToCart = (item) => {
-  const product = {
-    ...item,
-    productId: item.productId ?? item.id, // ⬅️ 統一用 productId 作為 key
-    quantity: 1,
-    unitPrice: 0,   // 贈品的價格設為 0
-    isGift: true,   // 設置 isGift 為 true
-  };
-  addToCart(product);
-};
+  const { currentUser } = useEmployee() || {};
+  const employeeUser = currentUser?.user;
 
-  // 贈送邏輯：庫存 <= 5
+  // 取剩餘額度優先（monthRemainGift），若沒有則用 giftAmount
+  const getGiftQuota = () => {
+    const remain = Number(employeeUser?.monthRemainGift);
+    return Number.isFinite(remain) && remain >= 0 ? remain : 0;
+  };
+
+  // 計算購物車中贈品「原價合計」
+  const calcGiftValue = (items) =>
+    (items || []).filter(i => i.isGift).reduce((sum, i) => {
+      const price = Number(i.originalPrice ?? i.price ?? i.unitPrice ?? 0);
+      const qty = Number(i.quantity ?? 1);
+      return sum + price * qty;
+    }, 0);
+
+  const quota = getGiftQuota();
+  const usedByCart = calcGiftValue(cartItems);
+  const remainForThisSession = Math.max(0, quota - usedByCart);
+
+  const handleAddToCart = (item) => {
+    const product = {
+      ...item,
+      productId: item.productId ?? item.id, // ⬅️ 統一用 productId 作為 key
+      quantity: 1,
+      unitPrice: 0,                             // 顯示價仍為 0
+      originalPrice: Number(item.price ?? 0),   // 存原價供額度扣用
+      isGift: true,
+    };
+    addToCart(product);
+  };
+
   const giftProducts = products;
 
   return (
     <div className="content-container w-100">
+      {/* 額度條 */}
+      <div
+        className="d-flex align-items-center justify-content-between px-3 pt-2"
+        style={{
+          position: "sticky",
+          top: 0,
+          background: "#fff",
+          zIndex: 5,
+          borderBottom: "1px solid #e9ecef",
+        }}
+      >
+        <div style={{ fontWeight: 600, color: "#495057" }}>贈送商品</div>
+        <div className="d-flex align-items-center" style={{ gap: 8 }}>
+          <span
+            title="後端提供之本期可用額度（尚未扣掉此購物車）"
+            style={{
+              fontSize: "0.85rem",
+              background: "#f1f3f5",
+              color: "#495057",
+              padding: "2px 8px",
+              borderRadius: 16,
+              border: "1px solid #dee2e6",
+            }}
+          >
+            目前額度剩餘：NT$ {quota}
+          </span>
+          <span
+            title="已放入購物車之贈品原價合計"
+            style={{
+              fontSize: "0.85rem",
+              background: "#fff3cd",
+              color: "#856404",
+              padding: "2px 8px",
+              borderRadius: 16,
+              border: "1px solid #ffeeba",
+            }}
+          >
+            購物車已佔用：NT$ {usedByCart}
+          </span>
+          <span
+            title="顯示上方便估：後端剩餘 - 此購物車佔用"
+            style={{
+              fontSize: "0.85rem",
+              background: "#e2f0fb",
+              color: "#0c5460",
+              padding: "2px 10px",
+              borderRadius: 16,
+              border: "1px solid #bee5eb",
+              fontWeight: 700,
+            }}
+          >
+            本次可用：NT$ {remainForThisSession}
+          </span>
+        </div>
+      </div>
+
       <div
         className="mt-3 px-3"
         style={{
-          height: "75vh",
+          height: "72vh",
           overflowY: "auto",
         }}
       >
@@ -41,7 +119,7 @@ export default function GiftTable({
               <div
                 key={item.id}
                 style={{
-                  height: "140px",
+                  height: "160px",
                   border: "1px solid #dee2e6",
                   borderRadius: "10px",
                   background: "#fff",
@@ -65,6 +143,7 @@ export default function GiftTable({
                     "0 2px 4px rgba(0,0,0,0.08)";
                 }}
               >
+                {/* 商品名稱 */}
                 <div
                   style={{
                     fontWeight: "600",
@@ -82,6 +161,7 @@ export default function GiftTable({
                   {item.name}
                 </div>
 
+                {/* 庫存 + 價格區塊 */}
                 <div
                   style={{
                     display: "flex",
@@ -105,12 +185,31 @@ export default function GiftTable({
 
                   <div
                     style={{
-                      color: "#17a2b8",
-                      fontWeight: "700",
-                      fontSize: "1rem",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "flex-end",
                     }}
                   >
-                    免費
+                    {/* 原價刪除線（用於額度計算的原價） */}
+                    <span
+                      style={{
+                        fontSize: "0.8rem",
+                        color: "#6c757d",
+                        textDecoration: "line-through",
+                      }}
+                    >
+                      NT$ {item.price ?? 0}
+                    </span>
+                    {/* 免費徽章 */}
+                    <span
+                      style={{
+                        color: "#17a2b8",
+                        fontWeight: "700",
+                        fontSize: "1rem",
+                      }}
+                    >
+                      免費
+                    </span>
                   </div>
                 </div>
               </div>

@@ -21,7 +21,6 @@ export default function Cart({
   updateQuantity,
   currentMember,
   setCurrentMember, // 父層包裝過的方法
-  members,
   onCartSummaryChange,
   stockMap = {},
   isGuideSelf,
@@ -31,7 +30,6 @@ export default function Cart({
   const [showReserved, setShowReserved] = useState(false);
   const [savedOrders, setSavedOrders] = useState([]);
   const [usedPoints, setUsedPoints] = useState(0);
-  const [distributorData, setDistributorData] = useState([]);
 
   const discountPerPoint = 1;
   const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
@@ -44,21 +42,69 @@ export default function Cart({
   const pointDiscount = usedPoints * discountPerPoint;
   const finalTotal = Math.max(subtotal - pointDiscount, 0);
 
-  // 載入經銷商資料
-  useEffect(() => {
-    if (currentMember?.isDistributor) {
-      axios
-        .get(
-          `https://yupinjia.hyjr.com.tw/api/api/t_Distributor?memberId=${currentMember.id}`
-        )
-        .then((response) => {
-          setDistributorData(response.data);
-        })
-        .catch((error) => {
-          console.error("載入經銷商資料失敗:", error);
-        });
+// ─────────────────────────────────────────────
+  // 共用：查單一會員 / 查經銷商 / 標準化
+  const API_BASE = "https://yupinjia.hyjr.com.tw/api/api";
+
+  async function fetchMemberById(memberId) {
+    try {
+      // 依你後端實際路由調整（先試 /t_Member/{id}，不行就 ?id=，最後全量過濾）
+      const try1 = await axios.get(`${API_BASE}/t_Member/${memberId}`).catch(() => null);
+      if (try1?.data?.id) return try1.data;
+
+      const try2 = await axios.get(`${API_BASE}/t_Member`, { params: { id: memberId } }).catch(() => null);
+      if (Array.isArray(try2?.data)) {
+        const found = try2.data.find((m) => m.id === memberId);
+        if (found) return found;
+      } else if (try2?.data?.id === memberId) {
+        return try2.data;
+      }
+
+      const try3 = await axios.get(`${API_BASE}/t_Member`).catch(() => null);
+      if (Array.isArray(try3?.data)) {
+        return try3.data.find((m) => m.id === memberId) || null;
+      }
+    } catch (e) {
+      console.error("fetchMemberById 失敗", e);
     }
-  }, [currentMember?.isDistributor, currentMember?.id]);
+    return null;
+  }
+
+  async function fetchDistributorByMemberId(memberId) {
+    try {
+      const { data } = await axios.get(`${API_BASE}/t_Distributor`, { params: { memberId } });
+      if (Array.isArray(data)) return data.find((d) => d.memberId === memberId) || null;
+      return data?.memberId === memberId ? data : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function normalizeMember(base, dist) {
+    const buyerType = dist?.buyerType ?? null; // 1=導遊,2=廠商
+    const isDistributor = !!dist;
+    const subType = buyerType === 1 ? "導遊" : buyerType === 2 ? "廠商" : (base?.memberType === "導遊" ? "導遊" : base?.memberType === "經銷商" ? "廠商" : "");
+    const discountRate = isDistributor ? Number(dist?.discountRate ?? 1) : (base?.discountRate ?? 1);
+
+    const point = Number(base?.cashbackPoint ?? base?.rewardPoints ?? base?.points ?? 0);
+    return {
+      ...base,
+      id: base?.id ?? base?.memberId,
+      memberId: base?.id ?? base?.memberId,
+      fullName: base?.fullName ?? base?.name ?? "未命名會員",
+      contactPhone: base?.contactPhone ?? base?.phone ?? base?.mobile ?? "",
+      memberLevel: base?.memberLevel ?? 0,
+      cashbackPoint: point,
+      rewardPoints: point, // 別名，給舊程式相容
+      isDistributor,
+      buyerType,
+      subType,
+      discountRate: Number(discountRate || 1),
+      type: isDistributor ? "VIP" : "一般",
+      level: `LV${base?.memberLevel ?? 0}`,
+    };
+  }
+  // ─────────────────────────────────────────────
 
   useEffect(() => {
     if (typeof onCartSummaryChange === "function") {
@@ -109,29 +155,20 @@ export default function Cart({
         showCancelButton: true,
         confirmButtonText: "確定",
         cancelButtonText: "取消",
-      }).then((result) => {
+      }).then(async (result) => {
         if (!result.isConfirmed) return;
 
-        const targetMember = members.find((m) => m.id === order.memberId);
-        if (!targetMember) {
-          Swal.fire({ title: "錯誤", text: "找不到該會員", icon: "error" });
-          return;
-        }
-
-        // 選完身份後才恢復訂單
-        handleSwitchByInput(targetMember, () => {
-          actuallyRestore(order);
-        });
+        const target = await fetchMemberById(order.memberId);
+        if (!target) return Swal.fire({ title: "錯誤", text: "找不到該會員", icon: "error" });
+        handleSwitchByInput(target, () => actuallyRestore(order)); // 切換成功後才恢復
       });
     } else {
-      handleSwitchByInput(currentMember, () => {
-        actuallyRestore(order);
-      });
+      handleSwitchByInput(currentMember, () => actuallyRestore(order));
     }
   };
 
   const actuallyRestore = (order) => {
-    if ((currentMember?.rewardPoints || 0) < usedPoints) {
+    if ((currentMember?.cashbackPoint || 0) < usedPoints) {
       Swal.fire({
         title: "點數不足",
         text: "會員點數不足以折抵",
@@ -165,30 +202,29 @@ export default function Cart({
     Swal.fire({ title: "成功", text: "已取回暫存訂單", icon: "success" });
   };
 
-  const handleSwitchByInput = (member, afterSelect) => {
-  const distributor = distributorData.find((d) => d.memberId === member.id);
+  const handleSwitchByInput = async (member, afterSelect) => {
+    // 若已帶齊身份/折扣就直接用；否則查 t_Distributor 後標準化
+    let normalized = member;
+    const needEnrich =
+      member?.discountRate == null &&
+      member?.buyerType == null &&
+      !member?.subType &&
+      member?.isDistributor == null;
 
-  const normalized = {
-    ...member,
-    fullName: member.fullName ?? member.name ?? "未命名會員",
-    rewardPoints: member.rewardPoints ?? member.points ?? 0,
-    type: member.isDistributor ? "VIP" : "一般",
-    level: `LV${member.memberLevel ?? 0}`,
-    discountRate: member.isDistributor ? 0.9 : 1, // 預設折扣
-    subType:
-      member.memberType === "導遊"
-        ? "導遊"
-        : member.memberType === "經銷商"
-        ? "廠商"
-        : "會員",
-  };
+    if (needEnrich) {
+      const dist = await fetchDistributorByMemberId(member?.id ?? member?.memberId);
+      normalized = normalizeMember(member, dist);
+    } else {
+      normalized = normalizeMember(member, member?.isDistributor ? { buyerType: member?.buyerType, discountRate: member?.discountRate, memberId: member?.id ?? member?.memberId } : null);
+    }
 
-  setCurrentMember(normalized);
+    setCurrentMember(normalized);
+    setUsedPoints(0); // 切換會員重置折抵，避免前一位的點數殘留
 
-  if (normalized.subType === "導遊") {
-    Swal.fire({
-      title: "<strong>請選擇結帳身份</strong>",
-      html: `
+    if (normalized.subType === "導遊") {
+      Swal.fire({
+        title: "<strong>請選擇結帳身份</strong>",
+        html: `
         <div style="display: flex; gap: 1rem; justify-content: center; margin-top:1rem;">
           <div id="guideSelf" style="flex:1;cursor:pointer;padding: 1.5rem;border: 1px solid #ddd;border-radius: 8px;background: #f9f9f9;font-size: 1.5rem;font-weight: 600;text-align: center;">
             導遊本人結帳<br/><span style="font-size:1.2rem; color:#28a745">(9折)</span>
@@ -197,46 +233,48 @@ export default function Cart({
             客人結帳<br/><span style="font-size:1.2rem; color:#007bff">(原價)</span>
           </div>
         </div>`,
-      showCancelButton: true,
-      cancelButtonText: `<div style="font-size:1.2rem; padding:0.5rem 1rem;">取消</div>`,
-      showConfirmButton: false,
-      didOpen: () => {
-        const popup = Swal.getPopup();
+        showCancelButton: true,
+        cancelButtonText: `<div style="font-size:1.2rem; padding:0.5rem 1rem;">取消</div>`,
+        showConfirmButton: false,
+        didOpen: () => {
+          const popup = Swal.getPopup();
 
-        // 導遊本人
-        popup?.querySelector("#guideSelf")?.addEventListener("click", () => {
-          Swal.close();
-          setIsGuideSelf(true);
+          // 導遊本人
+          popup?.querySelector("#guideSelf")?.addEventListener("click", () => {
+            Swal.close();
+            setIsGuideSelf(true);
+            localStorage.setItem("checkout_payer", "guide");
 
-          const updatedMember = {
-            ...normalized,
-            discountRate: 0.9, // 導遊本人折扣
-          };
-          setCurrentMember(updatedMember);
+            const updatedMember = {
+              ...normalized,
+              discountRate: 0.9, // 導遊本人折扣
+            };
+            setCurrentMember(updatedMember);
 
-          if (afterSelect) afterSelect();
-        });
+            if (afterSelect) afterSelect();
+          });
 
-        // 客人結帳
-        popup?.querySelector("#customer")?.addEventListener("click", () => {
-          Swal.close();
-          setIsGuideSelf(false);
+          // 客人結帳
+          popup?.querySelector("#customer")?.addEventListener("click", () => {
+            Swal.close();
+            setIsGuideSelf(false);
+            localStorage.setItem("checkout_payer", "customer");
 
-          const updatedMember = {
-            ...normalized,
-            discountRate: 1, // 客人結帳原價
-          };
-          setCurrentMember(updatedMember);
+            const updatedMember = {
+              ...normalized,
+              discountRate: 1, // 客人結帳原價
+            };
+            setCurrentMember(updatedMember);
 
-          if (afterSelect) afterSelect();
-        });
-      },
-    });
-  } else {
-    setIsGuideSelf(false);
-    if (afterSelect) afterSelect();
-  }
-};
+            if (afterSelect) afterSelect();
+          });
+        },
+      });
+    } else {
+      setIsGuideSelf(false);
+      if (afterSelect) afterSelect();
+    }
+  };
 
   return (
     <div className="cart py-3">
@@ -265,7 +303,7 @@ export default function Cart({
                   <FaMedal className="me-1" /> {currentMember?.level}
                 </span>
                 <FaTicketAlt className="me-1" /> 點數：
-                {currentMember?.rewardPoints}
+                {currentMember?.cashbackPoint}
               </div>
             )}
           </div>
@@ -273,7 +311,7 @@ export default function Cart({
             className="change-button ms-3"
             onClick={() => setShowModal(true)}
           >
-              <FaSyncAlt className="me-1" />  切換會員
+            <FaSyncAlt className="me-1" /> 切換會員
           </button>
 
           {currentMember?.subType === "導遊" && (
@@ -342,9 +380,12 @@ export default function Cart({
               value={usedPoints === 0 ? "" : usedPoints}
               onChange={(e) => {
                 const val = parseInt(e.target.value, 10);
+                const maxByCashback = currentMember?.cashbackPoint || 0;
+                const maxBySubtotal = Math.floor(subtotal / discountPerPoint);
                 const safeVal = Math.min(
                   Math.max(val || 0, 0),
-                  currentMember?.rewardPoints || 0
+                  maxByCashback,
+                  maxBySubtotal
                 );
                 setUsedPoints(safeVal);
               }}
@@ -354,7 +395,11 @@ export default function Cart({
             />
             <button
               className="btn btn-sm btn-outline-secondary"
-              onClick={() => setUsedPoints(currentMember?.rewardPoints || 0)}
+              onClick={() => {
+                const maxByCashback = currentMember?.cashbackPoint || 0;
+                const maxBySubtotal = Math.floor(subtotal / discountPerPoint);
+                setUsedPoints(Math.min(maxByCashback, maxBySubtotal));
+              }}
             >
               全折
             </button>
@@ -363,28 +408,27 @@ export default function Cart({
 
         <hr />
 
-        <div className="d-flex justify-content-between" style={{ color: "#A40000" }}>
-  <span>總價</span>
-  <span className="text-value">
-    ${finalTotal.toLocaleString()}
-    {isDealer(currentMember) && (
-      <span className="text-success ms-2 small">
-        ({Math.round((currentMember?.discountRate ?? 1) * 10)}折)
-      </span>
-    )}
-  </span>
-</div>
+        <div
+          className="d-flex justify-content-between"
+          style={{ color: "#A40000" }}
+        >
+          <span>總價</span>
+          <span className="text-value">
+            ${finalTotal.toLocaleString()}
+            {isDealer(currentMember) && (
+              <span className="text-success ms-2 small">
+                ({Math.round((currentMember?.discountRate ?? 1) * 10)}折)
+              </span>
+            )}
+          </span>
+        </div>
       </div>
 
-      {members?.length > 0 && (
-        <MemberModal
-          show={showModal}
-          onHide={() => setShowModal(false)}
-          members={members}
-          onSelect={handleSwitchByInput}
-          member={currentMember}
-        />
-      )}
+      <MemberModal
+        show={showModal}
+        onHide={() => setShowModal(false)}
+        onSelect={handleSwitchByInput}  // 傳回的 member 這裡會自動補齊身份/折扣
+      />
       <ReservedModal
         show={showReserved}
         onHide={() => setShowReserved(false)}

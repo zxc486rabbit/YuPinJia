@@ -1,28 +1,24 @@
 import { useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
-import CheckoutFlow from "../components/CheckoutFlow";
+import CheckoutFlow from "./CheckoutFlow/CheckoutFlow";
 
 export default function CheckoutPage() {
   const navigate = useNavigate();
   const [cartItems, setCartItems] = useState([]);
   const [currentMember, setCurrentMember] = useState({});
   const [usedPoints, setUsedPoints] = useState(0);
+  const [subtotal, setSubtotal] = useState(0);
+  const [finalTotal, setFinalTotal] = useState(0);
 
-useEffect(() => {
-  const savedData = JSON.parse(localStorage.getItem("checkoutData") || "{}");
+  useEffect(() => {
+    const savedData = JSON.parse(localStorage.getItem("checkoutData") || "{}");
 
-  // console.log("🚀 checkoutData:", savedData); // ✅ 觀察這邊是否有 contactPhone
-
-  if (Array.isArray(savedData.items)) {
-    setCartItems(savedData.items);
-  }
-  if (savedData.member) {
-    setCurrentMember(savedData.member); // 👈 這裡 savedData.member 應該要包含 contactPhone
-  }
-  if (typeof savedData.usedPoints === "number") {
-    setUsedPoints(savedData.usedPoints);
-  }
-}, []);
+    if (Array.isArray(savedData.items)) setCartItems(savedData.items);
+    if (savedData.member) setCurrentMember(savedData.member);
+    if (typeof savedData.usedPoints === "number") setUsedPoints(savedData.usedPoints);
+    if (typeof savedData.subtotal === "number") setSubtotal(savedData.subtotal);          // ← 新增
+    if (typeof savedData.finalTotal === "number") setFinalTotal(savedData.finalTotal);    // ← 新增
+  }, []);
 
   return (
     <div>
@@ -46,6 +42,8 @@ useEffect(() => {
           cartItems={cartItems}
           currentMember={currentMember}
           usedPoints={usedPoints}
+          initialSubtotal={subtotal}        // ← 傳進去
+          initialFinalTotal={finalTotal}    // ← 傳進去
           onComplete={(result) => {
             navigate("/summary", { state: result });
           }}

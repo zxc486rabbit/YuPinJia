@@ -1,0 +1,321 @@
+const styles = {
+  container: {
+    padding: "20px",
+    fontFamily: "'Segoe UI', sans-serif",
+  },
+  headerRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: "10px",
+  },
+  title: {
+    fontSize: "1.8rem",
+    margin: 0,
+    marginBottom: "15px",
+  },
+  subtitle: {
+    marginTop: "20px",
+    fontSize: "1.2rem",
+    color: "#555",
+  },
+  cardGrid3: {
+    display: "grid",
+    gridTemplateColumns: "repeat(3, 1fr)",
+    gap: "20px",
+    marginBottom: "25px",
+  },
+  cardGrid4: {
+    display: "grid",
+    gridTemplateColumns: "repeat(4, 1fr)",
+    gap: "15px",
+    marginBottom: "20px",
+  },
+  card: {
+    background: "#fff",
+    borderWidth: "2px",
+    borderStyle: "solid",
+    borderColor: "#ddd",
+    borderRadius: "8px",
+    padding: "18px",
+    textAlign: "center",
+    cursor: "pointer",
+    fontWeight: "bold",
+    fontSize: "1.1rem",
+    transition: "all 0.2s",
+  },
+  cardSelected: {
+    borderColor: "#007bff",
+    boxShadow: "0 0 6px rgba(0,123,255,0.5)",
+  },
+  cardDefault: {
+    borderColor: "#ddd",
+  },
+  primaryBtn: {
+    display: "block",
+    padding: "12px",
+    background: "#007bff",
+    color: "#fff",
+    fontSize: "1rem",
+    fontWeight: "bold",
+    border: "none",
+    borderRadius: "4px",
+    cursor: "pointer",
+    width: "100%",
+    maxWidth: "300px",
+    margin: "20px auto 0",
+  },
+  backBtn: {
+    backgroundColor: "#f1f1f1",
+    border: "1px solid #ccc",
+    borderRadius: "4px",
+    padding: "6px 12px",
+    cursor: "pointer",
+    fontWeight: "bold",
+    color: "#333",
+  },
+  extraInfo: {
+    marginTop: "20px",
+    background: "#f9f9f9",
+    padding: "15px",
+    borderRadius: "6px",
+    border: "1px solid #ddd",   // ← 修正這行
+  },
+  input: {
+    width: "100%",
+    padding: "10px",
+    marginBottom: "10px",
+    border: "1px solid #ccc",
+    borderRadius: "4px",
+    fontSize: "1rem",
+  },
+  textarea: {
+    width: "100%",
+    padding: "10px",
+    border: "1px solid #ccc",
+    borderRadius: "4px",
+    fontSize: "1rem",
+  },
+  table: {
+    width: "100%",
+    borderCollapse: "collapse",
+    margin: "20px 0",
+  },
+  th: {
+    textAlign: "left",
+    padding: "8px",
+    background: "#eee",
+    borderBottom: "1px solid #ccc",
+  },
+  td: {
+    padding: "8px",
+    borderBottom: "1px solid #eee",
+  },
+  inputRow: {
+    display: "flex",
+    gap: "10px",
+    marginBottom: "10px",
+  },
+  halfInput: {
+    flex: 1,
+    padding: "10px",
+    border: "1px solid #ccc",
+    borderRadius: "4px",
+    fontSize: "1rem",
+  },
+  cashSection: {
+    margin: "20px 0",
+  },
+  printingOverlay: {
+    position: "fixed",
+    top: 0,
+    left: 0,
+    width: "100%",
+    height: "100%",
+    background: "rgba(0, 0, 0, 0.5)",
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 9999,
+  },
+  printingContent: {
+    background: "#fff",
+    padding: "30px",
+    borderRadius: "8px",
+    textAlign: "center",
+    boxShadow: "0 4px 8px rgba(0,0,0,0.2)",
+  },
+  spinner: {
+    width: "50px",
+    height: "50px",
+    border: "6px solid #ccc",
+    borderTop: "6px solid #007bff",
+    borderRadius: "50%",
+    animation: "spin 1s linear infinite",
+    margin: "0 auto 15px",
+  },
+  tableContainer: {
+    maxHeight: "50vh",
+    overflowY: "auto",
+  },
+  invoiceRow: {
+    display: "flex",
+    gap: "12px",
+    marginBottom: "12px",
+  },
+  invoiceItem: {
+    flex: 1,
+  },
+  label: {
+    display: "block",
+    marginBottom: "6px",
+    color: "#333",
+    fontWeight: "bold",
+  },
+  /* ==== POS 佈局 ==== */
+  posShell: {
+    display: "flex",
+    gap: 16,
+    alignItems: "flex-start",
+    marginTop: 8,
+    flexWrap: "wrap",
+  },
+  posLeft: { width: 420, maxWidth: "100%" },
+  posRight: { flex: 1, minWidth: 320 },
+
+  /* ==== 總額卡片 ==== */
+  totalCard: {
+    background: "#fff",
+    border: "1px solid #e5e7eb",
+    borderRadius: 12,
+    padding: "14px 16px",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "baseline",
+    boxShadow: "0 2px 6px rgba(0,0,0,0.06)",
+    marginBottom: 12,
+  },
+  totalTitle: { fontSize: "1rem", color: "#6b7280", fontWeight: 600 },
+  totalNumber: { fontSize: "1.9rem", fontWeight: 800, letterSpacing: 0.2, color: "#111827" },
+  totalHint: { fontSize: ".9rem", color: "#6b7280" },
+
+  /* ==== 付款方式大按鈕 ==== */
+  methodGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+    gap: 10,
+    marginBottom: 12,
+  },
+  methodBtn: {
+    background: "#fff",
+    border: "2px solid #e5e7eb",
+    borderRadius: 10,
+    padding: "14px 10px",
+    textAlign: "center",
+    fontWeight: 800,
+    fontSize: "1.05rem",
+    cursor: "pointer",
+    userSelect: "none",
+  },
+  methodBtnActive: {
+    borderColor: "#2563eb",
+    boxShadow: "0 0 0 3px rgba(37,99,235,.15)",
+    color: "#2563eb",
+  },
+
+  /* ==== 區塊面板 ==== */
+  panel: {
+    background: "#fff",
+    border: "1px solid #e5e7eb",
+    borderRadius: 12,
+    padding: 14,
+    boxShadow: "0 2px 6px rgba(0,0,0,0.05)",
+    marginBottom: 12,
+  },
+
+  /* ==== 欄位排列 ==== */
+  fieldStack: { display: "grid", gap: 10 },
+  fieldRow2: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 },
+
+  /* ==== 快速金額 Chips ==== */
+  chipRow: { display: "flex", gap: 8, flexWrap: "wrap" },
+  chip: {
+    padding: "8px 12px",
+    borderRadius: 999,
+    border: "1px solid #e5e7eb",
+    background: "#f9fafb",
+    fontWeight: 700,
+    cursor: "pointer",
+  },
+
+  /* ==== 找零/賒帳 顯示 ==== */
+  dueRow: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginTop: 8 },
+  dueCard: {
+    background: "#f9fafb",
+    border: "1px solid #e5e7eb",
+    borderRadius: 10,
+    padding: "10px 12px",
+  },
+  dueLabel: { fontSize: ".85rem", color: "#6b7280" },
+  dueValue: { fontSize: "1.2rem", fontWeight: 800, marginTop: 4 },
+
+  /* ==== 小鍵盤 ==== */
+  keypadWrapper: {
+    background: "#fff",
+    border: "1px solid #e5e7eb",
+    borderRadius: 12,
+    padding: 16,
+    boxShadow: "0 2px 6px rgba(0,0,0,0.06)",
+    width: "100%",
+  },
+  keypadTitle: { fontWeight: 800, marginBottom: 8 },
+  keypadTargetRow: { marginBottom: 8, color: "#444" },
+  keypadDisplay: {
+    border: "1px solid #d1d5db",
+    borderRadius: 10,
+    padding: "12px 14px",
+    fontSize: "1.35rem",
+    textAlign: "right",
+    marginBottom: 12,
+    background: "#f9fafb",
+    fontWeight: 800,
+  },
+  keypadGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(3, 1fr)",
+    gap: 8,
+    marginBottom: 8,
+  },
+  keypadKey: {
+    padding: "16px 0",
+    borderRadius: 10,
+    border: "1px solid #d1d5db",
+    background: "#ffffff",
+    fontWeight: 800,
+    fontSize: "1.05rem",
+    cursor: "pointer",
+  },
+  keypadActionRow: { display: "flex", gap: 8, marginTop: 8 },
+  keypadPrimary: {
+    padding: "14px 0",
+    borderRadius: 10,
+    border: "none",
+    background: "#16a34a",
+    color: "#fff",
+    fontWeight: 800,
+    cursor: "pointer",
+  },
+  keypadGhost: {
+    padding: "14px 0",
+    borderRadius: 10,
+    border: "1px solid #d1d5db",
+    background: "#fff",
+    fontWeight: 800,
+    cursor: "pointer",
+  },
+
+  /* 聚焦高亮（你已有 inputActive 也可沿用） */
+  inputActive: { outline: "2px solid #2563eb", borderColor: "#2563eb" },
+};
+
+export default styles;

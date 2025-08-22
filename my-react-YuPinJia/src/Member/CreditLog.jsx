@@ -1,10 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import "../components/Search.css";
 import SearchField from "../components/SearchField";
 import Swal from "sweetalert2";
 import { Modal, Button, Form } from "react-bootstrap";
 import axios from "axios";
 import CreditSettleModal from "./CreditSettleModal";
+
+const API_BASE = "https://yupinjia.hyjr.com.tw/api/api";
 
 export default function CreditLog() {
   const [orderId, setOrderId] = useState("");
@@ -15,6 +17,7 @@ export default function CreditLog() {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [showSettleModal, setShowSettleModal] = useState(false);
+  const [remindingId, setRemindingId] = useState(null);
 
   const [settleAmount, setSettleAmount] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState("現金");
@@ -26,24 +29,29 @@ export default function CreditLog() {
   const [chequeNumber, setChequeNumber] = useState("");
   const [chequeDate, setChequeDate] = useState("");
 
-  // 取得賒帳資料並更新 tableData
-  useEffect(() => {
+  // 取得賒帳資料並更新 tableData → 抽成函式，方便重用
+  const fetchCreditRecords = useCallback(() => {
     axios
       .get("https://yupinjia.hyjr.com.tw/api/api/t_CreditRecord")
       .then((response) => {
         const updatedData = response.data.map((item) => ({
-          id: item.id, // 賒帳紀錄 ID
-          memberId: item.memberId, // 會員 ID
-          memberNo: item.memberNo || "-", // 會員編號 (可能為 null)
-          fullName: item.fullName || "-", // 會員名稱
-          billingDate: item.billingDate?.split("T")[0] || "-", // 帳單日期
-          creditAmount: item.creditAmount || 0, // 賒帳金額
-          unpaidAmount: item.creditAmount || 0, // 未結清金額 (先等於賒帳金額)
+          // 列表顯示用
+          id: item.id,
+          memberId: item.memberId,
+          memberNo: item.memberNo || "-",
+          fullName: item.fullName || "-",
+          billingDate: item.billingDate?.split("T")[0] || "-",
+          creditAmount: item.creditAmount ?? 0,
+          reminderCount: item.reminderCount ?? 0,
           repaymentDate: item.lastRepaymentDate
             ? item.lastRepaymentDate.split("T")[0]
-            : "-", // 最後還款日期
-          status: item.reminderCount > 0 ? "未還款" : "已還款", // 狀態
-          reminderCount: item.reminderCount || 0, // 提醒次數
+            : "-",
+          status: (item.reminderCount ?? 0) > 0 ? "未還款" : "已還款",
+
+          // PUT 用的原始欄位（避免後端要求完整物件）
+          billingDateIso: item.billingDate || null,
+          lastRepaymentDateIso: item.lastRepaymentDate || null,
+          raw: item,
         }));
         setTableData(updatedData);
       })
@@ -52,6 +60,10 @@ export default function CreditLog() {
         Swal.fire("資料載入失敗", "", "error");
       });
   }, []);
+
+  useEffect(() => {
+    fetchCreditRecords();
+  }, [fetchCreditRecords]);
 
   const handleSearch = () => {
     console.log("搜尋條件：", { orderId, status, pickupTime });
@@ -71,6 +83,10 @@ export default function CreditLog() {
 
   const closeModal = () => {
     setShowModal(false);
+    setSelectedOrder(null);
+  };
+  const closeSettleModal = () => {
+    setShowSettleModal(false);
     setSelectedOrder(null);
   };
 
@@ -105,30 +121,35 @@ export default function CreditLog() {
     closeModal();
   };
 
-  const handleRemind = (order) => {
-  const newCount = (order.reminderCount || 0) + 1;
+  const handleRemind = async (row) => {
+  if (remindingId) return; // 防二次點擊
+  setRemindingId(row.id);
 
-  // 更新後端 reminderCount
-  axios
-    .put(`https://yupinjia.hyjr.com.tw/api/api/t_CreditRecord/${order.id}`, {
-      ...order, // 把原本資料帶上（避免後端要求完整物件）
-      reminderCount: newCount,
-    })
-    .then(() => {
-      // 前端更新
-      setTableData((prev) =>
-        prev.map((item) =>
-          item.id === order.id
-            ? { ...item, reminderCount: newCount }
-            : item
-        )
-      );
-      Swal.fire("已發送提醒", "", "success");
-    })
-    .catch((error) => {
-      console.error("更新提醒次數失敗:", error);
-      Swal.fire("提醒失敗", "", "error");
-    });
+  try {
+    // ★ 正確端點：PUT /t_CreditRecord/CreditReminder/{id}
+    // 大多後端可接受 null/{} 空 body，若 415/400 可把 null 改成 {}
+    const res = await axios.put(
+      `${API_BASE}/t_CreditRecord/CreditReminder/${row.id}`,
+      null
+    );
+
+    // 若後端有回最新 reminderCount，用它；否則前端自行 +1
+    const nextCount =
+      typeof res?.data?.reminderCount === "number"
+        ? res.data.reminderCount
+        : (row.reminderCount ?? 0) + 1;
+
+    setTableData((prev) =>
+      prev.map((it) => (it.id === row.id ? { ...it, reminderCount: nextCount } : it))
+    );
+
+    Swal.fire("已發送提醒 (+1)", "", "success");
+  } catch (err) {
+    console.error("更新提醒次數失敗:", err);
+    Swal.fire("提醒失敗", "", "error");
+  } finally {
+    setRemindingId(null);
+  }
 };
 
   const handlePrint = () => {
@@ -270,8 +291,9 @@ export default function CreditLog() {
                     <button
                       className="edit-button me-2"
                       onClick={() => handleRemind(item)}
+                      disabled={remindingId === item.id}
                     >
-                      提醒
+                      {remindingId === item.id ? "送出中…" : "提醒"}
                     </button>
                     <button
                       className="edit-button"
@@ -304,8 +326,9 @@ export default function CreditLog() {
       {/* 結清 Modal */}
       <CreditSettleModal
         show={showSettleModal}
-        onClose={() => setShowSettleModal(false)}
+        onClose={closeSettleModal}
         creditRecordId={selectedOrder?.id}
+        onSettled={fetchCreditRecords} // ★ 結清成功後，重抓主表
       />
     </>
   );

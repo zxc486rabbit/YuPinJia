@@ -14,7 +14,6 @@ export default function Sales() {
 
   const [tableData, setTableData] = useState([]); // 僅供顯示與搜尋用
   const [originalData, setOriginalData] = useState([]); // /保留全部原始資料
-  const [memberMap, setMemberMap] = useState({}); // 會員姓名
   const [selectedOrder, setSelectedOrder] = useState(null); //記錄選到哪筆
   const [showModal, setShowModal] = useState(false); //檢視按鈕彈出框
   const [showEditModal, setShowEditModal] = useState(false); //編輯按鈕彈出框
@@ -25,30 +24,35 @@ export default function Sales() {
   const [loading, setLoading] = useState(true); // 控制載入狀態
 
   const handleReturnClick = (order) => {
-     setShowEditModal(false); // 關閉編輯彈出框
-  setSelectedOrder(order);
-  setShowReturnModal(true);
-};
-
-  const handleCloseReturnForm = () => {
-    setShowReturnForm(false);
+    setShowEditModal(false); // 關閉編輯彈出框
+    setSelectedOrder(order);
+    setShowReturnModal(true);
   };
 
-  const statusMap = {
-    作廢: 0,
-    賒帳: 1,
-    已付款: 2,
-    已出貨: 3,
-    配送中: 4,
-    已完成: 5,
+  // 文字/字串數字/數字 → 統一轉成數字代碼
+  const toStatusCode = (raw) => {
+    if (typeof raw === "number" && !Number.isNaN(raw)) return raw;
+    if (typeof raw === "string") {
+      if (/^\d+$/.test(raw)) return Number(raw);
+      const map = {
+        已作廢: 0,
+        賒帳: 1,
+        已付款: 2,
+        已出貨: 3,
+        配送中: 4,
+        已完成: 5,
+      };
+      if (raw in map) return map[raw];
+    }
+    return null; // 無法辨識
   };
 
   // 根據狀態碼自動顯示對應的狀態文字
   const renderStatusBadge = (statusCode) => {
-    const status =
-      statusCode === undefined || statusCode === null ? "未知" : statusCode; // 保證 status 永遠不會是 undefined 或 null
-
-    switch (status) {
+    const s = toStatusCode(statusCode);
+    if (s === null)
+      return <span className="badge bg-secondary fs-6">未知</span>;
+    switch (s) {
       case 5:
         return <span className="badge bg-success fs-6">已完成</span>;
       case 4:
@@ -68,21 +72,49 @@ export default function Sales() {
     }
   };
 
+  // 以後端回傳為主；若後端沒回再退回用明細推算
   const calculatedCreditAmount =
-  (selectedOrder?.productDetails?.reduce((sum, item) => {
-    const unitPrice = Number(item.unitPrice) || 0;
-    const quantity = Number(item.quantity) || 0;
-    const discount = Number(item.discountedAmount ?? 0) || 0;
-    return sum + (unitPrice * quantity - discount);
-  }, 0) || 0) - Number(selectedOrder?.paymentAmount || 0);
+    selectedOrder?.creditAmount != null
+      ? Number(selectedOrder.creditAmount)
+      : Math.max(
+          0,
+          (selectedOrder?.productDetails?.reduce((sum, item) => {
+            const unitPrice = Number(item.unitPrice) || 0;
+            const quantity = Number(item.quantity) || 0;
+            const discount = Number(item.discountedAmount ?? 0) || 0;
+            return sum + (unitPrice * quantity - discount);
+          }, 0) || 0) - Number(selectedOrder?.paymentAmount || 0)
+        );
+
+  // 格式化金額（安全處理）
+  const formatCurrency = (n) => Number(n || 0).toLocaleString();
+
+  // 把 paymentMethod（0/1/2/3 或字串）轉中文
+  const formatPaymentMethod = (pm) => {
+    if (pm === null || pm === undefined) return "—";
+    // 數字或數字字串
+    const code =
+      typeof pm === "number" ? pm : /^\d+$/.test(pm) ? Number(pm) : null;
+    if (code !== null) return ["現金", "匯款", "支票", "刷卡"][code] + "付款";
+    // 後端若已是中文
+    if (typeof pm === "string") {
+      if (/現金/.test(pm)) return "現金付款";
+      if (/匯款/.test(pm)) return "匯款";
+      if (/支票/.test(pm)) return "支票";
+      if (/刷卡|信用卡/.test(pm)) return "刷卡";
+      return pm;
+    }
+    return "—";
+  };
 
   // 當前狀態（數字）必須轉換為數字，避免傳入 NaN
   const getNextStepLabel = (status) => {
-    const numericStatus = Number(status); // 確保 status 是數字
+    const numericStatus = toStatusCode(status);
+    if (numericStatus === null) return "下一步";
 
     switch (numericStatus) {
       case 1:
-        return "確認付款"; // 賒帳狀態時，顯示 "確認付款"
+        return "確認出貨"; // 賒帳後直接出貨
       case 2:
         return "確認出貨";
       case 3:
@@ -102,6 +134,43 @@ export default function Sales() {
   const calculateDiscountedTotal = (unitPrice, quantity, discount = 0) => {
     return unitPrice * quantity - discount;
   };
+
+  const computeTotals = (o) => {
+    const paid = Number(o?.paymentAmount ?? 0);
+
+    const itemsTotal = o?.productDetails?.length
+      ? o.productDetails.reduce((sum, it) => {
+          const unit = Number(it.unitPrice) || 0;
+          const qty = Number(it.quantity) || 0;
+          const disc = Number(it.discountedAmount ?? 0) || 0;
+          return sum + (unit * qty - disc);
+        }, 0)
+      : null;
+
+    const total = Number(itemsTotal != null ? itemsTotal : (o?.totalAmount ?? 0));
+    const due = Math.max(0, total - paid);    // 應收餘額（賒帳）
+    const change = Math.max(0, paid - total); // 找零
+    return { total, paid, due, change };
+  };
+
+  // 把後端一筆訂單 → 轉成前端列表用的欄位（統一命名）
+const mapApiOrder = (order) => ({
+  id: order.id,
+  orderId: order.orderNumber,
+  store: order.storeName ?? "馬公門市",
+  member: order.memberName ?? order.memberIdName ?? "未命名會員",
+  phone: order.mobile ?? "",
+  totalAmount: Number(order.totalAmount ?? 0),          // 列表顯示用
+  paymentMethod: order.paymentMethod ?? "",             // 可能是「現金」或代碼
+  carrierNumber: order.carrierNumber || "無",
+  invoiceNumber: order.invoiceNumber || "",
+  taxId: order.unifiedBusinessNumber || "無",
+  pickupTime: order.pickupInfo?.match(/時間:(.*)/)?.[1] ?? "無",
+  deliveryMethod: order.deliveryMethod || "無",
+  operatorName: order.operatorName ?? "操作員A",
+  createdAt: order.createdAt ?? "",
+  status: toStatusCode(order.status),                   // 標準化狀態
+});
 
   const handleSearch = () => {
     const rawParams = {
@@ -130,29 +199,7 @@ export default function Sales() {
 
         raw.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-        const mapped = raw.map((order) => {
-          return {
-            id: order.id,
-            orderId: order.orderNumber,
-            store: order.storeName ?? "馬公門市",
-            member: order.memberIdName ?? "未命名會員", // 使用 API 中的 memberIdName
-            phone: order.mobile ?? "",
-            totalAmount: order.totalAmount.toLocaleString(),
-            pay: order.paymentMethod ?? "現金付款",
-            carrier: order.carrierNumber || "無",
-            invoice: order.invoiceNumber || "無",
-            taxId: order.unifiedBusinessNumber || "無",
-            address:
-              order.pickupInfo?.match(/地點:(.*?),/)?.[1] ||
-              order.pickupInfo?.match(/地點:(.*)/)?.[1] ||
-              "",
-            pickupTime: order.pickupInfo?.match(/時間:(.*)/)?.[1] ?? "無",
-            deliveryMethod: order.deliveryMethod || "無", // ✅ 加這行
-            operator: order.operatorName ?? "操作員A",
-            createdDate: order.createdAt?.split("T")[0] ?? "",
-            status: statusMap[order.status] ?? "未知",
-          };
-        });
+         const mapped = raw.map(mapApiOrder);
 
         setOriginalData(mapped);
         setTableData(mapped);
@@ -168,20 +215,25 @@ export default function Sales() {
   // 檢視訂單彈出框
   const handleView = async (order) => {
     try {
-      setSelectedOrder({ ...order, productDetails: [] }); // 先打開空的彈出框
+      setSelectedOrder({ ...order, productDetails: [] });
       setShowModal(true);
 
       const res = await axios.get(
         `https://yupinjia.hyjr.com.tw/api/api/t_SalesOrder/${order.id}`
       );
 
-      // 從 API 回應資料中獲取 orderItems
-      const productDetails = res.data.orderItems.map((item) => ({
-        productName: item.productName, // 商品名稱
-        quantity: Number(item.quantity), // 確保數量是數字
-        unitPrice: Number(item.unitPrice), // 確保單價是數字
-        discountedAmount: Number(item.discountedAmount ?? 0), // 折扣金額 (若是 null 則設為 0)
-      }));
+      const productDetails = res.data.orderItems.map((item) => {
+        const quantity = Number(item.quantity) || 0;
+        const unitPrice = Number(item.unitPrice) || 0;
+        return {
+          productName: item.productName || "未命名商品",
+          quantity,
+          unitPrice,
+          discountedAmount: Number(item.discountedAmount ?? 0) || 0,
+          subtotal: Number(item.subtotal ?? unitPrice * quantity), // ← 保障有小計
+          isGift: !!item.isGift, // ← 帶入贈品旗標
+        };
+      });
 
       setSelectedOrder((prev) => ({
         ...prev,
@@ -195,65 +247,69 @@ export default function Sales() {
 
   // 編輯訂單彈出框
   const handleEdit = async (order) => {
-  setSelectedOrder({
-    ...order,
-    productDetails: [],
-    totalAmount: order.totalAmount || 0,
-    paymentAmount: order.paymentAmount || 0,
-    creditAmount: order.creditAmount || 0,
-  });
+    setSelectedOrder({
+      ...order,
+      productDetails: [],
+      totalAmount: order.totalAmount || 0,
+      paymentAmount: order.paymentAmount || 0,
+      creditAmount: order.creditAmount || 0,
+    });
 
-  setShowEditModal(true);
+    setShowEditModal(true);
 
-  try {
-    const res = await axios.get(
-      `https://yupinjia.hyjr.com.tw/api/api/t_SalesOrder/${order.id}`
-    );
+    try {
+      const res = await axios.get(
+        `https://yupinjia.hyjr.com.tw/api/api/t_SalesOrder/${order.id}`
+      );
 
-    const data = res.data;
+      const data = res.data;
 
-    // 把 API 回傳的欄位全部放入 selectedOrder
-    setSelectedOrder((prev) => ({
-      ...prev,
-      id: data.id,
-      orderId: data.orderNumber,
-      store: data.storeName || "林園門市",
-      member: data.memberName || "未命名會員",
-       phone: data.mobile || "",
-      totalAmount: data.totalAmount || 0,
-      paymentAmount: data.paymentAmount || 0,
-      creditAmount: data.creditAmount || 0,
-      paymentMethod: data.paymentMethod || "現金付款",
-      totalQuantity: data.totalQuantity || 0,
-      status: data.status || 0,
-      unifiedBusinessNumber: data.unifiedBusinessNumber || "",
-      invoiceNumber: data.invoiceNumber || "",
-      note: data.note || "",
-      deliveryMethod: data.deliveryMethod || "",
-      carrierNumber: data.carrierNumber || "",
-      createdAt: data.createdAt || "",
-      operatorName: data.operatorName || "",
-      pickupInfo: data.pickupInfo || "",
-      signature: data.signature || "",
-      mobile: data.mobile || "",
-      shippingAddress: data.shippingAddress || "",
+      // 把 API 回傳的欄位全部放入 selectedOrder
+      setSelectedOrder((prev) => ({
+        ...prev,
+        id: data.id,
+        orderId: data.orderNumber,
+        store: data.storeName || "林園門市",
+        member: data.memberName || "未命名會員",
+        phone: data.mobile || "",
+        totalAmount: data.totalAmount || 0,
+        paymentAmount: data.paymentAmount || 0,
+        creditAmount: data.creditAmount || 0,
+        paymentMethod: data.paymentMethod || "現金",
+        totalQuantity: data.totalQuantity || 0,
+        status: toStatusCode(data.status),
+        unifiedBusinessNumber: data.unifiedBusinessNumber || "",
+        invoiceNumber: data.invoiceNumber || "",
+        note: data.note || "",
+        deliveryMethod: data.deliveryMethod || "",
+        carrierNumber: data.carrierNumber || "",
+        createdAt: data.createdAt || "",
+        operatorName: data.operatorName || "",
+        pickupInfo: data.pickupInfo || "",
+        signature: data.signature || "",
+        signatureMime: data.signatureMime || "image/jpeg",
+        mobile: data.mobile || "",
+        shippingAddress: data.shippingAddress || "",
 
-      // 商品明細
-      productDetails: data.orderItems.map((item) => ({
-        productName: item.productName || "未命名商品",
-        quantity: item.quantity || 0,
-        unitPrice: item.unitPrice || 0,
-        discountedAmount: item.discountedAmount || 0,
-        discountedTotal:
-          (item.unitPrice || 0) * (item.quantity || 0) -
-          (item.discountedAmount || 0),
-      })),
-    }));
-  } catch (error) {
-    console.error("載入訂單資料失敗", error);
-    Swal.fire("錯誤", "無法載入訂單資料", "error");
-  }
-};
+        // 商品明細
+        productDetails: data.orderItems.map((item) => {
+          const quantity = Number(item.quantity) || 0;
+          const unitPrice = Number(item.unitPrice) || 0;
+          return {
+            productName: item.productName || "未命名商品",
+            quantity,
+            unitPrice,
+            discountedAmount: Number(item.discountedAmount ?? 0) || 0,
+            subtotal: Number(item.subtotal ?? unitPrice * quantity), // 原價小計保底
+            isGift: !!item.isGift, // 贈品旗標
+          };
+        }),
+      }));
+    } catch (error) {
+      console.error("載入訂單資料失敗", error);
+      Swal.fire("錯誤", "無法載入訂單資料", "error");
+    }
+  };
   useEffect(() => {
     // 當 selectedOrder 更新時觸發這個 effect
     if (selectedOrder) {
@@ -267,6 +323,17 @@ export default function Sales() {
     setSelectedOrder(null);
   };
 
+  // 將後端回來的簽名（可能是純 base64 或已經有 data: 前綴）轉成 <img> 可用的 src
+  const getSignatureSrc = (order) => {
+    const sig = order?.signature;
+    if (!sig) return null;
+    if (typeof sig === "string" && sig.startsWith("data:image/")) {
+      return sig; // 已經是 data:URL 了
+    }
+    const mime = order?.signatureMime || "image/jpeg";
+    return `data:${mime};base64,${sig}`; // 把純 base64 補前綴
+  };
+
   // 顯示對應的操作按鈕
   const handleCompleteOrder = async () => {
     if (!selectedOrder) return;
@@ -276,18 +343,32 @@ export default function Sales() {
       Swal.fire("錯誤", "已作廢的訂單不能進行此操作", "error");
       return; // 禁止進行後續操作
     }
-    const currentStatus = selectedOrder.status;
-    let nextStatus = getNextStatus(currentStatus); // 獲取下一個狀態
-
-    // 根據當前狀態決定更新的狀態
-    if (currentStatus === 1) {
-      nextStatus = 2; // 如果是賒帳，更新為已付款
-    } else if (currentStatus === 2) {
-      nextStatus = 3; // 如果是已付款，更新為已出貨
-    } else if (currentStatus === 3) {
-      nextStatus = 4; // 如果是已出貨，更新為配送中
-    } else if (currentStatus === 4) {
-      nextStatus = 5; // 如果是配送中，更新為已完成
+    const currentStatus = toStatusCode(selectedOrder.status);
+    if (currentStatus === null) {
+      Swal.fire(
+        "提示",
+        "此筆訂單狀態無法辨識，請先在後台修正狀態再操作",
+        "info"
+      );
+      return;
+    }
+    // ✅ 新規則：賒帳(1) → 已出貨(3)，跳過已付款(2)
+    let nextStatus = currentStatus;
+    switch (currentStatus) {
+      case 1:
+        nextStatus = 3;
+        break; // 賒帳 → 已出貨
+      case 2:
+        nextStatus = 3;
+        break; // 仍允許已付款 → 已出貨
+      case 3:
+        nextStatus = 4;
+        break; // 已出貨 → 配送中
+      case 4:
+        nextStatus = 5;
+        break; // 配送中 → 已完成
+      default:
+        nextStatus = currentStatus; // 0/5 等保持不變
     }
 
     // 顯示 SweetAlert 確認框
@@ -318,7 +399,7 @@ export default function Sales() {
       note: selectedOrder.note || "",
       deliveryMethod: selectedOrder.deliveryMethod || "",
       dealerMemberId: selectedOrder.dealerMemberId || 0,
-      paymentMethod: selectedOrder.paymentMethod || "現金付款",
+      paymentMethod: selectedOrder.paymentMethod || "現金",
       carrierNumber: selectedOrder.carrierNumber || "",
       createdAt: selectedOrder.createdAt || new Date().toISOString(),
       operatorName: selectedOrder.operatorName || "系統",
@@ -410,19 +491,19 @@ export default function Sales() {
 
   // 顯示確認對話框
   const handleSubmitReturnOrder = async (payload) => {
-  try {
-    await axios.post(
-      "https://yupinjia.hyjr.com.tw/api/api/t_ReturnOrder",
-      payload,
-      { headers: { "Content-Type": "application/json" } }
-    );
-    Swal.fire("成功", "退貨處理成功", "success");
-    setShowReturnModal(false);
-  } catch (error) {
-    console.error(error);
-    Swal.fire("錯誤", "退貨失敗", "error");
-  }
-};
+    try {
+      await axios.post(
+        "https://yupinjia.hyjr.com.tw/api/api/t_ReturnOrder",
+        payload,
+        { headers: { "Content-Type": "application/json" } }
+      );
+      Swal.fire("成功", "退貨處理成功", "success");
+      setShowReturnModal(false);
+    } catch (error) {
+      console.error(error);
+      Swal.fire("錯誤", "退貨失敗", "error");
+    }
+  };
 
   const closeEditModal = () => {
     setShowEditModal(false);
@@ -441,28 +522,7 @@ export default function Sales() {
         // 排序資料
         raw.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-        const mapped = raw.map((order) => {
-          return {
-            id: order.id,
-            orderId: order.orderNumber,
-            store: order.storeName ?? "馬公門市",
-            member: order.memberIdName ?? "未命名會員", // 使用 API 中的 memberIdName
-            phone: order.mobile ?? "",
-            totalAmount: (order.totalAmount ?? 0).toLocaleString(), // 確保 totalAmount 不是 null 或 undefined
-            pay: order.paymentMethod ?? "現金付款",
-            carrier: order.carrierNumber || "無",
-            invoice: order.invoiceNumber || "無",
-            taxId: order.unifiedBusinessNumber || "無",
-            address:
-              order.pickupInfo?.match(/地點:(.*?),/)?.[1] ||
-              order.pickupInfo?.match(/地點:(.*)/)?.[1] ||
-              "",
-            pickupTime: order.pickupInfo?.match(/時間:(.*)/)?.[1] ?? "無",
-            operator: order.operatorName ?? "操作員A",
-            createdDate: order.createdAt?.split("T")[0] ?? "",
-            status: statusMap[order.status] ?? "未知",
-          };
-        });
+        const mapped = raw.map(mapApiOrder);
 
         setOriginalData(mapped);
         setTableData(mapped);
@@ -638,7 +698,7 @@ export default function Sales() {
                       檢視
                     </button>
                   </td>
-                  <td>{item.totalAmount}</td>
+                  <td>{item.totalAmount.toLocaleString()}</td>
                   {/* <td>{item.totalCount}</td> */}
                   <td>{item.deliveryMethod}</td>
                   <td>{renderStatusBadge(item.status)}</td>
@@ -681,7 +741,7 @@ export default function Sales() {
         <Modal.Header closeButton>
           <Modal.Title>商品明細</Modal.Title>
         </Modal.Header>
-        <div style={{ maxHeight: "50vh", overflowY: "auto" }}>
+        <div style={{ maxHeight: "60vh", overflowY: "auto" }}>
           <Modal.Body>
             <table className="table text-center" style={{ fontSize: "1.2rem" }}>
               <thead
@@ -703,22 +763,49 @@ export default function Sales() {
               </thead>
               <tbody>
                 {selectedOrder?.productDetails?.length > 0 ? (
-                  selectedOrder?.productDetails?.map((item, i) => {
-                    const quantity = Number(item.quantity) || 0; // 確保數量是數字
-                    const unitPrice = Number(item.unitPrice) || 0; // 確保單價是數字
-                    const discountedAmount = Number(item.discountedAmount) || 0; // 確保折扣金額是數字
-                    const subtotal = item.subtotal
-                      ? Number(item.subtotal)
-                      : unitPrice * quantity; // 如果有 subtotal，就使用它
-
-                    // 計算折扣後的金額
-                    const discountedTotal = subtotal - discountedAmount;
+                  selectedOrder.productDetails.map((item, i) => {
+                    const isGift = !!item.isGift;
+                    const quantity = Number(item.quantity) || 0;
+                    const unitPrice = Number(item.unitPrice) || 0;
+                    const subtotal = Number(
+                      item.subtotal ?? unitPrice * quantity
+                    );
+                    const discountedAmount = Number(item.discountedAmount) || 0;
+                    const discountedTotal = Math.max(
+                      0,
+                      subtotal - discountedAmount
+                    );
 
                     return (
-                      <tr key={i}>
-                        <td>{item.productName}</td> {/* 商品名稱 */}
+                      <tr
+                        key={i}
+                        style={isGift ? { background: "#fff7e6" } : undefined} // ← 贈品列淡色
+                      >
                         <td>
-                          {discountedAmount > 0 ? (
+                          {item.productName}
+                          {isGift && (
+                            <span className="badge bg-info ms-2">贈品</span> // ← 贈品徽章
+                          )}
+                        </td>
+
+                        <td>
+                          {isGift ? (
+                            <>
+                              <div
+                                style={{
+                                  textDecoration: "line-through",
+                                  color: "#888",
+                                }}
+                              >
+                                ${unitPrice.toLocaleString()}
+                              </div>
+                              <div
+                                style={{ color: "#17a2b8", fontWeight: "bold" }}
+                              >
+                                贈送
+                              </div>
+                            </>
+                          ) : discountedAmount > 0 ? (
                             <>
                               <div
                                 style={{
@@ -733,21 +820,25 @@ export default function Sales() {
                               >
                                 $
                                 {Math.round(
-                                  discountedTotal / quantity
+                                  discountedTotal / Math.max(1, quantity)
                                 ).toLocaleString()}
                               </div>
                             </>
                           ) : (
                             `$${unitPrice.toLocaleString()}`
                           )}
-                        </td>{" "}
-                        <td>{quantity}</td> {/* 數量 */}
-                        {/* 單價與折扣後單價 */}
-                        <td style={{ color: "#28a745", fontWeight: "bold" }}>
-                          ${discountedTotal.toLocaleString()}{" "}
-                          {/* 折扣後總金額 */}
                         </td>
-           
+
+                        <td>{quantity}</td>
+
+                        <td
+                          style={{
+                            color: isGift ? "#17a2b8" : "#28a745",
+                            fontWeight: "bold",
+                          }}
+                        >
+                          ${discountedTotal.toLocaleString()}
+                        </td>
                       </tr>
                     );
                   })
@@ -760,54 +851,56 @@ export default function Sales() {
             </table>
 
             {selectedOrder?.productDetails?.length > 0 &&
-    (() => {
-      let originalTotal = 0;
-      let discountedTotal = 0;
+              (() => {
+                let originalTotal = 0;
+                let discountedTotal = 0;
 
-      selectedOrder.productDetails.forEach((item) => {
-        const unitPrice = Number(item.unitPrice) || 0;
-        const quantity = Number(item.quantity) || 0;
-        const discountedAmount = Number(item.discountedAmount) || 0;
+                selectedOrder.productDetails.forEach((item) => {
+                  const unitPrice = Number(item.unitPrice) || 0;
+                  const quantity = Number(item.quantity) || 0;
+                  const discountedAmount = Number(item.discountedAmount) || 0;
 
-        // 計算折扣前金額
-        originalTotal += unitPrice * quantity;
+                  // 計算折扣前金額
+                  originalTotal += unitPrice * quantity;
 
-        // 計算折扣後金額
-        discountedTotal += unitPrice * quantity - discountedAmount;
-      });
+                  // 計算折扣後金額
+                  discountedTotal += unitPrice * quantity - discountedAmount;
+                });
 
-      const totalDiscount = originalTotal - discountedTotal; // 計算總折扣金額
+                const totalDiscount = originalTotal - discountedTotal; // 計算總折扣金額
 
-      return (
-        <div
-          className="mt-3 p-3 d-flex justify-content-start bg-light border rounded"
-          style={{ fontSize: "1.1rem", gap: "2rem" }}
-        >
-          <div>
-            共計商品：
-            <strong>{selectedOrder?.productDetails?.length ?? 0} 項</strong>
-          </div>
-          <div>
-            折扣前金額：
-            <strong>${originalTotal.toLocaleString()}</strong> 元
-          </div>
-          <div>
-            折扣後金額：
-            <strong style={{ color: "#28a745" }}>
-              ${discountedTotal.toLocaleString()}
-            </strong>{" "}
-            元
-          </div>
-          <div>
-            總折扣金額：
-            <strong style={{ color: "#dc3545" }}>
-              -${totalDiscount.toLocaleString()}
-            </strong>{" "}
-            元
-          </div>
-        </div>
-      );
-    })()}
+                return (
+                  <div
+                    className="mt-3 p-3 d-flex justify-content-start bg-light border rounded"
+                    style={{ fontSize: "1.1rem", gap: "2rem" }}
+                  >
+                    <div>
+                      共計商品：
+                      <strong>
+                        {selectedOrder?.productDetails?.length ?? 0} 項
+                      </strong>
+                    </div>
+                    <div>
+                      折扣前金額：
+                      <strong>${originalTotal.toLocaleString()}</strong> 元
+                    </div>
+                    <div>
+                      折扣後金額：
+                      <strong style={{ color: "#28a745" }}>
+                        ${discountedTotal.toLocaleString()}
+                      </strong>{" "}
+                      元
+                    </div>
+                    <div>
+                      總折扣金額：
+                      <strong style={{ color: "#dc3545" }}>
+                        -${totalDiscount.toLocaleString()}
+                      </strong>{" "}
+                      元
+                    </div>
+                  </div>
+                );
+              })()}
           </Modal.Body>
         </div>
         <Modal.Footer>
@@ -834,253 +927,283 @@ export default function Sales() {
         </Modal.Header>
         <Modal.Body>
           <div style={{ maxHeight: "50vh", overflowY: "auto" }}>
-           <table className="table text-center" style={{ fontSize: "1.2rem" }}>
-    <thead
-      className="table-light"
-      style={{
-        borderTop: "1px solid #c5c6c7",
-        position: "sticky",
-        top: 0,
-        background: "#d1ecf1",
-        zIndex: 1,
-      }}
-    >
-      <tr>
-        <th scope="col">商品名稱</th>
-        <th scope="col">數量</th>
-        <th scope="col">金額</th>
-        <th scope="col">折扣後</th>
-        <th scope="col">小計</th>
-      </tr>
-    </thead>
-    <tbody>
-      {selectedOrder?.productDetails?.length > 0 ? (
-        selectedOrder.productDetails.map((item, i) => {
-          const unitPrice = Number(item.unitPrice) || 0; // 確保是數字，若非數字則為 0
-          const quantity = Number(item.quantity) || 0; // 確保是數字，若非數字則為 0
-          const discountedAmount = Number(item.discountedAmount ?? 0) || 0; // 確保是數字，若非數字則為 0
-          const discountedTotal = unitPrice * quantity - discountedAmount; // 計算折扣後的金額
+            <table className="table text-center" style={{ fontSize: "1.2rem" }}>
+              <thead
+                className="table-light"
+                style={{
+                  borderTop: "1px solid #c5c6c7",
+                  position: "sticky",
+                  top: 0,
+                  background: "#d1ecf1",
+                  zIndex: 1,
+                }}
+              >
+                <tr>
+                  <th>商品名稱</th>
+                  <th>單價</th>
+                  <th>數量</th>
+                  <th>折扣後總額</th>
+                </tr>
+              </thead>
+              <tbody>
+                {selectedOrder?.productDetails?.length > 0 ? (
+                  selectedOrder.productDetails.map((item, i) => {
+                    const isGift = !!item.isGift;
+                    const quantity = Number(item.quantity) || 0;
+                    const unitPrice = Number(item.unitPrice) || 0;
+                    const subtotal = Number(
+                      item.subtotal ?? unitPrice * quantity
+                    );
+                    const discountedAmount = Number(item.discountedAmount) || 0;
+                    const discountedTotal = Math.max(
+                      0,
+                      subtotal - discountedAmount
+                    );
 
-          return (
-            <tr key={i}>
-              <td>{item.productName}</td> {/* 商品名稱 */}
-              <td>{quantity}</td> {/* 數量 */}
-              <td>{unitPrice.toLocaleString()}</td> {/* 單價 */}
-              <td>${(unitPrice * quantity).toLocaleString()}</td> {/* 折扣前金額 */}
-              <td style={{ color: "#28a745", fontWeight: "bold" }}>
-                ${discountedTotal.toLocaleString()} {/* 折扣後總金額 */}
-              </td>
-            </tr>
-          );
-        })
-      ) : (
-        <tr>
-          <td colSpan="5">無資料</td>
-        </tr>
-      )}
-    </tbody>
-  </table>
+                    return (
+                      <tr
+                        key={i}
+                        style={isGift ? { background: "#fff7e6" } : undefined} // ← 贈品列淡色
+                      >
+                        <td>
+                          {item.productName}
+                          {isGift && (
+                            <span className="badge bg-info ms-2">贈品</span> // ← 贈品徽章
+                          )}
+                        </td>
+
+                        <td>
+                          {isGift ? (
+                            <>
+                              <div
+                                style={{
+                                  textDecoration: "line-through",
+                                  color: "#888",
+                                }}
+                              >
+                                ${unitPrice.toLocaleString()}
+                              </div>
+                              <div
+                                style={{ color: "#17a2b8", fontWeight: "bold" }}
+                              >
+                                贈送
+                              </div>
+                            </>
+                          ) : discountedAmount > 0 ? (
+                            <>
+                              <div
+                                style={{
+                                  textDecoration: "line-through",
+                                  color: "#888",
+                                }}
+                              >
+                                ${unitPrice.toLocaleString()}
+                              </div>
+                              <div
+                                style={{ color: "#dc3545", fontWeight: "bold" }}
+                              >
+                                $
+                                {Math.round(
+                                  discountedTotal / Math.max(1, quantity)
+                                ).toLocaleString()}
+                              </div>
+                            </>
+                          ) : (
+                            `$${unitPrice.toLocaleString()}`
+                          )}
+                        </td>
+
+                        <td>{quantity}</td>
+
+                        <td
+                          style={{
+                            color: isGift ? "#17a2b8" : "#28a745",
+                            fontWeight: "bold",
+                          }}
+                        >
+                          ${discountedTotal.toLocaleString()}
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan="4">無資料</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
-          {selectedOrder &&
-  (() => {
-    const count = Number(selectedOrder.totalQuantity) || 0;
-    const amount = Number(selectedOrder.totalAmount ?? 0) || 0;
-    const total = count * amount;
-    const discounted = Math.round(total * 0.9);
+          {selectedOrder && (() => {
+  const { total, paid, due, change } = computeTotals(selectedOrder);
 
-    return (
-      <div
-        className="mt-3 p-3 d-flex justify-content-between bg-light border rounded"
-        style={{ fontSize: "1rem", lineHeight: "1.7" }}
-      >
-        <div>
-          {/* ==== 總計區塊（已調整賒帳金額位置） ==== */}
-          <div className="d-flex">
-  <div>
-    共計商品：
-    <strong>
-      {selectedOrder?.productDetails?.length ?? 0} 項
-    </strong>
-  </div>
-  <div className="ms-5">
-    總計：
-    <strong>
-      {selectedOrder?.productDetails
-        ? selectedOrder.productDetails
-            .reduce((sum, item) => {
-              const unitPrice = Number(item.unitPrice) || 0;
-              const quantity = Number(item.quantity) || 0;
-              const discount = Number(item.discountedAmount ?? 0) || 0;
-              return sum + (unitPrice * quantity - discount);
-            }, 0)
-            .toLocaleString()
-        : 0}
-      元
-    </strong>
-  </div>
-  
-  <div className="ms-5">
-    付款方式：
-    <strong>{selectedOrder?.pay || "無"}</strong>
-  </div>
+  return (
+    <div className="mt-3 p-3 d-flex justify-content-between bg-light border rounded" style={{ fontSize: "1rem", lineHeight: "1.7" }}>
+      <div>
+        <div className="d-flex">
+          <div>
+            共計商品：
+            <strong>{selectedOrder?.productDetails?.length ?? 0} 項</strong>
+          </div>
 
-  {/* 賒帳金額 */}
-  {calculatedCreditAmount > 0 && (
-  <div className="ms-5">
-    賒帳金額：
-    <strong style={{ color: "#dc3545" }}>
-      ${calculatedCreditAmount.toLocaleString()} 元
-    </strong>
-  </div>
-)}
-</div>
+          <div className="ms-5">
+            總計：
+            <strong>{formatCurrency(total)} 元</strong>
+          </div>
 
-{/* 第二行 */}
-<div className="d-flex mt-1">
-  <div>
-    會員：
-    <strong>{selectedOrder?.member || "未命名會員"}</strong>
-  </div>
-  <div className="ms-5">
-    手機：<strong>{selectedOrder?.phone}</strong>
-  </div>
-  <div className="ms-5">
-    配送方式：
-    <strong>{selectedOrder?.deliveryMethod}</strong>
-  </div>
-</div>
+          <div className="ms-5">
+            付款方式：
+            <strong>
+              {formatPaymentMethod(selectedOrder?.paymentMethod ?? selectedOrder?.pay)}
+              {due > 0 ? "（賒帳）" : ""}
+            </strong>
+          </div>
 
-{/* 第三行 - 付款金額與找零 / 餘額 */}
-{selectedOrder?.paymentAmount > 0 && selectedOrder?.status !== 1 && (
-  <div className="d-flex mt-1">
-    <div>
-      付款金額：
-      <strong style={{ color: "#28a745" }}>
-        ${Number(selectedOrder?.paymentAmount).toLocaleString()} 元
-      </strong>
-    </div>
-    <div className="ms-5">
-      {selectedOrder?.pay === "現金付款"
-        ? `找零：$${(
-            Number(selectedOrder?.paymentAmount) -
-            (selectedOrder?.productDetails?.reduce((sum, item) => {
-              const unitPrice = Number(item.unitPrice) || 0;
-              const quantity = Number(item.quantity) || 0;
-              const discount = Number(item.discountedAmount ?? 0) || 0;
-              return sum + (unitPrice * quantity - discount);
-            }, 0) || 0)
-          ).toLocaleString()} 元`
-        : selectedOrder?.pay === "匯款" || selectedOrder?.pay === "支票"
-        ? `餘額：$${(
-            (selectedOrder?.productDetails?.reduce((sum, item) => {
-              const unitPrice = Number(item.unitPrice) || 0;
-              const quantity = Number(item.quantity) || 0;
-              const discount = Number(item.discountedAmount ?? 0) || 0;
-              return sum + (unitPrice * quantity - discount);
-            }, 0) || 0) -
-            Number(selectedOrder?.paymentAmount)
-          ).toLocaleString()} 元`
-        : ""}
-    </div>
-  </div>
-)}
-
-          {/* 其他欄位保持原樣 */}
-        
-
-          <div className="d-flex mt-1">
-            <div>
-              發票號碼：
-              <strong>{selectedOrder?.invoice || "無"}</strong>
-            </div>
+          {due > 0 && (
             <div className="ms-5">
-              載具編號：
-              <strong>{selectedOrder?.carrier || "無"}</strong>
-            </div>
-          </div>
-          <div className="d-flex mt-1">
-            <div>
-              郵寄地址：
-              <strong>
-                {selectedOrder?.shippingAddress || "無"}
+              賒帳金額：
+              <strong style={{ color: "#dc3545" }}>
+                ${formatCurrency(due)} 元
               </strong>
             </div>
+          )}
+        </div>
+
+        {/* 第二行 */}
+        <div className="d-flex mt-1">
+          <div>
+            會員：<strong>{selectedOrder?.member || "未命名會員"}</strong>
           </div>
-          <div className="d-flex mt-1">
-            <div>
-              訂單成立：
-              <strong>
-                {selectedOrder?.createdDate?.split("T")[0] || "無"}
-                <span className="ms-1">
-                  ({selectedOrder?.store || "未知門市"})
-                </span>
-              </strong>
-            </div>
-            <div className="ms-5">
-              操作員：
-              <strong>{selectedOrder?.operator || "無"}</strong>
-            </div>
+          <div className="ms-5">
+            手機：<strong>{selectedOrder?.phone || "—"}</strong>
           </div>
-          <div className="d-flex mt-1">
-            <div>
-              取貨資訊：
-              <strong>
-                {selectedOrder?.taxId || "無"}
-                {selectedOrder?.deliveryMethod &&
-                  `（${selectedOrder.deliveryMethod}）`}
-              </strong>
-            </div>
-          </div>
-          <div className="mt-3">
-            <button
-              className="check-button fw-bold"
-              onClick={() => handleReturnClick(selectedOrder)}
-            >
-              退貨
-            </button>
-            <button
-              className="delete-button mx-4 fw-bold"
-              onClick={handleCancelOrder}
-            >
-              作廢
-            </button>
-            <button
-              className="pink-button"
-              style={{ fontSize: "1rem" }}
-            >
-              列印明細
-            </button>
-            <Button
-              variant="success"
-              className="fw-bold ms-4"
-              onClick={handleCompleteOrder}
-              disabled={
-                selectedOrder?.status === 0 || selectedOrder?.status === 5
-              }
-            >
-              {getNextStepLabel(selectedOrder?.status)}
-            </Button>
+          <div className="ms-5">
+            配送方式：<strong>{selectedOrder?.deliveryMethod || "—"}</strong>
           </div>
         </div>
 
-        {/* 簽名紀錄區 */}
-        <div className="signature-container p-3 border rounded d-flex align-items-center">
-          <span className="me-2">簽名紀錄：</span>
-          <div className="signature-box border rounded overflow-hidden">
-            <img
-              src="/sign.png"
-              alt="簽名圖片"
-              style={{
-                width: "100%",
-                height: "100%",
-                objectFit: "contain",
-              }}
-            />
+        {/* 第三行 - 付款金額與找零 / 餘額 */}
+        {paid > 0 && toStatusCode(selectedOrder?.status) !== 1 && (
+          <div className="d-flex mt-1">
+            <div>
+              付款金額：
+              <strong style={{ color: "#28a745" }}>
+                ${formatCurrency(paid)} 元
+              </strong>
+            </div>
+            <div className="ms-5">
+              {formatPaymentMethod(selectedOrder?.paymentMethod).includes("現金")
+                ? `找零：$${formatCurrency(change)} 元`
+                : `餘額：$${formatCurrency(due)} 元`}
+            </div>
           </div>
-        </div>
-      </div>
-    );
-  })()}
+        )}
+
+                    {/* 其他欄位保持原樣 */}
+
+                    <div className="d-flex mt-1">
+                      <div>
+                        發票號碼：
+                        <strong>{selectedOrder?.invoiceNumber || "無"}</strong>
+                      </div>
+                      <div className="ms-5">
+                        載具編號：
+                        <strong>{selectedOrder?.carrierNumber || "無"}</strong>
+                      </div>
+                    </div>
+                    <div className="d-flex mt-1">
+                      <div>
+                        郵寄地址：
+                        <strong>
+                          {selectedOrder?.shippingAddress || "無"}
+                        </strong>
+                      </div>
+                    </div>
+                    <div className="d-flex mt-1">
+                      <div>
+                        訂單成立：
+                        <strong>
+                          {selectedOrder?.createdAt?.split("T")[0] || "無"}
+                          <span className="ms-1">
+                            ({selectedOrder?.store || "未知門市"})
+                          </span>
+                        </strong>
+                      </div>
+                      <div className="ms-5">
+                        操作員：
+                        <strong>{selectedOrder?.operatorName || "無"}</strong>
+                      </div>
+                    </div>
+                    <div className="d-flex mt-1">
+                      <div>
+                        取貨資訊：
+                        <strong>
+                          {(selectedOrder?.pickupInfo &&
+                            selectedOrder.pickupInfo.trim()) ||
+                            "無"}
+                          {selectedOrder?.deliveryMethod &&
+                            `（${selectedOrder.deliveryMethod}）`}
+                        </strong>
+                      </div>
+                    </div>
+                    <div className="mt-3">
+                      <button
+                        className="check-button fw-bold"
+                        onClick={() => handleReturnClick(selectedOrder)}
+                      >
+                        退貨
+                      </button>
+                      <button
+                        className="delete-button mx-4 fw-bold"
+                        onClick={handleCancelOrder}
+                      >
+                        作廢
+                      </button>
+                      <button
+                        className="pink-button"
+                        style={{ fontSize: "1rem" }}
+                      >
+                        列印明細
+                      </button>
+                      <Button
+                        variant="success"
+                        className="fw-bold ms-4"
+                        onClick={handleCompleteOrder}
+                        disabled={
+                          selectedOrder?.status === 0 ||
+                          selectedOrder?.status === 5
+                        }
+                      >
+                        {getNextStepLabel(selectedOrder?.status)}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* 簽名紀錄區 */}
+                  <div className="signature-container p-3 border rounded d-flex align-items-center">
+                    <span className="me-2">簽名紀錄：</span>
+                    <div
+                      className="signature-box border rounded overflow-hidden d-flex align-items-center justify-content-center"
+                      style={{ width: 130, height: 120, background: "#f8f9fa" }}
+                    >
+                      {getSignatureSrc(selectedOrder) ? (
+                        <img
+                          src={getSignatureSrc(selectedOrder)}
+                          alt="簽名圖片"
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "contain",
+                          }}
+                        />
+                      ) : (
+                        <span style={{ color: "#9ca3af" }}>無簽名</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
           {/* 渲染時查看資料 */}
         </Modal.Body>
         <Modal.Footer>
@@ -1093,11 +1216,11 @@ export default function Sales() {
         </Modal.Footer>
       </Modal>
       <ReturnOrderForm
-  show={showReturnModal}
-  onClose={() => setShowReturnModal(false)}
-  orderData={selectedOrder}
-  onSubmit={handleSubmitReturnOrder}
-/>
+        show={showReturnModal}
+        onClose={() => setShowReturnModal(false)}
+        orderData={selectedOrder}
+        onSubmit={handleSubmitReturnOrder}
+      />
     </>
   );
 }
