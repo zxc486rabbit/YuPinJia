@@ -1,3 +1,6 @@
+import { useEffect, useMemo } from "react";
+import { customerBus } from "../../../utils/customerBus"; // 路徑依你的實際目錄調整
+
 // Step1：確認商品明細
 export default function CheckoutSummary({
   cartItems,
@@ -93,6 +96,50 @@ export default function CheckoutSummary({
         : unit;
     return i.isGift || discountedUnit === 0 || unit === 0;
   }).length;
+
+  // 準備客顯快照
+const snapshot = useMemo(() => {
+  const toNum = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+  const mapped = cartItems.map((i) => {
+    const unit = toNum(i.unitPrice);
+    const discountedUnit =
+      hasDiscount && typeof calcDiscountPrice === "function"
+        ? toNum(calcDiscountPrice(unit))
+        : unit;
+    const isGift = !!i.isGift || discountedUnit === 0 || unit === 0;
+    // 客顯端用的顯示單價（贈品顯示文字，不用價格）
+    const displayUnit = isGift ? 0 : discountedUnit;
+
+    return {
+      name: i.name,
+      quantity: toNum(i.quantity) || 0,
+      __displayUnit: displayUnit,
+      __isGift: isGift,
+    };
+  });
+
+  return {
+    cartItems: mapped,
+    hasDiscount,
+    totalOriginal,
+    discountAmount,
+    usedPoints,
+    finalTotal,
+    giftCount,
+    // 回扣資訊（你的原始計算已存在）
+    shouldShowCashback,
+    cashbackTotal,
+  };
+}, [cartItems, hasDiscount, calcDiscountPrice, totalOriginal, discountAmount, usedPoints, finalTotal, giftCount, shouldShowCashback, cashbackTotal]);
+
+// 在 Step1 顯示/更新客顯內容
+useEffect(() => {
+  // 發佈顯示（或更新）
+  customerBus.publishSummary(snapshot);
+
+  // 卸載時不主動 hide，讓客顯持續顯示到結帳完成
+  // return () => customerBus.hideSummary();
+}, [snapshot]);
 
   return (
     <>

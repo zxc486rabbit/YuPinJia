@@ -15,9 +15,10 @@ import PrintPage from "./components/PrintPage"; // 列印頁面
 import LoginPage from "./utils/LoginPage"; // 列印頁面
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import PrivateRoute from "./utils/PrivateRoute"; // ★ 新增
+import CustomerDisplay from "./utils/CustomerDisplay"; // 客顯頁面
 import "./Cart.css";
 import Modal from "react-modal";
-import "./utils/httpBootstrap";  // ← 全域 Token/刷新/重送在這裡掛好
+import "./utils/httpBootstrap"; // ← 全域 Token/刷新/重送在這裡掛好
 Modal.setAppElement("#root");
 
 function App() {
@@ -62,6 +63,9 @@ function App() {
             {/* 列印 */}
             <Route path="/print" element={<PrintPage />} />
             <Route path="/login" element={<LoginPage />} />
+
+            {/* 新增客顯路由 */}
+            <Route path="/customer-display" element={<CustomerDisplay />} />
           </Routes>
         </Router>
       </QueryClientProvider>

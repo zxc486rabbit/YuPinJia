@@ -9,6 +9,7 @@ import PaymentInvoice from "./components/PaymentInvoice";
 import PrintingOverlay from "./components/PrintingOverlay";
 import SignatureModal from "./components/SignatureModal";
 import { useEmployee } from "../../utils/EmployeeContext";
+import { customerBus } from "../../utils/customerBus"; // 檔頭引入
 
 import styles from "./styles";
 
@@ -71,12 +72,14 @@ const pickPriceGeneral = (p) => {
     { value: num(p.storePrice) },
     { value: num(p.price) },
   ];
-  const first = candidates.find((c) => c.value > 0) || candidates[candidates.length - 1];
+  const first =
+    candidates.find((c) => c.value > 0) || candidates[candidates.length - 1];
   return first.value;
 };
 const pickPriceStoreOnly = (p) => {
   const candidates = [{ value: num(p.storePrice) }, { value: num(p.price) }];
-  const first = candidates.find((c) => c.value > 0) || candidates[candidates.length - 1];
+  const first =
+    candidates.find((c) => c.value > 0) || candidates[candidates.length - 1];
   return first.value;
 };
 
@@ -243,7 +246,8 @@ export default function CheckoutFlow({
   };
 
   // ===== 回扣計算（導遊帳號 + 客人結帳時才計）=====
-  const isGuideAccount = currentMember?.subType === "導遊" || currentMember?.buyerType === 1;
+  const isGuideAccount =
+    currentMember?.subType === "導遊" || currentMember?.buyerType === 1;
   const shouldComputeCashback = isGuideAccount && !isGuideSelf;
 
   const calcCashbackTotal = () => {
@@ -434,8 +438,12 @@ export default function CheckoutFlow({
         for (const item of updatedCartItems) {
           const isGiftLine = !!item.isGift;
           const unitPriceForAPI = isGiftLine ? item.__orig : item.__orig; // 主檔 unitPrice 已採用實際下單價，明細這裡沿用基準
-          const subtotalForAPI = Math.round(unitPriceForAPI * Number(item.__qty || 0));
-          const discountedForAPI = isGiftLine ? 0 : Math.round(Number(item.__lineDiscount || 0));
+          const subtotalForAPI = Math.round(
+            unitPriceForAPI * Number(item.__qty || 0)
+          );
+          const discountedForAPI = isGiftLine
+            ? 0
+            : Math.round(Number(item.__lineDiscount || 0));
 
           const payload = {
             salesOrderId: newOrderId,
@@ -473,6 +481,10 @@ export default function CheckoutFlow({
       setTimeout(() => {
         setPrinting(false);
 
+        // ✅ 在這裡清空客顯畫面（localStorage 狀態）
+        customerBus.checkoutDone();
+
+        // 廣播（可保留，雙保險）
         try {
           const memberIdForRefresh = Number(currentMember?.id ?? 0);
           if (memberIdForRefresh) {
@@ -482,6 +494,7 @@ export default function CheckoutFlow({
             );
           }
           localStorage.setItem("checkout_done", String(Date.now()));
+          // 在 CheckoutFlow 結帳完成時，客顯自動清空
           if ("BroadcastChannel" in window) {
             const ch = new BroadcastChannel("pos-events");
             ch.postMessage({
@@ -540,10 +553,17 @@ export default function CheckoutFlow({
       const productId =
         Number(item.productId ?? item.pid ?? item.product?.id ?? item.id) || 0;
       const name = item.productName ?? item.name ?? "";
-      const origUnit = Number(item.unitPrice ?? item.price ?? item.originalPrice ?? 0);
+      const origUnit = Number(
+        item.unitPrice ?? item.price ?? item.originalPrice ?? 0
+      );
       const isGift = !!item.isGift || origUnit === 0;
       let discUnit = isGift ? 0 : calcDiscountUnit(origUnit);
-      if (!isGift && (_discountRate || 1) === 1 && discUnit === 0 && origUnit > 0) {
+      if (
+        !isGift &&
+        (_discountRate || 1) === 1 &&
+        discUnit === 0 &&
+        origUnit > 0
+      ) {
         discUnit = origUnit;
       }
       const perUnitDiscount = Math.max(0, origUnit - discUnit);
@@ -585,7 +605,10 @@ export default function CheckoutFlow({
     const paymentAmountValue = Math.min(received, total);
 
     // 不可賒帳：實收不足則擋
-    if (!getCreditAllowed(currentMember, isGuideSelf) && creditAmountValue > 0) {
+    if (
+      !getCreditAllowed(currentMember, isGuideSelf) &&
+      creditAmountValue > 0
+    ) {
       await Swal.fire({
         icon: "warning",
         title: "此身份不可賒帳",
@@ -651,7 +674,7 @@ export default function CheckoutFlow({
 
       bankCode: payment === "匯款" ? Number(bankCode || 0) : 0,
       paymentAccount:
-        payment === "匯款" || payment === "支票" ? (paymentAccount || "") : "",
+        payment === "匯款" || payment === "支票" ? paymentAccount || "" : "",
       payerName: payerName || customerName || "",
       paymentDate: paymentDateIso,
 
