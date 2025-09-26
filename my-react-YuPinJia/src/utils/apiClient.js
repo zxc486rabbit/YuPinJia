@@ -1,22 +1,20 @@
-// src/utils/apiClient.js
 import axios from "axios";
 
 const API_BASE = "https://yupinjia.hyjr.com.tw/api/api";
 const REFRESH_URL = `${API_BASE}/Account/refresh`;
-
-let isRefreshing = false;
-let pendingQueue = []; // 佇列：等待 refresh 完成後重試
 
 const api = axios.create({
   baseURL: API_BASE,
   headers: { Accept: "application/json" },
 });
 
-// 讀/寫 Token：統一管理
+// ---- Token 讀寫 ----
 export function getTokens() {
   return {
     accessToken: localStorage.getItem("accessToken") || "",
     refreshToken: localStorage.getItem("refreshToken") || "",
+    accessTokenExpiredAt: localStorage.getItem("accessTokenExpiredAt") || "",
+    refreshTokenExpiredAt: localStorage.getItem("refreshTokenExpiredAt") || "",
   };
 }
 export function setAuthHeader(token) {
@@ -24,7 +22,7 @@ export function setAuthHeader(token) {
   else delete api.defaults.headers.common["Authorization"];
 }
 
-// 主動呼叫 Refresh API
+// 主動 Refresh（供 httpBootstrap 呼叫）
 export async function refreshAccessToken() {
   const { accessToken, refreshToken } = getTokens();
   if (!refreshToken) throw new Error("No refreshToken to refresh.");
@@ -50,56 +48,20 @@ export async function refreshAccessToken() {
   if (refreshTokenExpiredAt) localStorage.setItem("refreshTokenExpiredAt", refreshTokenExpiredAt);
 
   setAuthHeader(newAT);
-  return newAT;
+  // 回傳給 httpBootstrap 使用
+  return { accessToken: newAT, refreshToken: newRT, accessTokenExpiredAt, refreshTokenExpiredAt };
 }
 
-// 每次請求自動夾帶 Bearer
+// 基本帶 Token（雙保險）
 api.interceptors.request.use((config) => {
   const at = localStorage.getItem("accessToken");
   if (at) config.headers.Authorization = `Bearer ${at}`;
+  if (!config.headers["Content-Type"]) config.headers["Content-Type"] = "application/json";
+  if (!config.headers.Accept) config.headers.Accept = "application/json";
   return config;
 });
 
-// 401 時自動 refresh 一次，成功就重試原請求
-api.interceptors.response.use(
-  (res) => res,
-  async (error) => {
-    const { response, config } = error;
-    if (!response) return Promise.reject(error);
-
-    if (response.status === 401 && !config._retry) {
-      config._retry = true;
-
-      // 若已在 refresh，掛到佇列，等成功後重試
-      if (isRefreshing) {
-        return new Promise((resolve) => {
-          pendingQueue.push((token) => {
-            config.headers.Authorization = `Bearer ${token}`;
-            resolve(api(config));
-          });
-        });
-      }
-
-      isRefreshing = true;
-      try {
-        const newToken = await refreshAccessToken();
-        // 喚醒所有等待中的請求
-        pendingQueue.forEach((cb) => cb(newToken));
-        pendingQueue = [];
-        isRefreshing = false;
-
-        config.headers.Authorization = `Bearer ${newToken}`;
-        return api(config); // 重試
-      } catch (e) {
-        isRefreshing = false;
-        pendingQueue = [];
-        // 讓呼叫端決定後續（通常登出）
-        return Promise.reject(e);
-      }
-    }
-
-    return Promise.reject(error);
-  }
-);
+// ⚠️ 不要在這裡再做 401 自動 refresh，交給 httpBootstrap.js 統一處理
+// api.interceptors.response.use((res) => res, (err) => Promise.reject(err));
 
 export default api;
