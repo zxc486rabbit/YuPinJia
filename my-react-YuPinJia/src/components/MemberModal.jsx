@@ -21,6 +21,24 @@ const MEMBER_TYPES = [
   { label: "廠商", value: 2 }, // 2=廠商
 ];
 
+// 兼容舊/新回傳格式，把任何型態統一轉為一維陣列
+function extractMembers(data) {
+  if (!data) return [];
+
+  // 舊版：直接回傳陣列
+  if (Array.isArray(data)) return data;
+
+  // 新版：{ total, offset, limit, items }
+  const items = data.items;
+  if (!items) return [];
+
+  // items 可能是：陣列（裡面是物件），或陣列包陣列（巢狀）
+  // 全部攤平到一維
+  const flat = Array.isArray(items) ? items.flat(Infinity) : [];
+  // 只保留物件（避免奇怪字串）
+  return flat.filter((x) => x && typeof x === "object");
+}
+
 export default function MemberModal({ show, onHide, onSelect }) {
   const [input, setInput] = useState("");
   const [memberType, setMemberType] = useState(""); // "", 0, 1, 2
@@ -44,26 +62,25 @@ export default function MemberModal({ show, onHide, onSelect }) {
 
   // 是否像電話（純數字且長度>=2）
   const looksLikePhone = useMemo(() => /^\d{2,}$/.test(input.trim()), [input]);
-  // 是否像會員編號（含字母或以 MB 等字母開頭）
-  const looksLikeMemberNo = useMemo(
-    () => /^[A-Za-z].*|.*[A-Za-z].*/.test(input.trim()),
-    [input]
-  );
+  // 是否含英文字母（視為可能是會員編號或名字）
+  const containsLetter = useMemo(() => /[A-Za-z]/.test(input.trim()), [input]);
 
-  // 後端查會員（支援同時以 memberNo、contactPhone 各打一輪，再合併）
+  // 後端查會員（支援 contactPhone / fullName / memberNo，各打一輪再合併）
   async function searchMembersBackend(keyword, typeValue, signal) {
-    const paramsCommon = {};
+    const paramsCommon = {
+      offset: 0,
+      limit: MAX_SUGGESTIONS,
+    };
     if (typeValue !== "" && typeValue !== null && typeValue !== undefined) {
       paramsCommon.memberType = typeValue; // 0/1/2
     }
 
-    // 決定要打哪些請求
-    const tasks = [];
     const kw = keyword.trim();
-
     if (kw.length < 2) return [];
 
-    // 如果像電話
+    const tasks = [];
+
+    // 1) 像電話 -> 用 contactPhone
     if (looksLikePhone) {
       tasks.push(
         axios.get(`${API_BASE}/t_Member`, {
@@ -73,8 +90,19 @@ export default function MemberModal({ show, onHide, onSelect }) {
       );
     }
 
-    // 如果像會員編號（或不是純數字，就也嘗試 memberNo 查）
-    if (looksLikeMemberNo || !looksLikePhone) {
+    // 2) 嘗試 memberNo（若後端不支援，會被忽略）
+    //    粗略：只要不是單純數字就試一下
+    if (!looksLikePhone || containsLetter) {
+      tasks.push(
+        axios.get(`${API_BASE}/t_Member`, {
+          params: { ...paramsCommon, memberNo: kw },
+          signal,
+        })
+      );
+    }
+
+    // 3) 一般名字/關鍵字 -> fullName
+    if (!looksLikePhone) {
       tasks.push(
         axios.get(`${API_BASE}/t_Member`, {
           params: { ...paramsCommon, fullName: kw },
@@ -83,14 +111,8 @@ export default function MemberModal({ show, onHide, onSelect }) {
       );
     }
 
-    // 若兩者都沒被命中（極端情況），保險同時各打一個
+    // 保險：如果啥都沒加到，就至少打一個 fullName
     if (tasks.length === 0) {
-      tasks.push(
-        axios.get(`${API_BASE}/t_Member`, {
-          params: { ...paramsCommon, contactPhone: kw },
-          signal,
-        })
-      );
       tasks.push(
         axios.get(`${API_BASE}/t_Member`, {
           params: { ...paramsCommon, fullName: kw },
@@ -101,11 +123,12 @@ export default function MemberModal({ show, onHide, onSelect }) {
 
     const settled = await Promise.allSettled(tasks);
     const list = [];
+
     for (const r of settled) {
       if (r.status === "fulfilled") {
         const d = r.value?.data;
-        if (Array.isArray(d)) list.push(...d);
-        else if (d && typeof d === "object") list.push(d);
+        const rows = extractMembers(d);
+        list.push(...rows);
       }
     }
 
@@ -170,6 +193,7 @@ export default function MemberModal({ show, onHide, onSelect }) {
       const { data } = await axios.get(`${API_BASE}/t_Distributor`, {
         params: { memberId },
       });
+      // 這邊後端仍是非分頁（若之後也改分頁，可以再用 extractMembers 包一下）
       if (Array.isArray(data))
         return data.find((d) => d.memberId === memberId) || null;
       return data?.memberId === memberId ? data : null;
@@ -200,7 +224,7 @@ export default function MemberModal({ show, onHide, onSelect }) {
       ? Number(dist?.discountRate ?? 1)
       : Number(base?.discountRate ?? 1);
 
-    // ⚠ 你說後端點數欄位用 cashbackPoint（若有就優先）
+    // 點數欄位兼容
     const point = Number(
       base?.cashbackPoint ?? base?.rewardPoints ?? base?.points ?? 0
     );
@@ -308,6 +332,10 @@ export default function MemberModal({ show, onHide, onSelect }) {
               </ListGroup.Item>
             ))}
           </ListGroup>
+        )}
+
+        {!loading && suggestions.length === 0 && input.trim().length >= 2 && (
+          <div className="text-muted mt-2">找不到符合的會員</div>
         )}
       </Modal.Body>
 

@@ -40,7 +40,9 @@ export default function Cart({
     0
   );
   const subtotal = items.reduce((sum, item) => {
-    const unit = Number(item.unitPrice ?? item.calculatedPrice ?? item.price ?? 0);
+    const unit = Number(
+      item.unitPrice ?? item.calculatedPrice ?? item.price ?? 0
+    );
     const qty = Number(item.quantity ?? 0);
     return sum + unit * qty;
   }, 0);
@@ -53,7 +55,9 @@ export default function Cart({
 
   async function fetchMemberById(memberId) {
     try {
-      const try1 = await axios.get(`${API_BASE}/t_Member/${memberId}`).catch(() => null);
+      const try1 = await axios
+        .get(`${API_BASE}/t_Member/${memberId}`)
+        .catch(() => null);
       if (try1?.data?.id) return try1.data;
 
       const try2 = await axios
@@ -89,7 +93,9 @@ export default function Cart({
         return tryQuery.data;
       }
       // 2) 退而求其次：/t_Distributor/{id}（若後端把 id == memberId）
-      const tryPath = await axios.get(`${API_BASE}/t_Distributor/${memberId}`).catch(() => null);
+      const tryPath = await axios
+        .get(`${API_BASE}/t_Distributor/${memberId}`)
+        .catch(() => null);
       if (tryPath?.data) return tryPath.data;
       return null;
     } catch {
@@ -114,7 +120,9 @@ export default function Cart({
       ? Number(dist?.discountRate ?? 1)
       : base?.discountRate ?? 1;
 
-    const point = Number(base?.cashbackPoint ?? base?.rewardPoints ?? base?.points ?? 0);
+    const point = Number(
+      base?.cashbackPoint ?? base?.rewardPoints ?? base?.points ?? 0
+    );
 
     // ✅ 帶入賒帳權限（API 欄位以後端回傳為準，這裡同時容忍 isSelfCredit/IsSelfCredit）
     const isSelfCredit =
@@ -205,7 +213,12 @@ export default function Cart({
         if (!result.isConfirmed) return;
 
         const target = await fetchMemberById(order.memberId);
-        if (!target) return Swal.fire({ title: "錯誤", text: "找不到該會員", icon: "error" });
+        if (!target)
+          return Swal.fire({
+            title: "錯誤",
+            text: "找不到該會員",
+            icon: "error",
+          });
         handleSwitchByInput(target, () => actuallyRestore(order)); // 切換成功後才恢復
       });
     } else {
@@ -225,7 +238,10 @@ export default function Cart({
 
     const outOfStock = order.items.find((it) => {
       const key = it.productId ?? it.id;
-      return stockMap[key] !== undefined && Number(it.quantity ?? 0) > Number(stockMap[key] ?? 0);
+      return (
+        stockMap[key] !== undefined &&
+        Number(it.quantity ?? 0) > Number(stockMap[key] ?? 0)
+      );
     });
     if (outOfStock) {
       const key = outOfStock.productId ?? outOfStock.id;
@@ -260,7 +276,9 @@ export default function Cart({
       member?.isDistributor == null;
 
     if (needEnrich) {
-      const dist = await fetchDistributorByMemberId(member?.id ?? member?.memberId);
+      const dist = await fetchDistributorByMemberId(
+        member?.id ?? member?.memberId
+      );
       normalized = normalizeMember(member, dist);
     } else {
       normalized = normalizeMember(
@@ -332,12 +350,11 @@ export default function Cart({
   };
 
   // 畫面上的賒帳狀態提示
-  const creditAllowed =
-    currentMember?.isDistributor
-      ? isGuideSelf
-        ? !!currentMember?.isSelfCredit
-        : !!currentMember?.isGuestCredit
-      : false;
+  const creditAllowed = currentMember?.isDistributor
+    ? isGuideSelf
+      ? !!currentMember?.isSelfCredit
+      : !!currentMember?.isGuestCredit
+    : false;
 
   return (
     <div className="cart py-3">
@@ -355,18 +372,31 @@ export default function Cart({
           <div style={{ flex: 1 }}>
             <div className="d-flex align-items-center mb-1">
               <FaUser className="me-1" />
-              {currentMember ? `會員：${currentMember.fullName}` : "尚未登入會員"}
+              {currentMember
+                ? `會員：${currentMember.fullName}`
+                : "尚未登入會員"}
             </div>
             {currentMember && (
               <div className="d-flex align-items-center text-muted small">
-                <FaGem className="me-1" /> {currentMember?.type}
+                {/* VIP 改成顯示 memberType（若沒有才退回舊的 type） */}
+                <FaGem className="me-1" />{" "}
+                {currentMember?.memberType ?? currentMember?.type}
+                {/* 等級顯示 levelCode（若沒有才退回舊的 level） */}
                 <span className="mx-3">
-                  <FaMedal className="me-1" /> {currentMember?.level}
+                  <FaMedal className="me-1" />{" "}
+                  {currentMember?.levelCode ?? currentMember?.level}
                 </span>
-                <FaTicketAlt className="me-1" /> 點數：{currentMember?.cashbackPoint}
+                {/* 點數顯示 cashbackPoint（你原本就是用這個，保留） */}
+                <FaTicketAlt className="me-1" /> 點數：
+                {currentMember?.cashbackPoint}
                 {currentMember?.isDistributor && (
                   <span className="ms-3">
-                    賒帳：{creditAllowed ? <b className="text-success">可</b> : <b className="text-danger">不可</b>}
+                    賒帳：
+                    {creditAllowed ? (
+                      <b className="text-success">可</b>
+                    ) : (
+                      <b className="text-danger">不可</b>
+                    )}
                   </span>
                 )}
               </div>
@@ -424,7 +454,11 @@ export default function Cart({
                 const val = parseInt(e.target.value, 10);
                 const maxByCashback = currentMember?.cashbackPoint || 0;
                 const maxBySubtotal = Math.floor(subtotal / discountPerPoint);
-                const safeVal = Math.min(Math.max(val || 0, 0), maxByCashback, maxBySubtotal);
+                const safeVal = Math.min(
+                  Math.max(val || 0, 0),
+                  maxByCashback,
+                  maxBySubtotal
+                );
                 setUsedPoints(safeVal);
               }}
               disabled={!currentMember}
