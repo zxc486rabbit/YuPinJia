@@ -24,12 +24,9 @@ const fmt = (n) => Number(n || 0).toLocaleString();
 function mapSalesDetail(items = []) {
   return items.map((it) => ({
     id: it.orderNumber || it.id || "-",
-    // 取 ISO 的 hh:mm
     date: (it.createdAt || "").toString().slice(11, 16) || "--:--",
-    // 你回傳的是 totalQuantity（不是 itemCount / items.length）
     total: it.totalQuantity ?? 0,
     totalMoney: Number(it.totalAmount ?? 0).toLocaleString(),
-    // 你回傳的是 paymentMethod（不是 payMethodName）
     payMethod: it.paymentMethod || "-",
   }));
 }
@@ -96,19 +93,23 @@ export default function ShiftChange() {
     return () => clearInterval(t);
   }, []);
 
-  /* ========= 取得登入者資訊 ========= */
+  /* ========= 取得登入者資訊（改為 /Account/userInfo） ========= */
   useEffect(() => {
     (async () => {
       try {
-        const res = await axios.get(`${API_BASE}/t_Staff/UserInfo`, {
+        const res = await axios.get(`${API_BASE}/Account/userInfo`, {
           headers: authJsonHeaders(),
         });
-        setUserInfo(res.data);
-        localStorage.setItem("userInfo", JSON.stringify(res.data));
+        const u = res?.data?.user || null;
+        setUserInfo(u);
+        localStorage.setItem("userInfo", JSON.stringify(u));
       } catch {
+        // 後備：讀 localStorage
         const cached = localStorage.getItem("userInfo");
-        if (cached) setUserInfo(JSON.parse(cached));
-        else {
+        if (cached) {
+          setUserInfo(JSON.parse(cached));
+        } else {
+          // 最後備援（避免畫面沒東西）
           setUserInfo({
             id: 1,
             staffId: 1,
@@ -173,7 +174,7 @@ export default function ShiftChange() {
     cashCreditSettlement = 0,
     cashRefund = 0,
     cashRedeemWithdraw = 0,
-    cashOutflow = 0,
+    cashOutflow = 0, // ← 現金支出（門市支出顯示用）
 
     // 回扣
     rebateOrderAmount = 0,
@@ -313,13 +314,14 @@ export default function ShiftChange() {
             mapper = mapSalesDetail;
             break;
           case "POS應有金額":
+            // 依你之前提供：這支同時可查 POS 應有金額明細
             url = `${API_BASE}/t_ShiftHandoverRecord/GetStoreSalesRebate`;
-            params = { ...params, type: "pos" }; // 若實際不需 type，移除
+            params = { ...params, type: "pos" }; // 若實際不需 type，可移除
             mapper = mapPosShouldHave;
             break;
           case "回扣金額":
             url = `${API_BASE}/t_ShiftHandoverRecord/GetStoreSalesRebate`;
-            params = { ...params, type: "rebate" }; // 若實際不需 type，移除
+            params = { ...params, type: "rebate" }; // 若實際不需 type，可移除
             mapper = mapRebate;
             break;
           case "經銷會員收款":
@@ -362,7 +364,6 @@ export default function ShiftChange() {
   /* ========= 初次載入 & detailButton 改變時：抓一次 ========= */
   useEffect(() => {
     fetchRightRows(detailButton);
-    // 僅依賴 detailButton / fetchRightRows（已穩定）
   }, [detailButton, fetchRightRows]);
 
   /* ========= 卡片點擊：同一張卡才強制重抓 ========= */
@@ -373,6 +374,15 @@ export default function ShiftChange() {
       setDetailButton(which); // 交給 useEffect 去抓一次
     }
   };
+
+  /* ========= 上方機器識別：先取 localStorage('machineCode') 沒有就 A01 ========= */
+  const machineCode = useMemo(
+    () => localStorage.getItem("machineCode") || "A01",
+    []
+  );
+
+  /* ========= 門市支出（串現金支出 cashOutflow） ========= */
+  const storeExpenseAmount = Number(cashOutflow || 0);
 
   /* ========= 底部總計 ========= */
   const footerTotals = [
@@ -427,17 +437,14 @@ export default function ShiftChange() {
     }
   };
 
-  /* ========= 門市支出（待 API） ========= */
-  const storeExpenseCount = 0;
-
   return (
     <>
       <div className="mx-4">
-        {/* 上方機器/人員/門市/時間 */}
+        {/* 上方機器/人員/門市/時間（改為吃 /Account/userInfo 的 user） */}
         <div className="d-flex mt-3 mb-2 gap-4 flex-wrap">
           <span style={{ color: "#535353", fontSize: "1.1rem", fontWeight: "bold" }}>
             機器:
-            <span className="ms-2" style={{ color: "black" }}>A01</span>
+            <span className="ms-2" style={{ color: "black" }}>{machineCode}</span>
           </span>
           <span style={{ color: "#535353", fontSize: "1.1rem", fontWeight: "bold" }}>
             工號:
@@ -454,8 +461,7 @@ export default function ShiftChange() {
           <span style={{ color: "#535353", fontSize: "1.1rem", fontWeight: "bold" }}>
             門市:
             <span className="ms-2" style={{ color: "black" }}>
-              {userInfo?.storeId ?? "—"}
-              {userInfo?.storeName ? `（${userInfo.storeName}）` : ""}
+              {userInfo?.storeName ? `${userInfo.storeName}` : ""}
             </span>
           </span>
           <span style={{ color: "#535353", fontSize: "1.1rem", fontWeight: "bold" }}>
@@ -503,7 +509,7 @@ export default function ShiftChange() {
             <div className="stats-bar mt-2">
               <div className="stat-pill">POS作廢訂單數 : {fmt(posCancelOrderCount || 0)}</div>
               <div className="stat-pill">客訴退款訂單數 : {fmt(complaintReturnOrderCount || 0)}</div>
-              <div className="stat-pill">門市支出 : {fmt(storeExpenseCount)}</div>
+              <div className="stat-pill">門市支出 : {fmt(storeExpenseAmount)} 元</div>
             </div>
           </div>
 
@@ -579,4 +585,3 @@ export default function ShiftChange() {
     </>
   );
 }
-

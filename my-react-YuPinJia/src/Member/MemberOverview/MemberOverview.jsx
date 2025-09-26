@@ -1,12 +1,14 @@
-import { useState, useEffect, useCallback } from "react";
-import "../../components/Search.css"; // 引入搜尋框的 CSS 來調整樣式
-import SearchField from "../../components/SearchField"; // 引入搜尋框模組
-import MemberDetailModal from "./MemberDetailModal"; // 消費情形
-import DistributorInfoModal from "./DistributorInfoModal"; // 經銷
-import MemberEditModal from "./MemberEditModal"; // 編輯
-import WithdrawModal from "./WithdrawModal"; // ⬅️ 提現
+import { useState, useEffect, useMemo } from "react";
+import "../../components/Search.css";
+import SearchField from "../../components/SearchField";
+import MemberDetailModal from "./MemberDetailModal";
+import DistributorInfoModal from "./DistributorInfoModal";
+import MemberEditModal from "./MemberEditModal";
+import WithdrawModal from "./WithdrawModal";
 import axios from "axios";
+import { Pagination, Form } from "react-bootstrap";
 
+// 顯示會員類型
 const displayMemberType = (mt) => {
   if (mt === 1 || mt === "1" || mt === "一般會員") return "一般會員";
   if (mt === 2 || mt === "2" || mt === "導遊") return "導遊";
@@ -14,7 +16,7 @@ const displayMemberType = (mt) => {
   return String(mt ?? "");
 };
 
-// 折扣率顯示：0.9 => 90%，2 => 2%，null/undefined => "-"
+// 折扣率顯示：0.9 => 90%，2 => 2%，null => "-"
 const formatDiscount = (v) => {
   if (v === null || v === undefined || v === "") return "-";
   const num = Number(v);
@@ -24,7 +26,8 @@ const formatDiscount = (v) => {
 
 // 將 API 回傳統一成表格用的形狀與型別
 const normalizeMember = (m) => {
-  const toNum = (v) => (v === null || v === undefined || v === "" ? 0 : Number(v));
+  const toNum = (v) =>
+    v === null || v === undefined || v === "" ? 0 : Number(v);
   return {
     ...m,
     id: Number(m?.id ?? m?.memberId ?? 0),
@@ -35,40 +38,33 @@ const normalizeMember = (m) => {
     createdAt: m?.createdAt ?? null,
     memberLevel: toNum(m?.memberLevel),
     accountBalance: toNum(m?.accountBalance),
-    cashbackPoint: toNum(m?.cashbackPoint), // ← 重點：只讀 cashbackPoint
+    cashbackPoint: toNum(m?.cashbackPoint),
     referredBy: String(m?.referredBy ?? ""),
     memberType: m?.memberType ?? "",
     isDistributor: Boolean(m?.isDistributor),
     discountRate:
-      m?.discountRate === null || m?.discountRate === undefined || m?.discountRate === ""
+      m?.discountRate === null ||
+      m?.discountRate === undefined ||
+      m?.discountRate === ""
         ? null
         : Number(m.discountRate),
   };
 };
 
+const API_BASE = "https://yupinjia.hyjr.com.tw/api/api";
+
 export default function MemberOverview() {
-  const [orderId, setOrderId] = useState(""); // 會員編號搜尋條件
-  const [contactPhone, setContactPhone] = useState(""); // 聯絡電話搜尋條件
-  const [status, setStatus] = useState("all"); // 會員類型搜尋條件
-  const [selectedMonth, setSelectedMonth] = useState("2025-08"); // 默認月份
+  // ── 搜尋條件 ──────────────────────────────────────────
+  const [orderId, setOrderId] = useState(""); // 會員編號
+  const [contactPhone, setContactPhone] = useState(""); // 聯絡電話
+  const [status, setStatus] = useState("all"); // 會員類型
+  const [selectedMonth, setSelectedMonth] = useState("2025-08"); // 消費情形用
 
-  const [tableData, setTableData] = useState([]); // 表格資料
-  const [loading, setLoading] = useState(false); // 加載狀態
+  // ── 清單資料/狀態 ─────────────────────────────────────
+  const [tableData, setTableData] = useState([]);
+  const [loading, setLoading] = useState(false);
 
-  const [showModal, setShowModal] = useState(false); // 消費情形
-  const [selectedDetail, setSelectedDetail] = useState(null); // 消費情形
-  const [memberId, setMemberId] = useState(null); // 消費情形 MemberId
-
-  const [showDistributorModal, setShowDistributorModal] = useState(false); // 經銷
-  const [selectedDistributor, setSelectedDistributor] = useState(null); // 經銷
-
-  const [showEditModal, setShowEditModal] = useState(false); // 編輯
-  const [selectedMember, setSelectedMember] = useState(null); // 編輯
-
-  const [showWithdrawModal, setShowWithdrawModal] = useState(false); // 提現 Modal
-  const [withdrawMember, setWithdrawMember] = useState(null); // 提現對象
-
-  // 高亮那一列的 id（1.8s 自動清除）
+  // 高亮那一列（1.8s 自動清除）
   const [highlightId, setHighlightId] = useState(null);
   useEffect(() => {
     if (!highlightId) return;
@@ -76,124 +72,32 @@ export default function MemberOverview() {
     return () => clearTimeout(t);
   }, [highlightId]);
 
-  // ✅ 統一抓會員清單（會帶目前搜尋條件）
-  const fetchMembers = useCallback(async () => {
-    const apiUrl = "https://yupinjia.hyjr.com.tw/api/api/t_Member";
-    const params = {
-      memberNo: orderId || undefined,
-      contactPhone: contactPhone || undefined,
-      memberType: status !== "all" ? Number(status) : undefined, // 若後端改用字串也能相容（Number("1")=1）
-    };
-    try {
-      setLoading(true);
-      const { data } = await axios.get(apiUrl, { params });
-    const list = Array.isArray(data) ? data.map(normalizeMember) : [];
-    setTableData(list);
-    return list; // ← 讓外面可以 await
-    } catch (err) {
-      console.error("載入會員資料失敗", err);
-    } finally {
-      setLoading(false);
-    }
-  }, [orderId, contactPhone, status]);
+  // ── 分頁狀態（新 API）─────────────────────────────────
+  const [total, setTotal] = useState(0);
+  const [limit, setLimit] = useState(20);
+  const [page, setPage] = useState(1); // 1-based
+  const totalPages = Math.max(1, Math.ceil(total / Math.max(1, limit)));
 
-  // 只刷新某一位會員資料（避免整表重抓）
-  const refreshMemberRow = useCallback(async (id) => {
-    try {
-      const { data } = await axios.get(
-        `https://yupinjia.hyjr.com.tw/api/api/t_Member/${id}`,
-        {
-          params: { _t: Date.now() }, // 避免快取
-          headers: { "Cache-Control": "no-cache" },
-        }
-      );
-      const next = normalizeMember(data);
-      setTableData((prev) => {
-        const hasRow = prev.some((m) => Number(m.id) === Number(id));
-        if (!hasRow) return prev;
-        return prev.map((m) => (Number(m.id) === Number(id) ? { ...m, ...next } : m));
-      });
-      setHighlightId(Number(id));
-    } catch (err) {
-      console.error("單列刷新失敗：", err);
-    }
-  }, []);
+  // 記住最後一次查詢（翻頁沿用）
+  const lastQueryRef = useMemo(() => ({ current: {} }), []);
+  const setLastQuery = (obj) => (lastQueryRef.current = obj);
+  const getLastQuery = () => lastQueryRef.current || {};
 
-  // 🔎 搜尋按鈕 → 直接呼叫 fetchMembers
-  const handleSearch = () => {
-    fetchMembers();
-  };
+  // ── Modal 狀態 ────────────────────────────────────────
+  const [showModal, setShowModal] = useState(false); // 消費情形
+  const [selectedDetail, setSelectedDetail] = useState(null);
+  const [memberId, setMemberId] = useState(null);
 
-  // ⏯️ 初始化載入
-  useEffect(() => {
-    fetchMembers();
-  }, [fetchMembers]);
+  const [showDistributorModal, setShowDistributorModal] = useState(false);
+  const [selectedDistributor, setSelectedDistributor] = useState(null);
 
-  // 當選擇檢視消費情形時，從 API 拉取資料
-  const handleViewConsumption = (memberId) => {
-    const apiUrl = `https://yupinjia.hyjr.com.tw/api/api/t_SalesOrder/GetSalesOrderByMember?memberId=${memberId}&filterMonth=${selectedMonth}`;
-    axios
-      .get(apiUrl)
-      .then((response) => {
-        setSelectedDetail(response.data);
-        setMemberId(memberId);
-        setShowModal(true);
-      })
-      .catch((error) => {
-        console.error("載入消費情形失敗：", error);
-      });
-  };
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [selectedMember, setSelectedMember] = useState(null);
 
-  // 月份變更時（若視窗有開啟且有 memberId）就重抓消費情形
-  useEffect(() => {
-    if (selectedDetail && memberId && selectedMonth) {
-      const apiUrl = `https://yupinjia.hyjr.com.tw/api/api/t_SalesOrder/GetSalesOrderByMember?memberId=${memberId}&filterMonth=${selectedMonth}`;
-      axios
-        .get(apiUrl)
-        .then((response) => setSelectedDetail(response.data))
-        .catch((error) => console.error("載入消費情形失敗：", error));
-    }
-  }, [selectedMonth, selectedDetail, memberId]);
+  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+  const [withdrawMember, setWithdrawMember] = useState(null);
 
-  // 當用戶點擊編輯
-  const handleEditMember = (member) => {
-    setSelectedMember({ id: member.id, memberType: member.memberType });
-    setShowEditModal(true);
-  };
-
-  // 編輯成功
-  const handleUpdateMember = (updatedMember) => {
-    axios
-      .put(
-        `https://yupinjia.hyjr.com.tw/api/api/t_Member/${updatedMember.id}`,
-        updatedMember
-      )
-      .then(() => {
-        setShowEditModal(false);
-        // 再打 API 以確保最新
-        refreshMemberRow(updatedMember.id);
-        
-      })
-      .catch((error) => {
-        console.error("更新失敗", error);
-      });
-  };
-
-  // 提現成功：樂觀更新 → 高亮 → 重抓
-  const handleWithdrawSuccess = async (updatedMember) => {
-    const patched = normalizeMember(updatedMember);
-    setTableData((prev) =>
-      prev.map((m) => (Number(m.id) === Number(patched.id) ? patched : m))
-    );
-    setHighlightId(Number(patched.id));
-    setShowWithdrawModal(false);
-    setWithdrawMember(null);
-    // ✅ 與賒帳結清一樣：整表重抓（依當前搜尋條件）
-  await fetchMembers();
-  // 重抓後再高亮該列（若存在）
-  setHighlightId(Number(patched.id));
-  };
-
+  // ── 共用函式 ──────────────────────────────────────────
   const formatDate = (iso) => {
     if (!iso) return "-";
     try {
@@ -209,9 +113,206 @@ export default function MemberOverview() {
     }
   };
 
+  // 相容舊/新分頁格式的抓取
+  const fetchMembers = async (query, _page = 1, _limit = limit) => {
+    setLoading(true);
+    try {
+      const offset = (_page - 1) * _limit;
+      const params = {
+        memberNo: query?.memberNo,
+        contactPhone: query?.contactPhone,
+        memberType: query?.memberType,
+        offset,
+        limit: _limit,
+      };
+      // 移除 undefined
+      Object.keys(params).forEach(
+        (k) => params[k] === undefined && delete params[k]
+      );
+
+      const { data } = await axios.get(`${API_BASE}/t_Member`, { params });
+
+      // 相容：舊為陣列；新為 { total, offset, limit, items }，且 items[0] 可能是原本陣列
+      let list = [];
+      let newTotal = 0;
+      let newLimit = _limit;
+
+      if (Array.isArray(data)) {
+        list = data;
+        newTotal = list.length;
+      } else if (data && typeof data === "object") {
+        const { total: t, limit: l, items } = data;
+        newTotal = typeof t === "number" ? t : 0;
+        newLimit = typeof l === "number" && l > 0 ? l : _limit;
+
+        if (Array.isArray(items)) {
+          list = Array.isArray(items[0]) ? items[0] : items;
+        }
+      }
+
+      // 排序（建立日期新到舊）
+      list.sort(
+        (a, b) => new Date(b.createdAt ?? 0) - new Date(a.createdAt ?? 0)
+      );
+      const mapped = list.map(normalizeMember);
+
+      setTableData(mapped);
+      setTotal(newTotal);
+      setLimit(newLimit);
+      setLoading(false);
+    } catch (err) {
+      console.error("載入會員資料失敗", err);
+      setLoading(false);
+    }
+  };
+
+  // 初次載入（可讀 URL 參數：memberNo/contactPhone/memberType）
+  useEffect(() => {
+    const qs = new URLSearchParams(window.location.search);
+    const initParams = {
+      memberNo: qs.get("memberNo") || undefined,
+      contactPhone: qs.get("contactPhone") || undefined,
+      memberType: (() => {
+        const v = qs.get("memberType");
+        if (!v || v === "all") return undefined;
+        return /^\d+$/.test(v) ? Number(v) : undefined;
+      })(),
+    };
+    setOrderId(initParams.memberNo || "");
+    setContactPhone(initParams.contactPhone || "");
+    setStatus(qs.get("memberType") || "all");
+
+    setLastQuery(initParams);
+    setPage(1);
+    fetchMembers(initParams, 1, limit);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 搜尋條件變更 → 自動（debounce）查詢 + 同步 URL
+  useEffect(() => {
+    const raw = {
+      memberNo: orderId || undefined,
+      contactPhone: contactPhone || undefined,
+      memberType: status !== "all" ? Number(status) : undefined,
+    };
+    const params = Object.fromEntries(
+      Object.entries(raw).filter(([, v]) => v !== undefined)
+    );
+
+    // URL 同步
+    const queryString = new URLSearchParams({
+      ...(params.memberNo ? { memberNo: params.memberNo } : {}),
+      ...(params.contactPhone ? { contactPhone: params.contactPhone } : {}),
+      ...(status ? { memberType: status } : {}),
+    }).toString();
+    window.history.pushState({}, "", `?${queryString}`);
+
+    // 記住條件、回第 1 頁
+    setLastQuery(params);
+    setPage(1);
+
+    const t = setTimeout(() => {
+      fetchMembers(params, 1, limit);
+    }, 350); // debounce
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderId, contactPhone, status]);
+
+  // 分頁跳轉
+  const goPage = (p) => {
+    const safe = Math.min(Math.max(1, p), totalPages);
+    setPage(safe);
+    fetchMembers(getLastQuery(), safe, limit);
+  };
+
+  // 每頁筆數
+  const handleChangePageSize = (e) => {
+    const newLimit = Number(e.target.value) || 20;
+    setLimit(newLimit);
+    setPage(1);
+    fetchMembers(getLastQuery(), 1, newLimit);
+  };
+
+  // 消費情形
+  const handleViewConsumption = (memberId) => {
+    const apiUrl = `${API_BASE}/t_SalesOrder/GetSalesOrderByMember?memberId=${memberId}&filterMonth=${selectedMonth}`;
+    axios
+      .get(apiUrl)
+      .then((response) => {
+        setSelectedDetail(response.data);
+        setMemberId(memberId);
+        setShowModal(true);
+      })
+      .catch((error) => {
+        console.error("載入消費情形失敗：", error);
+      });
+  };
+
+  // 月份變更時，若視窗開啟則重抓
+  useEffect(() => {
+    if (selectedDetail && memberId && selectedMonth) {
+      const apiUrl = `${API_BASE}/t_SalesOrder/GetSalesOrderByMember?memberId=${memberId}&filterMonth=${selectedMonth}`;
+      axios
+        .get(apiUrl)
+        .then((response) => setSelectedDetail(response.data))
+        .catch((error) => console.error("載入消費情形失敗：", error));
+    }
+  }, [selectedMonth, selectedDetail, memberId]);
+
+  // 編輯
+  const handleEditMember = (member) => {
+    setSelectedMember({ id: member.id, memberType: member.memberType });
+    setShowEditModal(true);
+  };
+
+  const refreshMemberRow = async (id) => {
+    try {
+      const { data } = await axios.get(`${API_BASE}/t_Member/${id}`, {
+        params: { _t: Date.now() },
+        headers: { "Cache-Control": "no-cache" },
+      });
+      const next = normalizeMember(data);
+      setTableData((prev) => {
+        const hasRow = prev.some((m) => Number(m.id) === Number(id));
+        if (!hasRow) return prev;
+        return prev.map((m) =>
+          Number(m.id) === Number(id) ? { ...m, ...next } : m
+        );
+      });
+      setHighlightId(Number(id));
+    } catch (err) {
+      console.error("單列刷新失敗：", err);
+    }
+  };
+
+  const handleUpdateMember = (updatedMember) => {
+    axios
+      .put(`${API_BASE}/t_Member/${updatedMember.id}`, updatedMember)
+      .then(() => {
+        setShowEditModal(false);
+        refreshMemberRow(updatedMember.id);
+      })
+      .catch((error) => {
+        console.error("更新失敗", error);
+      });
+  };
+
+  // 提現成功：樂觀更新 + 重抓
+  const handleWithdrawSuccess = async (updatedMember) => {
+    const patched = normalizeMember(updatedMember);
+    setTableData((prev) =>
+      prev.map((m) => (Number(m.id) === Number(patched.id) ? patched : m))
+    );
+    setHighlightId(Number(patched.id));
+    setShowWithdrawModal(false);
+    setWithdrawMember(null);
+    await fetchMembers(getLastQuery(), page, limit);
+    setHighlightId(Number(patched.id));
+  };
+
   return (
     <>
-      {/* 高亮動畫樣式：讓該列在 1.8 秒內淡出 */}
+      {/* 高亮動畫 */}
       <style>{`
         @keyframes rowFlash {
           0%   { background-color: #fff6bf; }
@@ -221,7 +322,8 @@ export default function MemberOverview() {
         .row-highlight td { animation: rowFlash 1.8s ease-out 0s 1 both; }
       `}</style>
 
-      <div className="search-container d-flex flex-wrap gap-3 px-4 py-3 rounded">
+      {/* 搜尋列（即時搜尋，無按鈕；右側放每頁筆數） */}
+      <div className="search-container d-flex flex-wrap gap-3 px-4 py-3 rounded align-items-center">
         <SearchField
           label="會員編號"
           type="text"
@@ -246,14 +348,63 @@ export default function MemberOverview() {
             { value: "3", label: "廠商" },
           ]}
         />
-        <button onClick={handleSearch} className="search-button">
-          搜尋
-        </button>
+
+        {/* 右側：清除 + 每頁筆數 */}
+        <div className="d-flex align-items-center ms-auto gap-2">
+          <button
+            className="btn btn-outline-secondary"
+            onClick={() => {
+              setOrderId("");
+              setContactPhone("");
+              setStatus("all");
+              setPage(1);
+              setTotal(0);
+              window.history.pushState({}, "", window.location.pathname);
+              const empty = {};
+              setLastQuery(empty);
+              fetchMembers(empty, 1, limit);
+            }}
+          >
+            清除搜尋
+          </button>
+
+          <div className="d-flex align-items-center">
+            <span className="me-2">每頁</span>
+            <Form.Select
+              size="sm"
+              value={limit}
+              onChange={handleChangePageSize}
+              style={{ width: 100 }}
+            >
+              {[10, 20, 30, 50, 100].map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </Form.Select>
+            <span className="ms-2">筆</span>
+          </div>
+        </div>
       </div>
 
-      <div className="table-container" style={{ maxHeight: "79vh", overflowY: "auto" }}>
+      {/* 表格 */}
+      <div
+        className="table-container position-relative"
+        style={{ maxHeight: "79vh", overflowY: "auto" }}
+      >
         {loading ? (
-          <div>加載中...</div>
+          <div
+            style={{
+              position: "absolute",
+              top: "50%",
+              left: "50%",
+              transform: "translate(-50%, -50%)",
+              fontSize: "1.2rem",
+              color: "#28a745",
+            }}
+          >
+            加載中...
+          </div>
         ) : (
           <table className="table text-center" style={{ fontSize: "1.2rem" }}>
             <thead
@@ -274,7 +425,7 @@ export default function MemberOverview() {
                 <th>等級</th>
                 <th>餘額</th>
                 <th>點數</th>
-                <th>會員類型</th>            
+                <th>會員類型</th>
                 <th>折扣率</th>
                 <th>消費情形</th>
                 <th>操作</th>
@@ -335,12 +486,52 @@ export default function MemberOverview() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan="14">無資料</td>
+                  <td colSpan="11">無資料</td>
                 </tr>
               )}
             </tbody>
           </table>
         )}
+      </div>
+
+      {/* 分頁器 */}
+      <div className="d-flex align-items-center justify-content-end pe-3 pb-2">
+        <span className="me-3">
+          共 <strong>{total}</strong> 筆，第 <strong>{page}</strong> /{" "}
+          {totalPages} 頁
+        </span>
+        <Pagination className="mb-0">
+          <Pagination.First disabled={page <= 1} onClick={() => goPage(1)} />
+          <Pagination.Prev
+            disabled={page <= 1}
+            onClick={() => goPage(page - 1)}
+          />
+          {(() => {
+            const pages = [];
+            const start = Math.max(1, page - 2);
+            const end = Math.min(totalPages, start + 4);
+            for (let p = start; p <= end; p++) {
+              pages.push(
+                <Pagination.Item
+                  key={p}
+                  active={p === page}
+                  onClick={() => goPage(p)}
+                >
+                  {p}
+                </Pagination.Item>
+              );
+            }
+            return pages;
+          })()}
+          <Pagination.Next
+            disabled={page >= totalPages}
+            onClick={() => goPage(page + 1)}
+          />
+          <Pagination.Last
+            disabled={page >= totalPages}
+            onClick={() => goPage(totalPages)}
+          />
+        </Pagination>
       </div>
 
       {/* 消費情形 */}
@@ -365,7 +556,6 @@ export default function MemberOverview() {
         member={selectedMember}
         onSave={handleUpdateMember}
       />
-
       {/* 提現 */}
       <WithdrawModal
         show={showWithdrawModal}
