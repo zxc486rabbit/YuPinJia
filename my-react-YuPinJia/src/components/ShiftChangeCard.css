@@ -2,7 +2,7 @@
     background: #fff;
     border: 1px solid #A3A3A3;
     margin:0 10px 15px;
-    min-height: 21vh;
+    min-height: 24vh;
 }
 .title{
     background: #678CBF;
@@ -12,15 +12,15 @@
     justify-content: space-between;
     align-items: center;
     padding:8px 20px;
-    font-size: 1.1rem;
+    font-size: 1.15rem;
 }
 .content{
-    padding: 0 30px;
+    padding: 5px 30px;
 }
 .content .text{
     display: flex;
     justify-content: space-between;
-    font-size: 1rem;
+    font-size: 1.05rem;
     font-weight: bold;
     margin-block: 10px;
 }
@@ -47,4 +47,39 @@
 }
 .shift-change td{
     font-size: 1rem !important;
+}
+
+/* === 四張卡片底部的水平統計條 === */
+.stats-bar{
+    display: flex;
+    gap: 10px;
+    margin: 0 10px;       /* 與卡片左右對齊 */
+}
+.stat-pill{
+    background: #EA4D4D;
+    color: #fff;
+    font-weight: bold;
+    font-size: 1rem;
+    padding: 10px 16px;
+    border-radius: 8px;
+    text-align: center;
+    flex: 1 1 0;          /* 等寬填滿 */
+    white-space: nowrap;
+}
+
+/* ====== 固定把左/右欄撐開：針對這個 row 直接使用 flex gap ====== */
+
+
+/* 保底：若你的全域把 .col-* padding 清掉，這裡用 !important 要回來 */
+.cards-panel { padding-right: 10px !important; }
+.table-panel { padding-left: 10px !important; }
+
+/* 右側再包一層內距與分隔線，視覺更乾淨 */
+.table-panel-inner{
+  border-left: 1px solid #E5E5E5;
+}
+
+/* RWD 微調 */
+@media (max-width: 992px){
+    .stats-bar{ flex-wrap: wrap; }
 }

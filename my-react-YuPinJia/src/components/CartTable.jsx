@@ -2,22 +2,28 @@ import QuantityControl from "./QuantityControl";
 import { FaTimes } from "react-icons/fa";
 import Swal from "sweetalert2";
 
-export default function CartTable({ items, updateQuantity, removeItem, currentMember }) {
-  const getPrice = (item) => {
+export default function CartTable({
+  items,
+  updateQuantity,
+  removeItem,
+  currentMember, // 目前不需要，但保留參數相容
+}) {
+  // 金額格式
+  const money = (n) => `\$${Number(n || 0).toLocaleString()}`;
+
+  // 單列小計：一律用 unitPrice（Home 已計算好的最終價；贈品為 0）
+  const getRowSubtotal = (item) => {
     if (item.isGift) return 0;
-    const discount = currentMember?.discountRate ?? 1;
-    return Math.round(item.unitPrice * discount);
+    const unit = Number(item.unitPrice ?? 0);
+    const qty = Number(item.quantity ?? 0);
+    return unit * qty;
   };
 
   const handleClearCart = () => {
-    if (items.length === 0) {
-      Swal.fire({
-        title: "購物車已是空的",
-        icon: "info",
-      });
+    if ((items?.length || 0) === 0) {
+      Swal.fire({ title: "購物車已是空的", icon: "info" });
       return;
     }
-
     Swal.fire({
       title: "確認清空購物車？",
       icon: "warning",
@@ -27,16 +33,13 @@ export default function CartTable({ items, updateQuantity, removeItem, currentMe
     }).then((result) => {
       if (result.isConfirmed) {
         updateQuantity("__CLEAR__", 0);
-        Swal.fire({
-          title: "已清空",
-          text: "購物車已清空",
-          icon: "success",
-        });
+        Swal.fire({ title: "已清空", text: "購物車已清空", icon: "success" });
       }
     });
   };
 
   const handleRemoveItem = (item) => {
+    const key = item.productId ?? item.id;
     Swal.fire({
       title: `確定要移除「${item.name}」？`,
       icon: "warning",
@@ -45,7 +48,7 @@ export default function CartTable({ items, updateQuantity, removeItem, currentMe
       cancelButtonText: "取消",
     }).then((result) => {
       if (result.isConfirmed) {
-        removeItem(item.productId);
+        removeItem(key);
         Swal.fire({
           title: "已移除",
           text: `${item.name} 已從購物車刪除`,
@@ -76,33 +79,42 @@ export default function CartTable({ items, updateQuantity, removeItem, currentMe
         </tr>
       </thead>
       <tbody>
-        {items.map((item) => (
-          <tr key={item.productId} className="cartTr">
-            <td>{item.name}</td>
-            <td className="quantity-control">
-              <QuantityControl
-                defaultValue={item.quantity}
-                onChange={(value) => updateQuantity(item.productId, value)}
-                onRemove={() => handleRemoveItem(item)}
-              />
-            </td>
-            <td>
-              {item.isGift ? (
-                "贈品"
-              ) : (
-                `$${(getPrice(item) * item.quantity).toLocaleString()}`
-              )}
-            </td>
-            <td style={{ textAlign: "center" }}>
-              <FaTimes
-                className="text-danger"
-                style={{ cursor: "pointer" }}
-                title="刪除"
-                onClick={() => handleRemoveItem(item)}
-              />
-            </td>
-          </tr>
-        ))}
+        {items.map((item) => {
+          const key = item.productId ?? item.id;
+          const subtotal = getRowSubtotal(item);
+
+          return (
+            <tr key={key} className="cartTr">
+              <td>
+                {item.name}
+                {item.isGift && (
+                  <span className="badge text-bg-info ms-2" title={`原價 ${money(item.originalPrice ?? item.price ?? 0)}`}>
+                    贈品
+                  </span>
+                )}
+              </td>
+
+              <td className="quantity-control">
+                <QuantityControl
+                  defaultValue={item.quantity}
+                  onChange={(value) => updateQuantity(key, value)}
+                  onRemove={() => handleRemoveItem(item)}
+                />
+              </td>
+
+              <td>{item.isGift ? "免費" : money(subtotal)}</td>
+
+              <td style={{ textAlign: "center" }}>
+                <FaTimes
+                  className="text-danger"
+                  style={{ cursor: "pointer" }}
+                  title="刪除"
+                  onClick={() => handleRemoveItem(item)}
+                />
+              </td>
+            </tr>
+          );
+        })}
       </tbody>
     </table>
   );

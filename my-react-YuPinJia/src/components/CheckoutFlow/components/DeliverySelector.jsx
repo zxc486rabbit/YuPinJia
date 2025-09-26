@@ -34,8 +34,10 @@ export default function DeliverySelector({
   onBack,
   onNext,
   styles,
+  /** ★ 新增：會員地址，由父層傳入 */
+  memberAddress, // e.g. "台南市善化區 XXX 路 123 號"
 }) {
-  // ====== 新增：店到店選店相關（原本） ======
+  // ====== 店到店選店相關（原本） ======
   const [cvsSubtype, setCvsSubtype] = useState("UNIMARTC2C"); // 7-ELEVEN
   const popupRef = useRef(null);
 
@@ -43,10 +45,13 @@ export default function DeliverySelector({
     /iPad|iPhone|iPod/.test(navigator.userAgent) &&
     !window.MSStream;
 
-  // ====== 新增：訂單自取 → 後端門市下拉 ======
+  // ====== 訂單自取 → 後端門市下拉 ======
   const [storeList, setStoreList] = useState([]); // [{label, value, key}]
   const [storesLoading, setStoresLoading] = useState(false);
   const [storesError, setStoresError] = useState("");
+
+  // ★ 紀錄「宅配到府」下，使用者是否手動改過出貨點，避免自動覆蓋
+  const pickupTouchedRef = useRef(false);
 
   // 只有在選到「訂單自取」時才拉門市清單；避免每次 render 重抓
   useEffect(() => {
@@ -63,11 +68,8 @@ export default function DeliverySelector({
           throw new Error(`GetStoreList 失敗 (${res.status}) ${t}`);
         }
         const data = await res.json();
-        // 預期格式：[{ label: "馬公門市", value: 1, key: "馬公門市" }, ...]
         const rows = Array.isArray(data) ? data : [];
         setStoreList(rows);
-        // 若先前尚未選擇且只有一筆，也可預設選上：
-        // if (!pickupLocation && rows.length === 1) setPickupLocation(rows[0].label);
       } catch (e) {
         setStoresError(e?.message || "無法取得門市清單");
       } finally {
@@ -101,6 +103,10 @@ export default function DeliverySelector({
   useEffect(() => {
     if ((delivery !== "店到店" && delivery !== "訂單自取") && pickupLocation) {
       setPickupLocation("");
+    }
+    // 每次離開「宅配到府」，重置 touched 旗標
+    if (delivery !== "宅配到府") {
+      pickupTouchedRef.current = false;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [delivery]);
@@ -146,6 +152,19 @@ export default function DeliverySelector({
       );
     }
   };
+
+  // ★ 自動帶入宅配到府的出貨點（會員地址）
+  useEffect(() => {
+    if (
+      delivery === "宅配到府" &&
+      !pickupLocation && // 只在目前是空值時帶入，避免覆蓋你手動輸入
+      memberAddress &&   // 有提供會員地址
+      !pickupTouchedRef.current // 使用者尚未手動修改
+    ) {
+      setPickupLocation(memberAddress);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [delivery, memberAddress]);
 
   // 下一步前的驗證：自取要選門市；店到店要選門市/有出貨點
   const handleNext = () => {
@@ -292,14 +311,21 @@ export default function DeliverySelector({
             </>
           )}
 
-          {/* 其他配送：維持原本（可手動輸入出貨點） */}
+          {/* 其他配送（含：宅配到府）：可手動輸入出貨點 */}
           {delivery !== "店到店" && delivery !== "訂單自取" && (
             <div style={styles.inputRow}>
               <input
                 style={styles.halfInput}
-                placeholder="出貨點"
+                placeholder={
+                  delivery === "宅配到府" ? "出貨點（預設為會員地址）" : "出貨點"
+                }
                 value={pickupLocation}
-                onChange={(e) => setPickupLocation(e.target.value)}
+                onChange={(e) => {
+                  setPickupLocation(e.target.value);
+                  if (delivery === "宅配到府") {
+                    pickupTouchedRef.current = true; // ★ 標記為使用者已手動修改
+                  }
+                }}
                 readOnly={false}
               />
               <input

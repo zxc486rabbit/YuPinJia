@@ -1,4 +1,5 @@
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { useState } from "react";
 import { EmployeeProvider } from "./utils/EmployeeContext"; // 引入登入上下文
 import Sidebar from "./components/sidebar";
 import AppLayout from "./AppLayout"; // 👈 主版面
@@ -13,19 +14,27 @@ import CheckoutPage from "./components/CheckoutPage"; // 結帳頁面
 import PrintPage from "./components/PrintPage"; // 列印頁面
 import LoginPage from "./utils/LoginPage"; // 列印頁面
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import PrivateRoute from "./utils/PrivateRoute"; // ★ 新增
 import "./Cart.css";
 import Modal from "react-modal";
+import "./utils/httpBootstrap";  // ← 全域 Token/刷新/重送在這裡掛好
 Modal.setAppElement("#root");
 
 function App() {
-  const queryClient = new QueryClient();
+  const [queryClient] = useState(() => new QueryClient()); // ★ lazy 建立一次
   return (
     <EmployeeProvider>
       <QueryClientProvider client={queryClient}>
         <Router>
           <Routes>
             {/* 用 AppLayout 套 Sidebar */}
-            <Route element={<AppLayout />}>
+            <Route
+              element={
+                <PrivateRoute>
+                  <AppLayout />
+                </PrivateRoute>
+              }
+            >
               {/* 主頁 */}
               <Route path="/" element={<Home />} />
               {/* 結帳頁面 */}

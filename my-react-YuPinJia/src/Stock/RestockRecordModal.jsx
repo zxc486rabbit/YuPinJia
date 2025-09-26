@@ -1,162 +1,396 @@
-import { Modal, Button, Table, Form } from "react-bootstrap";
-import { FaEdit, FaTrash } from "react-icons/fa";
-import { useState } from "react";
+// src/pages/RestockRecordModal.jsx
+import { Modal, Button, Table, Form, Offcanvas } from "react-bootstrap";
+import { FaEdit, FaTrash, FaCheck, FaEye } from "react-icons/fa";
+import { useEffect, useMemo, useState } from "react";
 import Swal from "sweetalert2";
 
-export default function RestockRecordModal({ show, onHide, data }) {
-  const [showImageModal, setShowImageModal] = useState(false);
-  const [showDetailModal, setShowDetailModal] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
-  const [selectedRecord, setSelectedRecord] = useState(null);
-  const [editableInfo, setEditableInfo] = useState({});
+// ✅ 共用 api（已含 Token / 600 / 401 自動處理）
+import api from "../utils/apiClient";
 
-  const displayData = [
-    {
-      product: "御品家大禮包",
-      branch: "馬公門市",
-      supplier: "汪汪集團",
-      date: "2024-12-04",
-      quantity: 100,
-      image: "檢視",
-      detail: [
-        {
-          name: "御品家大禮包",
-          category: "禮盒",
-          quantity: 50,
-          pack: 10,
-          unit: "包",
-          price: 150,
-          cost: 120,
-        },
-        {
-          name: "海苔餅",
-          category: "零食",
-          quantity: 100,
-          pack: 20,
-          unit: "包",
-          price: 80,
-          cost: 65,
-        },
-      ],
-      operator: "汪寶寶",
-      manager: "大胖熊",
-    },
-    ...data.map((item) => ({
-      ...item,
-      detail: item.detail || [], // 確保 detail 是陣列
-    })),
-  ];
+const STATUS = { DRAFT: 0, POSTED: 1, VOID: 9 };
+const normalizeStatus = (s) => ([0, 1, 9].includes(Number(s)) ? Number(s) : 0);
+const statusLabel = (s) =>
+  s === 0 ? "暫存" : s === 1 ? "已進貨" : s === 9 ? "作廢" : "未知";
+const statusBadge = (s) =>
+  s === 0
+    ? "badge bg-secondary"
+    : s === 1
+    ? "badge bg-success"
+    : s === 9
+    ? "badge bg-dark"
+    : "badge bg-light text-dark";
 
-  const handleShowDetail = (record, editing = false) => {
-    setSelectedRecord({
-      ...record,
-      detail: Array.isArray(record.detail) ? record.detail : [], // 保護
-    });
-    setIsEditing(editing);
-    setEditableInfo({
-      branch: record.branch,
-      supplier: record.supplier,
-      date: record.date,
-      operator: record.operator,
-    });
-    setShowDetailModal(true);
+export default function RestockRecordModal({ show, onHide, data = [] }) {
+  const [rows, setRows] = useState([]);
+  useEffect(() => {
+    setRows(Array.isArray(data) ? data : []);
+  }, [data]);
+
+  const [filter, setFilter] = useState("ALL");
+  const [detail, setDetail] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const [hints, setHints] = useState({});
+  const [hintTimers, setHintTimers] = useState({});
+
+  const [supplierOpts, setSupplierOpts] = useState([]);
+  async function loadSuppliers() {
+    try {
+      const { data } = await api.get("/Dropdown/GetSupplier");
+      const arr = Array.isArray(data) ? data : [];
+      setSupplierOpts(arr.map((x) => ({ value: x.value, label: x.label })));
+    } catch {
+      setSupplierOpts([]);
+    }
+  }
+  useEffect(() => {
+    if (show) loadSuppliers();
+  }, [show]);
+
+  const filtered = useMemo(() => {
+    const list = (rows || []).map((x) => ({ ...x, status: normalizeStatus(x.status) }));
+    if (filter === "ALL") return list;
+    const want = filter === "DRAFT" ? 0 : filter === "POSTED" ? 1 : 9;
+    return list.filter((x) => Number(x.status) === want);
+  }, [rows, filter]);
+
+  const openDetail = async (record, editable = false) => {
+    try {
+      setLoading(true);
+      const { data } = await api.get(`/t_PurchaseOrder/${record.id}`);
+      const rec = {
+        ...data,
+        status: normalizeStatus(data?.status),
+        date: (data?.date || "").toString().slice(0, 10),
+      };
+      const items = Array.isArray(rec.items) ? rec.items : [];
+      setDetail({
+        record: rec,
+        editable: editable && rec.status === STATUS.DRAFT,
+        header: { supplierName: rec.supplierName || "", date: rec.date || "" },
+        items: items.map((it) => ({
+          id: it.id,
+          productId: it.productId ?? 0,
+          productName: it.productName ?? "",
+          quantity: Number(it.quantity) || 0,
+          unit: it.unit || "件",
+          unitPrice: Number(it.unitPrice) || 0, // 不顯示
+        })),
+      });
+    } catch (err) {
+      Swal.fire(
+        "讀取失敗",
+        String(err?.response?.data?.message || err?.message || ""),
+        "error"
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleSave = () => {
-    Swal.fire({
-      title: "確認儲存變更？",
-      text: "儲存後將更新進貨紀錄",
+  // 供應商 inline 更新
+  const findValueByLabel = (label) =>
+    supplierOpts.find((o) => o.label === label)?.value ?? "";
+  const updateDraftSupplier = async (row, newValue) => {
+    if (newValue === "__current__") return;
+    const newLabel =
+      supplierOpts.find((o) => String(o.value) === String(newValue))?.label || "";
+    if (!newLabel) return;
+    try {
+      const { data } = await api.get(`/t_PurchaseOrder/${row.id}`);
+      const rec = data || {};
+      const body = {
+        id: rec.id,
+        orderNumber: rec.orderNumber || null,
+        supplierName: newLabel,
+        date: (rec.date ? String(rec.date).slice(0, 10) : "") + "T00:00:00",
+        createdAt: rec.createdAt || null,
+        status: STATUS.DRAFT,
+        note: rec.note || null,
+        items: (rec.items || []).map((it) => ({
+          id: it.id ?? 0,
+          pickOrderId: rec.id, // 後端仍用此欄位名稱就維持
+          productId: it.productId || 0,
+          productName: it.productName || "",
+          quantity: Number(it.quantity) || 0,
+          unit: it.unit || "件",
+          unitPrice: Number(it.unitPrice) || 0,
+          pickOrder: null,
+        })),
+      };
+      await api.put(`/t_PurchaseOrder/${row.id}`, body);
+      setRows((prev) =>
+        prev.map((r) => (r.id === row.id ? { ...r, supplierName: newLabel } : r))
+      );
+      setDetail((d) =>
+        d && d.record?.id === row.id
+          ? { ...d, header: { ...d.header, supplierName: newLabel } }
+          : d
+      );
+      Swal.fire("已更新", "暫存單供應商已修改", "success");
+    } catch (err) {
+      Swal.fire(
+        "更新失敗",
+        String(err?.response?.data?.message || err?.message || ""),
+        "error"
+      );
+    }
+  };
+
+  // 模糊查詢
+  const fetchProductHints = async (idx, keyword) => {
+    try {
+      if (!keyword?.trim()) {
+        setHints((h) => ({ ...h, [idx]: { open: false, list: [] } }));
+        return;
+      }
+      const { data } = await api.get("/Dropdown/GetProductList", { params: { keyword } });
+      const list = Array.isArray(data) ? data : [];
+      setHints((h) => ({ ...h, [idx]: { open: true, list } }));
+    } catch {
+      setHints((h) => ({ ...h, [idx]: { open: true, list: [] } }));
+    }
+  };
+  const debounceFetch = (idx, term) => {
+    if (hintTimers[idx]) clearTimeout(hintTimers[idx]);
+    const t = setTimeout(() => fetchProductHints(idx, term), 200);
+    setHintTimers((m) => ({ ...m, [idx]: t }));
+  };
+  const chooseHint = async (idx, hint) => {
+    const label = hint?.label || "";
+    const value = hint?.value;
+    setDetail((d) => {
+      const items = [...d.items];
+      items[idx] = { ...items[idx], productId: value || 0, productName: label };
+      return { ...d, items };
+    });
+    setHints((h) => ({ ...h, [idx]: { open: false, list: [] } }));
+    try {
+      const { data } = await api.get("/t_Product/QueryProducts", {
+        params: { keyword: label, offset: 0, limit: 1 },
+      });
+      const item = Array.isArray(data?.items) && data.items[0];
+      if (item) {
+        setDetail((d) => {
+          const arr = [...d.items];
+          arr[idx] = {
+            ...arr[idx],
+            unit: item.unit || arr[idx].unit || "件",
+            unitPrice: Number(item.price) || 0,
+          };
+          return { ...d, items: arr };
+        });
+      }
+    } catch {}
+  };
+
+  const saveDraft = async () => {
+    if (!detail) return;
+    const ok = await Swal.fire({
+      title: "儲存變更？",
+      text: "將更新暫存單的明細與主檔",
       icon: "question",
       showCancelButton: true,
       confirmButtonText: "儲存",
       cancelButtonText: "取消",
-    }).then((result) => {
-      if (result.isConfirmed) {
-        setIsEditing(false);
-        Swal.fire("已儲存", "進貨紀錄已更新", "success").then(() => {
-          setShowDetailModal(false);
-        });
-      }
-    });
+    }).then((r) => r.isConfirmed);
+    if (!ok) return;
+    try {
+      const rec = detail.record;
+      const body = {
+        id: rec.id,
+        orderNumber: rec.orderNumber || null,
+        supplierName: detail.header.supplierName || null,
+        date: detail.header.date ? `${detail.header.date}T00:00:00` : null,
+        createdAt: rec.createdAt || null,
+        status: STATUS.DRAFT,
+        note: rec.note || null,
+        items: (detail.items || []).map((it) => ({
+          id: it.id ?? 0,
+          pickOrderId: rec.id,
+          productId: it.productId || 0,
+          productName: it.productName || "",
+          quantity: Number(it.quantity) || 0,
+          unit: it.unit || "件",
+          unitPrice: Number(it.unitPrice) || 0,
+          pickOrder: null,
+        })),
+      };
+      await api.put(`/t_PurchaseOrder/${rec.id}`, body);
+      await Swal.fire("已儲存", "暫存單已更新", "success");
+      setDetail((d) => ({ ...d, editable: false }));
+    } catch (err) {
+      Swal.fire(
+        "儲存失敗",
+        String(err?.response?.data?.message || err?.message || ""),
+        "error"
+      );
+    }
   };
 
-  const calcTotal = () => {
-    if (!selectedRecord) return { count: 0, total: 0 };
-    const allItems = selectedRecord.detail || [];
-    const totalAmount = allItems.reduce(
-      (sum, item) => sum + (item.quantity ?? 0) * (item.cost ?? 0),
-      0
-    );
-    return { count: allItems.length, total: totalAmount };
+  const postDraft = async (record) => {
+    const ok = await Swal.fire({
+      title: `將單號「${record.orderNumber || record.id}」進貨？`,
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: "進貨",
+      cancelButtonText: "取消",
+    }).then((r) => r.isConfirmed);
+    if (!ok) return;
+    try {
+      await api.put(`/t_PurchaseOrder/PutPurchaseStatus/${record.id}`, { status: 1 });
+      await Swal.fire("進貨完成", "此暫存單已過帳", "success");
+      setDetail(null);
+      setRows((prev) => prev.map((r) => (r.id === record.id ? { ...r, status: 1 } : r)));
+    } catch (err) {
+      Swal.fire(
+        "過帳失敗",
+        String(err?.response?.data?.message || err?.message || ""),
+        "error"
+      );
+    }
+  };
+
+  const deleteDraft = async (record) => {
+    const ok = await Swal.fire({
+      title: `刪除單號「${record.orderNumber || record.id}」？`,
+      text: "此操作無法復原",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "刪除",
+      cancelButtonText: "取消",
+    }).then((r) => r.isConfirmed);
+    if (!ok) return;
+    try {
+      await api.delete(`/t_PurchaseOrder/${record.id}`);
+      await Swal.fire("已刪除", "暫存單已刪除", "success");
+      setRows((prev) => prev.filter((r) => r.id !== record.id));
+      setDetail(null);
+    } catch (err) {
+      Swal.fire(
+        "刪除失敗",
+        String(err?.response?.data?.message || err?.message || ""),
+        "error"
+      );
+    }
   };
 
   return (
     <>
-      <Modal
-        show={show}
-        onHide={onHide}
-        size="xl"
-        dialogClassName="modal-80w"
-        centered
-      >
+      <Modal show={show} onHide={onHide} size="xl" centered>
         <Modal.Header closeButton>
           <Modal.Title>進貨紀錄</Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          <Table bordered responsive>
+          <div className="d-flex align-items-center gap-2 mb-3">
+            <span className="text-muted">狀態</span>
+            <select
+              className="form-select"
+              style={{ width: 180 }}
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+            >
+              <option value="ALL">全部</option>
+              <option value="DRAFT">暫存</option>
+              <option value="POSTED">已進貨</option>
+              <option value="VOID">作廢</option>
+            </select>
+          </div>
+
+          <Table bordered responsive className="align-middle">
             <thead className="table-light">
               <tr>
-                <th>進貨單號</th>
-                <th>進貨門市</th>
+                <th style={{ width: 180 }}>進貨單號</th>
                 <th>供應商名稱</th>
-                <th>進貨日期</th>
-                <th>總數量</th>
-                <th>貨單照片</th>
-                <th>進貨明細</th>
-                <th>操作員</th>
-                <th>主管簽核</th>
-                <th>操作</th>
+                <th style={{ width: 140 }}>狀態</th>
+                <th style={{ width: 140 }}>進貨日期</th>
+                <th style={{ width: 260 }}>操作</th>
               </tr>
             </thead>
             <tbody>
-              {displayData.map((item, index) => (
-                <tr key={index}>
-                  <td>T{1132000 + index}</td>
-                  <td>{item.branch}</td>
-                  <td>{item.supplier}</td>
-                  <td>{item.date}</td>
-                  <td>{item.quantity}</td>
-                  <td>
-                    <button
-                      className="check-button"
-                      onClick={() => setShowImageModal(true)}
-                    >
-                      {item.image}
-                    </button>
-                  </td>
-                  <td>
-                    <button
-                      className="check-button"
-                      onClick={() => handleShowDetail(item)}
-                    >
-                      檢視
-                    </button>
-                  </td>
-                  <td>{item.operator}</td>
-                  <td>{item.manager}</td>
-                  <td>
-                    <button
-                      className="btn btn-sm btn-outline-primary me-1"
-                      onClick={() => handleShowDetail(item, true)}
-                    >
-                      <FaEdit />
-                    </button>
-                    <button className="btn btn-sm btn-outline-danger">
-                      <FaTrash />
-                    </button>
+              {filtered.length ? (
+                filtered.map((item) => {
+                  const st = normalizeStatus(item.status);
+                  const isDraft = st === STATUS.DRAFT;
+                  // 供應商 select 的預設值 = 原本值；若不在清單，插入一個 "__current__" 作為顯示
+                  const mappedVal = findValueByLabel(item.supplierName);
+                  const selectValue = mappedVal || "__current__";
+                  return (
+                    <tr key={item.id}>
+                      <td>{item.orderNumber || item.id}</td>
+                      <td>
+                        {isDraft ? (
+                          <select
+                            className="form-select form-select-sm"
+                            value={selectValue}
+                            onChange={(e) => updateDraftSupplier(item, e.target.value)}
+                          >
+                            {!mappedVal && (
+                              <option value="__current__">
+                                {item.supplierName || "—"}
+                              </option>
+                            )}
+                            {supplierOpts.map((o) => (
+                              <option key={o.value} value={o.value}>
+                                {o.label}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          item.supplierName || "—"
+                        )}
+                      </td>
+                      <td>
+                        <span className={statusBadge(st)}>{statusLabel(st)}</span>
+                      </td>
+                      <td>{(item.date || "").toString().slice(0, 10)}</td>
+                      <td className="text-nowrap">
+                        {st === STATUS.POSTED && (
+                          <button
+                            className="btn btn-sm btn-outline-primary me-1"
+                            onClick={() => openDetail(item, false)}
+                          >
+                            <FaEye className="me-1" /> 檢視
+                          </button>
+                        )}
+                        {isDraft && (
+                          <>
+                            <button
+                              className="btn btn-sm btn-outline-secondary me-1"
+                              onClick={() => openDetail(item, true)}
+                            >
+                              <FaEdit className="me-1" /> 編輯
+                            </button>
+                            <button
+                              className="btn btn-sm btn-success me-1"
+                              onClick={() => postDraft(item)}
+                            >
+                              <FaCheck className="me-1" /> 進貨
+                            </button>
+                            <button
+                              className="btn btn-sm btn-outline-danger"
+                              onClick={() => deleteDraft(item)}
+                            >
+                              <FaTrash className="me-1" /> 刪除
+                            </button>
+                          </>
+                        )}
+                        {st !== STATUS.DRAFT && st !== STATUS.POSTED && (
+                          <button className="btn btn-sm btn-outline-secondary" disabled>
+                            已鎖定
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td colSpan={5} className="text-center">
+                    目前沒有符合條件的紀錄
                   </td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </Table>
         </Modal.Body>
@@ -167,115 +401,218 @@ export default function RestockRecordModal({ show, onHide, data }) {
         </Modal.Footer>
       </Modal>
 
-      <Modal
-        show={showImageModal}
-        onHide={() => setShowImageModal(false)}
-        centered
+      {/* 右側抽屜（在最上層） */}
+      <Offcanvas
+        show={!!detail}
+        onHide={() => setDetail(null)}
+        placement="end"
+        backdrop
+        scroll={false}
+        style={{ width: 720, zIndex: 1065 }}
       >
-        <Modal.Header closeButton>
-          <Modal.Title>貨單照片</Modal.Title>
-        </Modal.Header>
-        <Modal.Body className="text-center">
-          <img
-            src="https://via.placeholder.com/600x400.png?text=Sample+Invoice"
-            alt="貨單"
-            className="img-fluid"
-          />
-        </Modal.Body>
-      </Modal>
-
-      <Modal
-        show={showDetailModal}
-        onHide={() => setShowDetailModal(false)}
-        size="xl"
-        dialogClassName="modal-80w"
-        centered
-      >
-        <Modal.Header closeButton>
-          <Modal.Title>進貨明細</Modal.Title>
-        </Modal.Header>
-        <Modal.Body className="bg-light">
-          {selectedRecord && (
-            <div className="mb-4 p-3 border rounded bg-white">
-              <div className="row g-3">
-                {["門市", "供應商", "進貨日期", "操作員"].map((label, i) => (
-                  <div className="col-md-3" key={label}>
-                    <Form.Label style={{ fontSize: "1rem" }}>
-                      {label}
-                    </Form.Label>
-                    <Form.Control
-                      type={label.includes("日期") ? "date" : "text"}
-                      value={editableInfo[Object.keys(editableInfo)[i]]}
-                      onChange={(e) =>
-                        setEditableInfo({
-                          ...editableInfo,
-                          [Object.keys(editableInfo)[i]]: e.target.value,
-                        })
-                      }
-                      disabled={!isEditing}
-                      style={{ fontSize: "1rem" }}
-                    />
-                  </div>
-                ))}
-              </div>
+        <style>{`.offcanvas-backdrop.show{ z-index:1064; opacity:.82 } .hover-bg:hover{ background:#f6f7f9 }`}</style>
+        <Offcanvas.Header closeButton>
+          <Offcanvas.Title className="w-full">
+            進貨明細 — {detail?.record?.orderNumber || detail?.record?.id}{" "}
+            <span className={statusBadge(detail?.record?.status)}>
+              {statusLabel(detail?.record?.status)}
+            </span>
+            <div className="text-muted mt-1" style={{ fontSize: ".9rem" }}>
+              供應商：{detail?.header?.supplierName || "—"}　日期：
+              {detail?.header?.date || "—"}
             </div>
-          )}
+          </Offcanvas.Title>
+        </Offcanvas.Header>
 
-          <div className="table-responsive border p-3 rounded shadow-sm bg-white">
+        <Offcanvas.Body className="bg-light">
+          <div className="p-3 bg-white border rounded">
             <Table bordered className="align-middle text-center">
               <thead className="table-info">
                 <tr>
-                  <th>商品名稱</th>
-                  <th>分類</th>
-                  <th>數量</th>
-                  <th>分包裝數量</th>
-                  <th>單位</th>
-                  <th>單價</th>
-                  <th>進貨價</th>
+                  <th>商品名稱（可模糊查詢）</th>
+                  <th style={{ width: 140 }}>數量</th>
+                  <th style={{ width: 140 }}>單位</th>
                 </tr>
               </thead>
               <tbody>
-                {selectedRecord?.detail?.length > 0 ? (
-                  selectedRecord.detail.map((item, idx) => (
+                {loading ? (
+                  <tr>
+                    <td colSpan={3}>讀取中…</td>
+                  </tr>
+                ) : detail?.editable ? (
+                  (detail?.items || []).length ? (
+                    detail.items.map((it, idx) => {
+                      const rowHints = hints[idx]?.list || [];
+                      const open = hints[idx]?.open && rowHints.length > 0;
+                      return (
+                        <tr key={idx} style={{ position: "relative" }}>
+                          <td style={{ textAlign: "left" }}>
+                            <Form.Control
+                              type="text"
+                              value={it.productName}
+                              placeholder="輸入商品名稱（支援模糊查詢）"
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                setDetail((d) => {
+                                  const arr = [...d.items];
+                                  arr[idx] = { ...arr[idx], productName: v };
+                                  return { ...d, items: arr };
+                                });
+                                if (v) debounceFetch(idx, v);
+                              }}
+                              onFocus={() => {
+                                if (it.productName) debounceFetch(idx, it.productName);
+                              }}
+                              onBlur={() => {
+                                setTimeout(
+                                  () =>
+                                    setHints((h) => ({
+                                      ...h,
+                                      [idx]: {
+                                        open: false,
+                                        list: h[idx]?.list || [],
+                                      },
+                                    })),
+                                  200
+                                );
+                              }}
+                            />
+                            {open && (
+                              <div
+                                className="border rounded bg-white shadow-sm"
+                                style={{
+                                  position: "absolute",
+                                  zIndex: 1056,
+                                  top: "calc(100% - 4px)",
+                                  left: 12,
+                                  right: 12,
+                                  maxHeight: 200,
+                                  overflow: "auto",
+                                }}
+                              >
+                                {rowHints.map((h, i) => (
+                                  <div
+                                    key={i}
+                                    className="px-2 py-1 hover-bg"
+                                    style={{ cursor: "pointer" }}
+                                    onMouseDown={(e) => {
+                                      e.preventDefault();
+                                      chooseHint(idx, h);
+                                    }}
+                                  >
+                                    {h.label}
+                                    <span className="text-muted ms-2">#{h.key}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </td>
+                          <td>
+                            <Form.Control
+                              type="number"
+                              value={it.quantity}
+                              onChange={(e) =>
+                                setDetail((d) => {
+                                  const arr = [...d.items];
+                                  arr[idx] = {
+                                    ...arr[idx],
+                                    quantity: parseInt(e.target.value || 0, 10) || 0,
+                                  };
+                                  return { ...d, items: arr };
+                                })
+                              }
+                            />
+                          </td>
+                          <td>
+                            <Form.Control
+                              type="text"
+                              value={it.unit}
+                              placeholder="件 / 箱 / 包"
+                              onChange={(e) =>
+                                setDetail((d) => {
+                                  const arr = [...d.items];
+                                  arr[idx] = { ...arr[idx], unit: e.target.value || "件" };
+                                  return { ...d, items: arr };
+                                })
+                              }
+                            />
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={3}>此暫存單目前沒有明細，可新增</td>
+                    </tr>
+                  )
+                ) : (detail?.items || []).length ? (
+                  detail.items.map((it, idx) => (
                     <tr key={idx}>
-                      <td>{item.name}</td>
-                      <td>{item.category}</td>
-                      <td>{item.quantity}</td>
-                      <td>{item.pack}</td>
-                      <td>{item.unit}</td>
-                      <td>{item.price}</td>
-                      <td>{item.cost}</td>
+                      <td style={{ textAlign: "left" }}>
+                        {it.productName || it.productId}
+                      </td>
+                      <td>{it.quantity}</td>
+                      <td>{it.unit || "件"}</td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="7">此筆紀錄沒有明細資料</td>
+                    <td colSpan={3}>沒有明細資料</td>
                   </tr>
                 )}
               </tbody>
             </Table>
-            <div className="text-end fw-bold mt-3">
-              共計 {calcTotal().count} 項，總計：
-              {calcTotal().total.toLocaleString()} 元
-            </div>
-          </div>
 
-          {isEditing && (
-            <div className="text-end mt-3">
-              <Button
-                style={{
-                  backgroundColor: "#D68E08",
-                  border: "none",
-                  fontSize: "1rem",
-                }}
-                onClick={handleSave}
-              >
-                儲存
-              </Button>
-            </div>
-          )}
-        </Modal.Body>
-      </Modal>
+            {detail?.editable && (
+              <div className="d-flex justify-content-between align-items-center mt-2">
+                <div className="text-muted">
+                  共 {(detail?.items || []).length} 項；合計數量：
+                  {(detail?.items || []).reduce(
+                    (s, i) => s + (Number(i.quantity) || 0),
+                    0
+                  )}
+                </div>
+                <div className="d-flex gap-2">
+                  <Button
+                    variant="outline-secondary"
+                    onClick={() =>
+                      setDetail((d) => ({
+                        ...d,
+                        items: [
+                          ...d.items,
+                          {
+                            productId: 0,
+                            productName: "",
+                            quantity: 0,
+                            unit: "件",
+                            unitPrice: 0,
+                          },
+                        ],
+                      }))
+                    }
+                  >
+                    + 新增商品
+                  </Button>
+                  <Button
+                    style={{ backgroundColor: "#D68E08", border: "none" }}
+                    onClick={saveDraft}
+                  >
+                    儲存
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {detail?.record?.status === STATUS.DRAFT && !detail?.editable && (
+              <div className="text-end mt-3">
+                <Button variant="success" onClick={() => postDraft(detail.record)}>
+                  <FaCheck className="me-1" /> 進貨
+                </Button>
+              </div>
+            )}
+          </div>
+        </Offcanvas.Body>
+      </Offcanvas>
     </>
   );
 }

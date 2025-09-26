@@ -1,43 +1,50 @@
 import React from "react";
-import { useEmployee } from "../utils/EmployeeContext"; // ← 依你的路徑調整
+import Swal from "sweetalert2";
 
 export default function GiftTable({
   products = [],
   addToCart,
   cartItems = [],
   onCheckout,
+  giftQuota = 0,
+  isLoadingQuota = false,
 }) {
-  const { currentUser } = useEmployee() || {};
-  const employeeUser = currentUser?.user;
-
-  // 取剩餘額度優先（monthRemainGift），若沒有則用 giftAmount
-  const getGiftQuota = () => {
-    const remain = Number(employeeUser?.monthRemainGift);
-    return Number.isFinite(remain) && remain >= 0 ? remain : 0;
-  };
+  // 輕量提示
+  const toast = Swal.mixin({
+    toast: true,
+    position: "top",
+    showConfirmButton: false,
+    timer: 1500,
+  });
 
   // 計算購物車中贈品「原價合計」
   const calcGiftValue = (items) =>
-    (items || []).filter(i => i.isGift).reduce((sum, i) => {
-      const price = Number(i.originalPrice ?? i.price ?? i.unitPrice ?? 0);
-      const qty = Number(i.quantity ?? 1);
-      return sum + price * qty;
-    }, 0);
+    (items || [])
+      .filter((i) => i.isGift)
+      .reduce((sum, i) => {
+        const price = Number(i.originalPrice ?? i.price ?? i.unitPrice ?? 0);
+        const qty = Number(i.quantity ?? 1);
+        return sum + price * qty;
+      }, 0);
 
-  const quota = getGiftQuota();
+  const quota = Number.isFinite(Number(giftQuota)) ? Number(giftQuota) : 0;
   const usedByCart = calcGiftValue(cartItems);
   const remainForThisSession = Math.max(0, quota - usedByCart);
 
   const handleAddToCart = (item) => {
-    const product = {
+    if (isLoadingQuota) {
+      toast.fire({ icon: "info", title: "額度載入中，請稍候…" });
+      return;
+    }
+    const payload = {
       ...item,
-      productId: item.productId ?? item.id, // ⬅️ 統一用 productId 作為 key
+      productId: item.productId ?? item.id,
       quantity: 1,
-      unitPrice: 0,                             // 顯示價仍為 0
-      originalPrice: Number(item.price ?? 0),   // 存原價供額度扣用
+      unitPrice: 0, // 贈品顯示 0
+      originalPrice: Number(item.price ?? 0), // 額度扣原價
       isGift: true,
     };
-    addToCart(product);
+    addToCart(payload);
   };
 
   const giftProducts = products;
@@ -46,7 +53,7 @@ export default function GiftTable({
     <div className="content-container w-100">
       {/* 額度條 */}
       <div
-        className="d-flex align-items-center justify-content-between px-3 pt-2"
+        className="d-flex align-items-center justify-content-between px-3 py-2"
         style={{
           position: "sticky",
           top: 0,
@@ -68,7 +75,7 @@ export default function GiftTable({
               border: "1px solid #dee2e6",
             }}
           >
-            目前額度剩餘：NT$ {quota}
+            {isLoadingQuota ? "額度載入中…" : `目前額度剩餘：NT$ ${quota}`}
           </span>
           <span
             title="已放入購物車之贈品原價合計"
@@ -84,7 +91,7 @@ export default function GiftTable({
             購物車已佔用：NT$ {usedByCart}
           </span>
           <span
-            title="顯示上方便估：後端剩餘 - 此購物車佔用"
+            title="（顯示用途）本次可用 = 後端剩餘 - 此購物車佔用"
             style={{
               fontSize: "0.85rem",
               background: "#e2f0fb",
@@ -100,13 +107,7 @@ export default function GiftTable({
         </div>
       </div>
 
-      <div
-        className="mt-3 px-3"
-        style={{
-          height: "72vh",
-          overflowY: "auto",
-        }}
-      >
+      <div className="mt-3 px-3" style={{ height: "72vh", overflowY: "auto" }}>
         <div
           style={{
             display: "grid",
@@ -174,13 +175,16 @@ export default function GiftTable({
                     style={{
                       fontSize: "0.75rem",
                       backgroundColor:
-                        item.nowStock > 0 ? "#d4edda" : "#f8d7da",
-                      color: item.nowStock > 0 ? "#155724" : "#721c24",
+                        Number(item.nowStock ?? 0) > 0 ? "#d4edda" : "#f8d7da",
+                      color:
+                        Number(item.nowStock ?? 0) > 0 ? "#155724" : "#721c24",
                       padding: "2px 4px",
                       borderRadius: "4px",
                     }}
                   >
-                    {item.nowStock > 0 ? `庫存 ${item.nowStock}` : "缺貨"}
+                    {Number(item.nowStock ?? 0) > 0
+                      ? `庫存 ${item.nowStock}`
+                      : "缺貨"}
                   </span>
 
                   <div
@@ -190,7 +194,6 @@ export default function GiftTable({
                       alignItems: "flex-end",
                     }}
                   >
-                    {/* 原價刪除線（用於額度計算的原價） */}
                     <span
                       style={{
                         fontSize: "0.8rem",
@@ -198,9 +201,8 @@ export default function GiftTable({
                         textDecoration: "line-through",
                       }}
                     >
-                      NT$ {item.price ?? 0}
+                      NT$ {Number(item.price ?? 0).toLocaleString()}
                     </span>
-                    {/* 免費徽章 */}
                     <span
                       style={{
                         color: "#17a2b8",

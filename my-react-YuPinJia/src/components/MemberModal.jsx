@@ -123,7 +123,6 @@ export default function MemberModal({ show, onHide, onSelect }) {
     if (!show) return;
 
     const kw = input.trim();
-    setSelected(null);
 
     if (kw.length < 2) {
       setSuggestions([]);
@@ -236,10 +235,13 @@ export default function MemberModal({ show, onHide, onSelect }) {
     const dist = await fetchDistributorByMemberId(memberId);
     const normalized = normalizeMember(selected, dist);
 
-    onSelect(normalized);
-    setSelected(null);
-    setInput("");
-    onHide();
+    onHide(); // 先關
+    setTimeout(() => {
+      // 等背板收掉再回傳
+      onSelect(normalized);
+      setSelected(null);
+      setInput("");
+    }, 150);
   }
 
   return (
@@ -255,7 +257,10 @@ export default function MemberModal({ show, onHide, onSelect }) {
               autoFocus
               placeholder="輸入手機或會員編號（至少 2 個字）"
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={(e) => {
+                setSelected(null);
+                setInput(e.target.value);
+              }}
               disabled={loading}
             />
           </Col>

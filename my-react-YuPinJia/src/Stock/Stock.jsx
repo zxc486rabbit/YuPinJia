@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo } from "react";
-import "../components/Search.css"; // 引入搜尋框的 CSS
-import SearchField from "../components/SearchField"; // 搜尋框模組
+import { useEffect, useMemo, useRef, useState } from "react";
+import "../components/Search.css";
+import SearchField from "../components/SearchField";
 import { FaSearch } from "react-icons/fa";
 import { useEmployee } from "../utils/EmployeeContext";
 
@@ -17,177 +17,260 @@ function buildQuery(params = {}) {
   return s ? `?${s}` : "";
 }
 
+const toStr = (v) => (v === undefined || v === null ? "" : String(v));
+const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
+
 export default function Stock() {
-  const { currentUser } = useEmployee() || {}; // ⬅️ 取登入者
-  const [category, setCategory] = useState(""); // 對應後端 categoryId
-  const [keyword, setKeyword] = useState(""); // 對應後端 productName
-  const [storeId, setStoreId] = useState(""); // ⬅️ 新增：門市（對應後端 storeId）
-  const [tableData, setTableData] = useState([]); // t_Stock 原始資料
+  const { currentUser } = useEmployee() || {};
+  // userInfo 預設門市
+  const userStoreId = toStr(currentUser?.user?.storeId);
+  const userStoreName = toStr(currentUser?.user?.storeName);
+
+  // 查詢條件
+  const [category, setCategory] = useState("");                 // categoryId
+  const [keyword, setKeyword] = useState("");                   // productName (輸入中)
+  const [debouncedKeyword, setDebouncedKeyword] = useState(""); // 防抖後關鍵字
+  const [storeId, setStoreId] = useState("");                   // storeId（字串）
+
+  // 分頁（t_Stock 專用）
+  const [page, setPage] = useState(0);      // 0-based page index
+  const [limit, setLimit] = useState(50);   // 每頁筆數
+  const [total, setTotal] = useState(0);    // 總筆數
+
+  // 左側：庫存資料（t_Stock.items）
+  const [tableData, setTableData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // PendingOrder（未包裝/待處理）資料
-  const [pendingList, setPendingList] = useState([]);
-  const [pendingMap, setPendingMap] = useState(new Map()); // productId -> pendingQty
-
-  // 門市下拉資料
-  const [storeOptions, setStoreOptions] = useState([]);
+  // 門市下拉
+  const [storeOptions, setStoreOptions] = useState([]);         // [{value,label}]
   const [storeLoading, setStoreLoading] = useState(false);
-  const [storeError, setStoreError] = useState("");
 
-  // 載入門市清單
+  // 右側：低庫存預警（GetWarningStock）
+  const [warningData, setWarningData] = useState([]);
+  const [warningLoading, setWarningLoading] = useState(false);
+  const [warningError, setWarningError] = useState("");
+
+  // 高亮（右表點擊 → 左表）
+  const [highlightId, setHighlightId] = useState(""); // 字串版 productId
+  const rowRefs = useRef(new Map()); // productId(string) -> <tr> ref
+
+  // ---------- 關鍵字防抖 ----------
+  useEffect(() => {
+    const h = setTimeout(() => setDebouncedKeyword(keyword.trim()), 300);
+    return () => clearTimeout(h);
+  }, [keyword]);
+
+  // ---------- 當 storeId / category / keyword 改變時，重置分頁 ----------
+  useEffect(() => {
+    setPage(0);
+  }, [storeId, category, debouncedKeyword]);
+
+  // ---------- 載入門市清單（[{label,value,key}]） ----------
   useEffect(() => {
     const ctrl = new AbortController();
     (async () => {
       setStoreLoading(true);
-      setStoreError("");
       try {
-        const res = await fetch(`${API_BASE}/Dropdown/GetStoreList`, {
-          signal: ctrl.signal,
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const arr = await res.json();
-        // 轉成 SearchField 需要的 options 格式
-        const opts = (Array.isArray(arr) ? arr : []).map((x) => ({
-          value: String(x.value), // 用字串最穩，送參數時一樣會被轉成字串
-          label: x.label ?? String(x.value),
-        }));
+        const res = await fetch(`${API_BASE}/Dropdown/GetStoreList`, { signal: ctrl.signal });
+        const text = await res.text();
+        if (!res.ok) {
+          console.error("[GetStoreList] HTTP", res.status, res.statusText, "Body:", text);
+          throw new Error(`HTTP ${res.status}`);
+        }
+        const raw = text ? JSON.parse(text) : [];
+        let opts = (Array.isArray(raw) ? raw : []).map((x) => ({
+          value: toStr(x.value),
+          label: toStr(x.label ?? x.key ?? x.value),
+        })).filter((o) => o.value);
+
+        // 若清單中沒有 userInfo 的門市，補上去（置頂）
+        if (userStoreId && !opts.some((o) => o.value === userStoreId)) {
+          opts = [{ value: userStoreId, label: userStoreName || `門市 ${userStoreId}` }, ...opts];
+        }
+
         setStoreOptions(opts);
+
+        // 預設選取：優先 userInfo，其次第一個選項
+        if (!storeId) {
+          setStoreId(userStoreId || (opts[0]?.value ?? ""));
+        }
       } catch (e) {
         if (e.name !== "AbortError") {
-          console.error("門市清單載入失敗:", e);
-          setStoreError("門市清單載入失敗");
+          console.warn("門市清單載入失敗，使用 fallback：", e);
+          const fbValue = userStoreId || "1";
+          const fbLabel = userStoreName || `門市 ${fbValue}`;
+          setStoreOptions([{ value: fbValue, label: fbLabel }]);
+          if (!storeId) setStoreId(fbValue);
         }
       } finally {
         setStoreLoading(false);
       }
     })();
     return () => ctrl.abort();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userStoreId, userStoreName]);
 
-  // 1) 依條件向後端查 t_Stock（用後端篩選，不在前端過濾）
-  useEffect(() => {
-    const ctrl = new AbortController();
-    const t = setTimeout(async () => {
-      setLoading(true);
-      setError("");
-      try {
-        const url =
-          API_BASE +
-          "/t_Stock" +
-          buildQuery({
-            categoryId: category || undefined,
-            productName: keyword || undefined,
-            storeId: storeId || undefined, // ⬅️ 帶上門市
-          });
+  // ---------- 依條件載入 t_Stock（分頁 + 相容純陣列） ----------
+useEffect(() => {
+  if (!storeId) return; // 沒選門市不打
+  const ctrl = new AbortController();
+  (async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const offset = page * limit;
+      const url = API_BASE + "/t_Stock" + buildQuery({
+        storeId,
+        categoryId: category || undefined,
+        productName: debouncedKeyword || undefined,
+        offset,
+        limit,
+      });
 
-        const res = await fetch(url, { signal: ctrl.signal });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        setTableData(Array.isArray(data) ? data : []);
-      } catch (e) {
-        if (e.name !== "AbortError") {
-          console.error("載入失敗:", e);
-          setError("庫存載入失敗");
-        }
-      } finally {
-        setLoading(false);
+      const res = await fetch(url, { signal: ctrl.signal, headers: { Accept: "application/json" } });
+      const text = await res.text();
+      if (!res.ok) {
+        console.error("[t_Stock] HTTP", res.status, res.statusText, "Body:", text);
+        throw new Error(`HTTP ${res.status}`);
       }
-    }, 250); // 關鍵字防抖
 
-    return () => {
-      clearTimeout(t);
-      ctrl.abort();
-    };
-  }, [category, keyword, storeId]);
+      const json = text ? JSON.parse(text) : null;
 
-  // 2) 讀取 PendingOrder（未包裝）列表，建立 productId -> 數量 的對照表
+      // 兩種格式皆可
+      let items = [];
+      let totalVal = 0;
+      let limitVal = limit;
+      let offsetVal = offset;
+
+      if (Array.isArray(json)) {
+        // ★ 你的現況：純陣列
+        items = json;
+        // 若後端有帶 total/Total 在頂層也吃，否則用 items.length 當 fallback
+        totalVal = Number(json.total ?? json.Total ?? json.length ?? 0);
+        limitVal = limit;   // 後端若沒回 limit，就沿用前端設定
+        offsetVal = offset; // 同上
+      } else {
+        // 分頁殼：{ total, offset, limit, items }
+        items = Array.isArray(json?.items) ? json.items : [];
+        totalVal = Number(json?.total ?? 0);
+        limitVal = Number(json?.limit ?? limit);
+        offsetVal = Number(json?.offset ?? offset);
+      }
+
+      setTableData(items);
+      setTotal(Number.isFinite(totalVal) ? totalVal : (items?.length || 0));
+
+      // 後端可能調整 limit/offset，做一次對齊
+      if (Number.isFinite(limitVal) && limitVal > 0 && limitVal !== limit) setLimit(limitVal);
+      const correctedPage = Math.floor((Number.isFinite(offsetVal) ? offsetVal : 0) / (limitVal || 1));
+      if (correctedPage !== page) setPage(correctedPage);
+    } catch (e) {
+      if (e.name !== "AbortError") {
+        console.error("庫存載入失敗:", e);
+        setError("庫存載入失敗");
+        setTableData([]);
+        setTotal(0);
+      }
+    } finally {
+      setLoading(false);
+    }
+  })();
+  return () => ctrl.abort();
+}, [storeId, category, debouncedKeyword, page, limit]);
+
+  // ---------- 依條件載入 Warning API（低庫存預警，不分頁） ----------
   useEffect(() => {
+    if (!storeId) return;
     const ctrl = new AbortController();
     (async () => {
+      setWarningLoading(true);
+      setWarningError("");
       try {
-        const res = await fetch(`${API_BASE}/t_SalesOrder/PendingOrder`, {
-          signal: ctrl.signal,
+        const url = API_BASE + "/t_Stock/GetWarningStock" + buildQuery({
+          storeId,
+          categoryId: category || undefined,
+          productName: debouncedKeyword || undefined,
         });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const list = await res.json();
-        const arr = Array.isArray(list) ? list : [];
-        setPendingList(arr);
 
-        // 嘗試從可能的欄位推導 productId 與 pendingQty
-        const map = new Map();
-        for (const x of arr) {
-          const productId =
-            x.productId ?? x.id ?? x.product?.id ?? x.productID ?? null;
-          const pendingQty =
-            x.pendingQty ?? x.quantity ?? x.count ?? x.qty ?? 0;
-          if (productId != null) {
-            map.set(productId, (map.get(productId) || 0) + Number(pendingQty));
-          }
+        const res = await fetch(url, { signal: ctrl.signal, headers: { Accept: "application/json" } });
+        const text = await res.text();
+        if (!res.ok) {
+          console.warn("[GetWarningStock] HTTP", res.status, res.statusText, "Body:", text);
+          throw new Error(`HTTP ${res.status}`);
         }
-        setPendingMap(map);
+        const raw = text ? JSON.parse(text) : [];
+        const arr = Array.isArray(raw) ? raw : (Array.isArray(raw?.data) ? raw.data : []);
+        setWarningData(arr);
       } catch (e) {
         if (e.name !== "AbortError") {
-          console.error("PendingOrder 載入失敗:", e);
+          console.warn("WarningStock 載入失敗：", e);
+          setWarningError("預警載入失敗");
+          setWarningData([]);
         }
+      } finally {
+        setWarningLoading(false);
       }
     })();
     return () => ctrl.abort();
-  }, []);
+  }, [storeId, category, debouncedKeyword]);
 
-  // 安全取值：不同後端欄位名的容錯
-  const getProductId = (item) =>
-    item.productId ?? item.id ?? item.product?.id ?? item.productID ?? null;
-  const getProductName = (item) =>
-    item.productName ?? item.product?.name ?? item.name ?? "";
-  const getStoreQty = (item) =>
-    Number(item.storeQuantity ?? item.quantity ?? 0); // 門市庫存（若後端沒有 storeQuantity，就用 quantity）
-  const getTotalQty = (item) =>
-    Number(
-      item.totalQuantity ??
-        item.totalQty ??
-        item.allQuantity ??
-        item.quantity ??
-        0
-    ); // 總庫存（若後端沒有 total，退回 quantity）
-  const getSafety = (item) =>
-    Number(item.safetyStock ?? item.safeQty ?? Infinity);
-  const getPending = (item) => {
-    const pid = getProductId(item);
-    return pid != null ? pendingMap.get(pid) || 0 : 0;
+  // ---------- 左表欄位取值（依 t_Stock） ----------
+  const getProductId     = (x) => toStr(x.productId ?? x.id ?? x.product?.id ?? "");
+  const getProductName   = (x) => x.productName ?? x.product?.name ?? "";
+  const getTotalQuantity = (x) => Number(x.totalQuantity ?? 0);
+  const getStoreQuantity = (x) => Number(x.quantity ?? 0);
+  const getSafetyStock   = (x) => Number(x.safetyStock ?? 0);
+
+  // ---------- 右表欄位取值（Warning） ----------
+  const wId         = (w) => toStr(w.Id ?? w.id ?? w.stockId ?? w.StockId);
+  const wProductId  = (w) => toStr(w.ProductId ?? w.productId ?? w.pid);
+  const wName       = (w) => w.ProductName ?? w.productName ?? w.name ?? "";
+  const wQty        = (w) => Number(w.Quantity ?? w.quantity ?? w.qty ?? 0);
+  const wSafe       = (w) => Number(w.SafetyStock ?? w.safetyStock ?? w.safe ?? 0);
+  const wDiff       = (w) => wQty(w) - wSafe(w); // 差異 = 門市庫存 - 安全庫存
+
+  // 右表依差異由小到大（越缺越上面）
+  const sortedWarning = useMemo(() => {
+    const arr = [...warningData];
+    arr.sort((a, b) => wDiff(a) - wDiff(b));
+    return arr;
+  }, [warningData]);
+
+  // 點擊右側預警 → 左表高亮 + 捲動
+  const onPickWarning = (w) => {
+    const pid = wProductId(w);
+    if (!pid) return;
+    setHighlightId(pid);
+
+    const el = rowRefs.current.get(pid);
+    if (el && typeof el.scrollIntoView === "function") {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+    setTimeout(() => setHighlightId((cur) => (cur === pid ? "" : cur)), 3000);
   };
 
-  // 右側：將 PendingOrder 結果與目前載入的庫存資料做 join（好顯示產品名與門市庫存）
-  const pendingRows = useMemo(() => {
-    const byId = new Map(tableData.map((x) => [getProductId(x), x]));
-    const rows = [];
-    for (const [pid, qty] of pendingMap.entries()) {
-      const item = byId.get(pid);
-      rows.push({
-        productId: pid,
-        productName: item ? getProductName(item) : `#${pid}`,
-        storeQty: item ? getStoreQty(item) : 0,
-        pendingQty: qty,
-      });
-    }
-    // 大到小排序：先處理未包裝數量多的
-    rows.sort((a, b) => b.pendingQty - a.pendingQty);
-    return rows;
-  }, [pendingMap, tableData]);
+  // 分頁計算
+  const pageCount = Math.max(1, Math.ceil((total || 0) / (limit || 1)));
+  const canPrev = page > 0;
+  const canNext = page + 1 < pageCount;
 
-  // ✅ 清單載好後、且尚未選門市時，預設為登入者的門市
-  useEffect(() => {
-    if (!storeId && currentUser?.user?.storeId && storeOptions.length > 0) {
-      setStoreId(String(currentUser.user.storeId));
+  // 直接跳頁（輸入框）
+  const handleJump = (e) => {
+    const v = e.target.value;
+    const n = Number(v);
+    if (Number.isFinite(n)) {
+      const p = clamp(Math.floor(n) - 1, 0, pageCount - 1); // 使用者用 1-based
+      if (p !== page) setPage(p);
     }
-  }, [storeId, storeOptions.length, currentUser?.user?.storeId]);
+  };
 
   return (
     <div className="container-fluid">
       <div className="row">
         {/* 搜尋區 */}
         <div className="search-container d-flex flex-wrap gap-3 px-5 pt-4 pb-3 rounded">
-          {/* 門市下拉（送 storeId） */}
+          {/* 門市（預設取 userInfo 的 storeId/storeName） */}
           <SearchField
             type="select"
             value={storeId}
@@ -195,14 +278,14 @@ export default function Stock() {
             options={[...storeOptions]}
             disabled={storeLoading}
           />
-          {storeError && <span style={{ color: "red" }}>{storeError}</span>}
-          {/* 分類下拉（送 categoryId） */}
+
+          {/* 分類 */}
           <SearchField
             type="select"
             value={category}
             onChange={(e) => setCategory(e.target.value)}
             options={[
-              { value: "", label: "全部分類" },
+              { value: "",  label: "全部分類" },
               { value: "0", label: "澎湖特色土產海產類" },
               { value: "1", label: "自製糕餅類" },
               { value: "2", label: "澎湖冷凍海鮮產品類" },
@@ -210,19 +293,19 @@ export default function Stock() {
             ]}
           />
 
-          {/* 關鍵字搜尋（送 productName） */}
+          {/* 關鍵字（商品名稱） */}
           <div className="search-bar">
             <FaSearch className="search-icon" />
             <input
               type="text"
               placeholder="搜尋商品名稱..."
               value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
+              onChange={(e) => setKeyword(e.target.value.trimStart())}
             />
           </div>
         </div>
 
-        {/* 左邊 - 全部庫存 */}
+        {/* 左邊 - 全部庫存（對齊 t_Stock 欄位，分頁） */}
         <div className="col-7">
           <div
             style={{
@@ -253,131 +336,168 @@ export default function Stock() {
                 }}
               >
                 <tr>
-                  <th style={{ width: "400px" }}>商品名稱</th>
+                  <th style={{ width: "420px" }}>商品名稱</th>
                   <th>總庫存</th>
                   <th>門市庫存</th>
-                  <th>未包裝</th>
+                  <th>安全庫存</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr>
-                    <td colSpan={4}>載入中…</td>
-                  </tr>
+                  <tr><td colSpan={4}>載入中…</td></tr>
                 ) : error ? (
-                  <tr>
-                    <td colSpan={4} style={{ color: "red" }}>
-                      {error}
-                    </td>
-                  </tr>
+                  <tr><td colSpan={4} style={{ color: "red" }}>{error}</td></tr>
                 ) : tableData.length > 0 ? (
-                  tableData.map((item, index) => {
-                    const name = getProductName(item);
-                    const total = getTotalQty(item);
-                    const store = getStoreQty(item);
-                    const pending = getPending(item);
-                    const safety = getSafety(item);
+                  tableData.map((item) => {
+                    const pid    = getProductId(item); // 字串
+                    const name   = getProductName(item);
+                    const totalQ = getTotalQuantity(item);
+                    const storeQ = getStoreQuantity(item);
+                    const safety = getSafetyStock(item);
+                    const danger = storeQ < safety;
+
                     return (
-                      <tr key={index}>
+                      <tr
+                        key={pid || Math.random()}
+                        ref={(el) => { if (pid) rowRefs.current.set(pid, el); }}
+                        style={{
+                          transition: "background-color 200ms",
+                          backgroundColor: pid && pid === highlightId ? "rgba(255,230,150,0.8)" : "transparent",
+                        }}
+                      >
                         <td
                           title={name}
-                          style={{
-                            whiteSpace: "nowrap",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                          }}
+                          style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
                         >
                           {name}
                         </td>
-                        <td>{total}</td>
-                        <td
-                          style={{ color: store < safety ? "red" : "inherit" }}
-                        >
-                          {store}
-                        </td>
-                        <td>{pending}</td>
+                        <td>{totalQ}</td>
+                        <td style={{ color: danger ? "red" : "inherit", fontWeight: danger ? 600 : 400 }}>{storeQ}</td>
+                        <td>{safety}</td>
                       </tr>
                     );
                   })
                 ) : (
-                  <tr>
-                    <td colSpan={4}>無資料</td>
-                  </tr>
+                  <tr><td colSpan={4}>無資料</td></tr>
                 )}
               </tbody>
             </table>
           </div>
+
+          {/* 分頁器 */}
+          <div
+            style={{
+              width: "90%",
+              margin: "8px auto 0",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              fontSize: "0.95rem",
+            }}
+          >
+            <div>
+              總筆數：{total}　|　每頁
+              <select
+                value={limit}
+                onChange={(e) => {
+                  const v = Number(e.target.value) || 20;
+                  setLimit(v);
+                  setPage(0); // 換每頁筆數時回到第一頁
+                }}
+                style={{ marginLeft: 6, marginRight: 6 }}
+              >
+                {[10, 20, 30, 50, 100].map(n => (
+                  <option key={n} value={n}>{n}</option>
+                ))}
+              </select>
+              筆
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <button
+                className="btn btn-sm btn-outline-secondary"
+                disabled={!canPrev}
+                onClick={() => canPrev && setPage(page - 1)}
+              >
+                上一頁
+              </button>
+
+              <span>
+                第{" "}
+                <input
+                  type="number"
+                  min={1}
+                  max={pageCount}
+                  defaultValue={page + 1}
+                  onBlur={handleJump}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleJump(e);
+                  }}
+                  style={{ width: 64, textAlign: "center" }}
+                />{" "}
+                / {pageCount} 頁
+              </span>
+
+              <button
+                className="btn btn-sm btn-outline-secondary"
+                disabled={!canNext}
+                onClick={() => canNext && setPage(page + 1)}
+              >
+                下一頁
+              </button>
+            </div>
+          </div>
         </div>
 
-        {/* 右邊 - 預警／待處理（未包裝） */}
+        {/* 右邊 - 低庫存預警（可點擊） */}
         <div className="col-5">
           <div style={{ height: "79vh", overflow: "auto" }}>
-            <h5 className="no-safe-text mt-1 mb-0 py-2">
-              預警（待處理 / 未包裝）
-            </h5>
-            <table
-              className="table text-center"
-              style={{ fontSize: "1.3rem", width: "90%" }}
-            >
-              <thead
-                className="table-light"
-                style={{ borderTop: "1px solid #c5c6c7" }}
-              >
-                <tr>
-                  <th scope="col">商品名稱</th>
-                  <th scope="col">未包裝</th>
-                  <th scope="col">門市庫存</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pendingRows.length > 0 ? (
-                  pendingRows.map((row) => (
-                    <tr key={row.productId}>
-                      <td>{row.productName}</td>
-                      <td style={{ fontWeight: 600 }}>{row.pendingQty}</td>
-                      <td
-                        style={{
-                          color: row.storeQty === 0 ? "red" : "inherit",
-                        }}
-                      >
-                        {row.storeQty}
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={3}>目前沒有未包裝項目</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-
-            {/* 若你仍需要顯示「低庫存預警」，可取消下方註解（本地判斷 quantity < safetyStock） */}
-            {/*
-            <h6 className="mt-4 mb-2 px-3">低庫存預警</h6>
+            <h5 className="no-safe-text mt-1 mb-2 py-2">低庫存預警</h5>
             <table className="table text-center" style={{ fontSize: "1.1rem", width: "90%" }}>
-              <thead className="table-light">
+              <thead className="table-light" style={{ borderTop: "1px solid #c5c6c7" }}>
                 <tr>
                   <th>商品名稱</th>
                   <th>門市庫存</th>
-                  <th>預警數量</th>
+                  <th>安全庫存</th>
+                  <th>差異</th>
                 </tr>
               </thead>
               <tbody>
-                {tableData
-                  .filter((v) => getStoreQty(v) < getSafety(v))
-                  .map((v, i) => (
-                    <tr key={i}>
-                      <td>{getProductName(v)}</td>
-                      <td style={{ color: "red" }}>{getStoreQty(v)}</td>
-                      <td>{getSafety(v)}</td>
-                    </tr>
-                  ))}
+                {warningLoading ? (
+                  <tr><td colSpan={4}>載入中…</td></tr>
+                ) : warningError ? (
+                  <tr><td colSpan={4} style={{ color: "red" }}>{warningError}</td></tr>
+                ) : sortedWarning.length > 0 ? (
+                  sortedWarning.map((w, i) => {
+                    const id   = wId(w) || `row-${i}`;
+                    const pid  = wProductId(w);
+                    const name = wName(w);
+                    const qty  = wQty(w);
+                    const safe = wSafe(w);
+                    const diff = wDiff(w);
+                    return (
+                      <tr
+                        key={id}
+                        onClick={() => onPickWarning(w)}
+                        style={{ cursor: pid ? "pointer" : "default" }}
+                        title={pid ? "點擊以在左側高亮" : undefined}
+                      >
+                        <td style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</td>
+                        <td style={{ color: qty < safe ? "red" : "inherit", fontWeight: qty < safe ? 600 : 400 }}>{qty}</td>
+                        <td>{safe}</td>
+                        <td style={{ fontWeight: 600, color: diff < 0 ? "red" : "inherit" }}>{diff}</td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr><td colSpan={4}>目前沒有低庫存品項</td></tr>
+                )}
               </tbody>
             </table>
-            */}
           </div>
         </div>
+
       </div>
     </div>
   );

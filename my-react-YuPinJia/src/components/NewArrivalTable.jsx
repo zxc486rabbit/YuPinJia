@@ -1,66 +1,35 @@
 import React from "react";
 
+const SOURCE_LABEL = {
+  distributor: "經銷",
+  level: "等級",
+  store: "門市",
+  product: "售價",
+};
+
 export default function NewArrivalTable({
   products = [],
   addToCart,
   cartItems = [],
   onCheckout,
-  usedPoints = 0,
-  currentMember,
-  isGuideSelf = false,
 }) {
   const handleAddToCart = (item) => {
-    const product = {
+    const payload = {
       ...item,
-      productId: item.productId ?? item.id, // ⬅️ 統一用 productId 作為 key
+      productId: item.productId ?? item.id,
       quantity: 1,
     };
-    addToCart(product);
+    addToCart(payload);
   };
 
-  const parsePrice = (val) =>
-    typeof val === "number" ? val : Number(String(val).replace(/[^0-9.]/g, ""));
-
-  const getMemberPrice = (basePrice) => {
-    if (!currentMember) return basePrice;
-    return Math.round(basePrice * (currentMember?.discountRate ?? 1));
-  };
-
-  const checkoutWithDiscount = () => {
-    if (!onCheckout) return;
-
-    const subtotal = cartItems.reduce((sum, item) => {
-      const price = Number(item.unitPrice ?? 0);
-      const discountRate =
-        isGuideSelf || currentMember?.subType === "廠商"
-          ? currentMember?.discountRate ?? 1
-          : 1;
-      const finalPrice = Math.round(price * discountRate);
-
-      return sum + finalPrice * item.quantity;
-    }, 0);
-
-    const finalTotal = subtotal - usedPoints;
-
-    onCheckout?.({
-      items: cartItems,
-      subtotal,
-      pointDiscount: usedPoints,
-      finalTotal,
-      usedPoints,
-    });
-  };
-
-  const newProducts = [...products].sort((a, b) => b.id - a.id).slice(0, 6);
+  // 這裡保留簡單的「取最新」邏輯（如需依 createdAt 改排序可調整）
+  const newProducts = [...products].sort((a, b) => (b.id ?? 0) - (a.id ?? 0)).slice(0, 6);
 
   return (
     <div className="content-container w-100">
       <div
         className="mt-3 px-3"
-        style={{
-          height: "75vh",
-          overflowY: "auto",
-        }}
+        style={{ height: "75vh", overflowY: "auto" }}
       >
         <div
           style={{
@@ -70,16 +39,21 @@ export default function NewArrivalTable({
           }}
         >
           {newProducts.length > 0 ? (
-            newProducts.map((item) => {
-              const originalPrice = parsePrice(item.price);
-              const discountedPrice = getMemberPrice(originalPrice);
-              const isDiscounted =
-                (currentMember?.discountRate ?? 1) < 1 &&
-                discountedPrice !== originalPrice;
+            newProducts.map((p) => {
+              const id = p.productId ?? p.id;
+              const inCartQty =
+                cartItems?.find(
+                  (c) => (c.productId ?? c.id) === id && !c.isGift
+                )?.quantity ?? 0;
+
+              const showPrice = Number(p.calculatedPrice ?? p.price ?? 0);
+              const showOriginal =
+                Number(p.price ?? 0) > 0 &&
+                Number(p.price) !== Number(p.calculatedPrice ?? p.price);
 
               return (
                 <div
-                  key={item.id}
+                  key={id}
                   style={{
                     height: "140px",
                     border: "1px solid #dee2e6",
@@ -93,7 +67,7 @@ export default function NewArrivalTable({
                     padding: "10px",
                     transition: "all 0.2s",
                   }}
-                  onClick={() => handleAddToCart(item)}
+                  onClick={() => handleAddToCart(p)}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.transform = "scale(1.03)";
                     e.currentTarget.style.boxShadow =
@@ -105,21 +79,9 @@ export default function NewArrivalTable({
                       "0 2px 4px rgba(0,0,0,0.08)";
                   }}
                 >
-                  <div
-                    style={{
-                      fontWeight: "600",
-                      fontSize: "1rem",
-                      color: "#495057",
-                      minHeight: "48px",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      display: "-webkit-box",
-                      WebkitLineClamp: 2,
-                      WebkitBoxOrient: "vertical",
-                      textAlign: "center",
-                    }}
-                  >
-                    {item.name}
+                  <div className="d-flex align-items-center justify-content-between">
+                    <div className="fw-bold">{p.name}</div>
+                    <span className="badge text-bg-info">新品</span>
                   </div>
 
                   <div
@@ -134,57 +96,49 @@ export default function NewArrivalTable({
                       style={{
                         fontSize: "0.75rem",
                         backgroundColor:
-                          item.nowStock > 0 ? "#d4edda" : "#f8d7da",
-                        color: item.nowStock > 0 ? "#155724" : "#721c24",
+                          Number(p.nowStock ?? 0) > 0 ? "#d4edda" : "#f8d7da",
+                        color:
+                          Number(p.nowStock ?? 0) > 0 ? "#155724" : "#721c24",
                         padding: "2px 4px",
                         borderRadius: "4px",
                       }}
                     >
-                      {item.nowStock > 0 ? `庫存 ${item.nowStock}` : "缺貨"}
+                      {Number(p.nowStock ?? 0) > 0
+                        ? `庫存 ${p.nowStock}`
+                        : "缺貨"}
                     </span>
 
                     <div style={{ textAlign: "right" }}>
-                      {isDiscounted ? (
-                        <div>
-                          <div
-                            style={{
-                              fontSize: "0.75rem",
-                              color: "#868e96",
-                              textDecoration: "line-through",
-                            }}
-                          >
-                            ${originalPrice.toLocaleString()}
-                          </div>
-                          <div
-                            style={{
-                              color: "#e83e8c",
-                              fontWeight: "700",
-                              fontSize: "1rem",
-                            }}
-                          >
-                            ${discountedPrice.toLocaleString()}
-                            <span
-                              style={{
-                                fontSize: "0.65rem",
-                                color: "#28a745",
-                                marginLeft: "3px",
-                              }}
-                            >
-                              會員價
-                            </span>
-                          </div>
-                        </div>
-                      ) : (
+                      {showOriginal && (
                         <div
                           style={{
-                            color: "#e83e8c",
-                            fontWeight: "700",
-                            fontSize: "1rem",
+                            fontSize: "0.75rem",
+                            color: "#868e96",
+                            textDecoration: "line-through",
                           }}
                         >
-                          ${originalPrice.toLocaleString()}
+                          ${Number(p.price).toLocaleString()}
                         </div>
                       )}
+
+                      <div
+                        style={{
+                          color: "#e83e8c",
+                          fontWeight: "700",
+                          fontSize: "1rem",
+                        }}
+                      >
+                        ${showPrice.toLocaleString()}
+                        <span
+                          className="badge rounded-pill text-bg-secondary ms-2"
+                          style={{ fontSize: "0.7rem" }}
+                          title={`價格來源：${p._priceSource}`}
+                        >
+                          {SOURCE_LABEL[p._priceSource] ?? p._priceSource}
+                        </span>
+                      </div>
+
+                      <div className="text-muted small">已在購物車：{inCartQty}</div>
                     </div>
                   </div>
                 </div>
@@ -201,7 +155,7 @@ export default function NewArrivalTable({
         style={{ gap: "10px", justifyContent: "flex-start" }}
       >
         <button className="open-button me-3">開錢櫃</button>
-        <button className="checkout-button" onClick={checkoutWithDiscount}>
+        <button className="checkout-button" onClick={onCheckout}>
           結帳
         </button>
       </div>

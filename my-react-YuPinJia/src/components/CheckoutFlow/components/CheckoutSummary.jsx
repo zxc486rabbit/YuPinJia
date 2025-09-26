@@ -10,8 +10,81 @@ export default function CheckoutSummary({
   onNext,
   styles,
 }) {
+  // ── 判斷是否要顯示回扣（導遊帳號 + 客人結帳） ─────────────────────────
+  const safeParse = (s, fb = null) => {
+    try {
+      return JSON.parse(s);
+    } catch {
+      return fb;
+    }
+  };
+  const currentMember = safeParse(localStorage.getItem("currentMember"), {});
+  const payerFlag =
+    (safeParse(localStorage.getItem("checkoutData"), {})?.checkoutPayer ||
+      localStorage.getItem("checkout_payer")) || "";
+  const isGuideAccount =
+    currentMember?.subType === "導遊" || currentMember?.buyerType === 1;
+  const isCustomerPay =
+    payerFlag === "CUSTOMER" || payerFlag === "customer"; // 非導遊本人
+  const shouldShowCashback = isGuideAccount && isCustomerPay;
 
-    // 統計贈品數（純顯示用）
+  // ── 計算回扣總額（只在 shouldShowCashback 時才算） ──────────────────
+  const num = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+  };
+  const pickDealerPrice = (p) => {
+    // 經銷 > 等級 > 門市 > 原價
+    const cands = [p.distributorPrice, p.levelPrice, p.storePrice, p.price];
+    for (const c of cands) {
+      const n = num(c);
+      if (n > 0) return n;
+    }
+    return 0;
+  };
+  const pickStorePrice = (p) => {
+    // 門市 > 原價
+    const cands = [p.storePrice, p.price];
+    for (const c of cands) {
+      const n = num(c);
+      if (n > 0) return n;
+    }
+    return 0;
+  };
+
+  const cashbackTotal = shouldShowCashback
+    ? cartItems.reduce((sum, i) => {
+        // 判定是否為贈品（或單價為 0）
+        const unit = Number(i.unitPrice) || 0;
+        const discountedUnit =
+          hasDiscount && typeof calcDiscountPrice === "function"
+            ? Number(calcDiscountPrice(unit))
+            : unit;
+        const isGift = !!i.isGift || discountedUnit === 0 || unit === 0;
+        if (isGift) return sum;
+
+        const storePrice =
+          num(i.__storePrice) ||
+          pickStorePrice({
+            storePrice: i.storePrice,
+            price: i.price,
+          });
+
+        const dealerPrice =
+          num(i.__dealerPrice) ||
+          pickDealerPrice({
+            distributorPrice: i.distributorPrice,
+            levelPrice: i.levelPrice,
+            storePrice: i.storePrice,
+            price: i.price,
+          });
+
+        const diff = Math.max(storePrice - dealerPrice, 0);
+        return sum + diff * (Number(i.quantity) || 0);
+      }, 0)
+    : 0;
+
+  // 統計贈品數（純顯示用）
   const giftCount = cartItems.filter((i) => {
     const unit = Number(i.unitPrice) || 0;
     const discountedUnit =
@@ -20,6 +93,7 @@ export default function CheckoutSummary({
         : unit;
     return i.isGift || discountedUnit === 0 || unit === 0;
   }).length;
+
   return (
     <>
       <h2 style={styles.title}>確認商品明細</h2>
@@ -53,7 +127,7 @@ export default function CheckoutSummary({
 
                 return (
                   <tr
-                    key={item.id}
+                    key={item.id ?? item.productId ?? item.name}
                     style={isGift ? { background: "#fff7e6" } : undefined}
                   >
                     <td style={styles.td}>
@@ -139,6 +213,16 @@ export default function CheckoutSummary({
             折抵金額:{" "}
             <span style={{ color: "#dc3545", fontWeight: "bold" }}>
               NT$ {discountAmount.toLocaleString()}
+            </span>
+          </p>
+        )}
+
+        {/* ★ 新增：本次回扣金額（只在導遊帳號 + 客人結帳時顯示） */}
+        {shouldShowCashback && (
+          <p>
+            本次回扣金額:{" "}
+            <span style={{ color: "#0d6efd", fontWeight: "bold" }}>
+              NT$ {Number(cashbackTotal).toLocaleString()}
             </span>
           </p>
         )}
