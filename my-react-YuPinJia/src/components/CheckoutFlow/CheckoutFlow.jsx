@@ -1,4 +1,3 @@
-// CheckoutFlow.jsx
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Swal from "sweetalert2";
@@ -9,13 +8,13 @@ import PaymentInvoice from "./components/PaymentInvoice";
 import PrintingOverlay from "./components/PrintingOverlay";
 import SignatureModal from "./components/SignatureModal";
 import { useEmployee } from "../../utils/EmployeeContext";
-import { customerBus } from "../../utils/customerBus"; // 檔頭引入
+import { customerBus } from "../../utils/customerBus";
 
 import styles from "./styles";
 
 const API_BASE = "https://yupinjia.hyjr.com.tw/api/api";
 
-// ===== 配送/付款 雙向碼表 =====
+// 配送方式（含司機配送）
 const DELIVERY_CODE = {
   現場帶走: 0,
   機場提貨: 1,
@@ -23,17 +22,13 @@ const DELIVERY_CODE = {
   宅配到府: 3,
   店到店: 4,
   訂單自取: 5,
+  司機配送: 6, // 記得後端也要對應此代碼
 };
-const CODE_TO_DELIVERY = Object.fromEntries(
-  Object.entries(DELIVERY_CODE).map(([k, v]) => [v, k])
-);
 const toDeliveryCode = (label) => DELIVERY_CODE[label] ?? 0;
 
 const PAYMENT_CODE = { 現金: 0, 匯款: 1, 支票: 2, 刷卡: 3 };
-const CODE_TO_PAYMENT = { 0: "現金", 1: "匯款", 2: "支票", 3: "刷卡" };
 const toPaymentCode = (label) => PAYMENT_CODE[label] ?? 0;
 
-// 後端要 YYYY-MM-DD
 const toDateOnly = (d) => {
   const dt = d ? new Date(d) : new Date();
   const y = dt.getFullYear();
@@ -42,25 +37,11 @@ const toDateOnly = (d) => {
   return `${y}-${m}-${day}`;
 };
 
-// 以本地時間為準的 ISO
 const toIsoLocal = (d) => {
   const dt = d ? new Date(d) : new Date();
   return new Date(dt.getTime() - dt.getTimezoneOffset() * 60000).toISOString();
 };
 
-// ===== 依會員身份與結帳對象判斷是否可賒帳 =====
-const getCreditAllowed = (member, isGuideSelf) => {
-  const sub = member?.subType ?? ""; // "導遊" | "廠商" | ""
-  if (sub === "導遊") {
-    return isGuideSelf ? !!member?.isSelfCredit : !!member?.isGuestCredit;
-  }
-  if (sub === "廠商") {
-    return !!member?.isSelfCredit;
-  }
-  return false;
-};
-
-// ===== 價格選擇工具（若缺少 __dealerPrice/__storePrice 時備援計算）=====
 const num = (v) => {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
@@ -83,6 +64,17 @@ const pickPriceStoreOnly = (p) => {
   return first.value;
 };
 
+const getCreditAllowed = (member, isGuideSelf) => {
+  const sub = member?.subType ?? "";
+  if (sub === "導遊") {
+    return isGuideSelf ? !!member?.isSelfCredit : !!member?.isGuestCredit;
+  }
+  if (sub === "廠商") {
+    return !!member?.isSelfCredit;
+  }
+  return false;
+};
+
 export default function CheckoutFlow({
   onComplete,
   cartItems = [],
@@ -99,6 +91,7 @@ export default function CheckoutFlow({
     employeeUser.chineseName || employeeUser.account || "操作員";
   const staffIdFromUser = Number(employeeUser.staffId ?? 0);
   const storeIdFromUser = Number(employeeUser.storeId ?? 0);
+  const storeNameFromUser = employeeUser.storeName || "本店";
 
   const [step, setStep] = useState(1);
   const [showSignature, setShowSignature] = useState(false);
@@ -113,37 +106,50 @@ export default function CheckoutFlow({
   const [printing, setPrinting] = useState(false);
   const [invoiceTaxId, setInvoiceTaxId] = useState("");
 
+  // 聯絡人（宅配隱藏）
   const [customerName, setCustomerName] = useState(currentMember.name || "");
   const [customerPhone, setCustomerPhone] = useState(
     currentMember.contactPhone || ""
   );
+
+  // 取貨或物流資訊
   const [pickupLocation, setPickupLocation] = useState("");
-  const [cashReceived, setCashReceived] = useState("");
-  const [paymentAmount, setPaymentAmount] = useState("");
-  const [creditCardInfo, setCreditCardInfo] = useState("");
-  const [openInvoiceNow, setOpenInvoiceNow] = useState(true);
   const [pickupTime, setPickupTime] = useState(
     new Date().toISOString().slice(0, 16)
   );
   const [note, setNote] = useState("");
+
+  // 金流
+  const [cashReceived, setCashReceived] = useState("");
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [creditCardInfo, setCreditCardInfo] = useState("");
+  const [openInvoiceNow, setOpenInvoiceNow] = useState(true);
   const [checkoutTime, setCheckoutTime] = useState(null);
 
-  // 角色（true=導遊本人；false=客人）
+  // 導遊身份
   const [isGuideSelf, setIsGuideSelf] = useState(false);
 
-  // 待取來源識別
-  const [isFromPickup, setIsFromPickup] = useState(false);
-  const [pickupSalesOrderId, setPickupSalesOrderId] = useState(null);
-  const [originalOrderNumber, setOriginalOrderNumber] = useState("");
-  const [originalDeliveryCode, setOriginalDeliveryCode] = useState(5);
-
-  // 付款附加欄位（匯款／支票）
+  // 匯款/支票
   const [bankCode, setBankCode] = useState("");
   const [paymentAccount, setPaymentAccount] = useState("");
   const [payerName, setPayerName] = useState(
     currentMember.fullName || currentMember.name || ""
   );
   const [checkDate, setCheckDate] = useState(toDateOnly(new Date()));
+
+  // 宅配/司機：寄件與收件（司機這次只用到收件地址）
+  const [senderName, setSenderName] = useState(storeNameFromUser);
+  const [senderPhone, setSenderPhone] = useState("");
+  const [senderAddress, setSenderAddress] = useState("");
+  const [receiverName, setReceiverName] = useState(
+    currentMember.fullName || currentMember.name || ""
+  );
+  const [receiverPhone, setReceiverPhone] = useState(
+    currentMember.contactPhone || ""
+  );
+  const [receiverAddress, setReceiverAddress] = useState(
+    currentMember.contactAddress || ""
+  );
 
   const deliveryOptions = [
     { label: "現場帶走", icon: null },
@@ -152,6 +158,7 @@ export default function CheckoutFlow({
     { label: "宅配到府", icon: null },
     { label: "店到店", icon: null },
     { label: "訂單自取", icon: null },
+    { label: "司機配送", icon: null },
   ];
 
   const paymentOptions = ["現金", "匯款", "支票", "刷卡"];
@@ -163,7 +170,52 @@ export default function CheckoutFlow({
     "碼頭提貨",
     "宅配到府",
     "訂單自取",
+    "司機配送",
   ].includes(delivery);
+
+  const extFinal = Number(initialFinalTotal);
+  const useExternalTotals = Number.isFinite(extFinal);
+
+  const discountRate = Number(currentMember?.discountRate ?? 1);
+  const totalOriginal = cartItems.reduce(
+    (sum, i) => sum + Number(i.unitPrice ?? 0) * Number(i.quantity ?? 1),
+    0
+  );
+  const couponDiscount = Number(usedPoints ?? 0);
+
+  const calcDiscountPrice = (p) => Math.round(Number(p) * (discountRate || 1));
+  const showDiscount = discountRate < 1;
+  const totalDiscounted = showDiscount
+    ? cartItems.reduce(
+        (sum, i) =>
+          sum + calcDiscountPrice(Number(i.unitPrice ?? 0)) * Number(i.quantity ?? 1),
+        0
+      )
+    : totalOriginal;
+  const computedFinalTotal = Math.max(0, totalDiscounted - couponDiscount);
+  const finalTotal = useExternalTotals ? extFinal : computedFinalTotal;
+  const discountAmount = totalOriginal - totalDiscounted;
+
+  const creditAllowed = getCreditAllowed(currentMember, isGuideSelf);
+  const handlePaymentMethodChange = (method) => setPayment(method);
+
+  const isGuideAccount =
+    currentMember?.subType === "導遊" || currentMember?.buyerType === 1;
+  const shouldComputeCashback = isGuideAccount && !isGuideSelf;
+
+  const calcCashbackTotal = () => {
+    if (!shouldComputeCashback) return 0;
+    let sum = 0;
+    for (const item of cartItems) {
+      if (item.isGift) continue;
+      const qty = Number(item.quantity ?? 1);
+      const storePrice = num(item.__storePrice ?? pickPriceStoreOnly(item));
+      const dealerPrice = num(item.__dealerPrice ?? pickPriceGeneral(item));
+      const diff = Math.max(storePrice - dealerPrice, 0);
+      sum += diff * qty;
+    }
+    return Math.round(sum);
+  };
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -171,15 +223,10 @@ export default function CheckoutFlow({
     let newOrderId = 0;
     try {
       const data = await res.clone().json();
-      if (typeof data === "number") {
-        newOrderId = Number(data);
-      } else if (Array.isArray(data) && data[0]?.id) {
-        newOrderId = Number(data[0].id);
-      } else if (data && typeof data === "object") {
-        newOrderId = Number(
-          data.id ?? data.Id ?? data.orderId ?? data.OrderId ?? 0
-        );
-      }
+      if (typeof data === "number") newOrderId = Number(data);
+      else if (Array.isArray(data) && data[0]?.id) newOrderId = Number(data[0].id);
+      else if (data && typeof data === "object")
+        newOrderId = Number(data.id ?? data.Id ?? data.orderId ?? data.OrderId ?? 0);
     } catch {}
     if (!newOrderId) {
       try {
@@ -212,59 +259,7 @@ export default function CheckoutFlow({
     return newOrderId;
   }
 
-  // ===== 顯示金額（單價已由 Home 決定）=====
-  const extFinal = Number(initialFinalTotal);
-  const useExternalTotals = Number.isFinite(extFinal);
-
-  const discountRate = Number(currentMember?.discountRate ?? 1);
-  const totalOriginal = cartItems.reduce(
-    (sum, i) => sum + Number(i.unitPrice ?? 0) * Number(i.quantity ?? 1),
-    0
-  );
-  const couponDiscount = Number(usedPoints ?? 0);
-
-  const calcDiscountPrice = (price) =>
-    Math.round(Number(price) * (discountRate || 1));
-  const showDiscount = discountRate < 1;
-  const totalDiscounted = showDiscount
-    ? cartItems.reduce(
-        (sum, i) =>
-          sum +
-          calcDiscountPrice(Number(i.unitPrice ?? 0)) * Number(i.quantity ?? 1),
-        0
-      )
-    : totalOriginal;
-  const computedFinalTotal = Math.max(0, totalDiscounted - couponDiscount);
-  const finalTotal = useExternalTotals ? extFinal : computedFinalTotal;
-  const discountAmount = totalOriginal - totalDiscounted;
-
-  // ===== 決定是否可賒帳（依當前身份）=====
-  const creditAllowed = getCreditAllowed(currentMember, isGuideSelf);
-
-  const handlePaymentMethodChange = (method) => {
-    setPayment(method);
-  };
-
-  // ===== 回扣計算（導遊帳號 + 客人結帳時才計）=====
-  const isGuideAccount =
-    currentMember?.subType === "導遊" || currentMember?.buyerType === 1;
-  const shouldComputeCashback = isGuideAccount && !isGuideSelf;
-
-  const calcCashbackTotal = () => {
-    if (!shouldComputeCashback) return 0;
-    let sum = 0;
-    for (const item of cartItems) {
-      if (item.isGift) continue;
-      const qty = Number(item.quantity ?? 1);
-      const storePrice = num(item.__storePrice ?? pickPriceStoreOnly(item));
-      const dealerPrice = num(item.__dealerPrice ?? pickPriceGeneral(item));
-      const diff = Math.max(storePrice - dealerPrice, 0);
-      sum += diff * qty;
-    }
-    return Math.round(sum);
-  };
-
-  // ===== 送主檔 + 明細 =====
+  // 送主檔 + 明細
   const submitOrder = async (orderPayload, updatedCartItems) => {
     try {
       setSubmitting(true);
@@ -273,228 +268,75 @@ export default function CheckoutFlow({
       const checkoutTimeIso = toIsoLocal(now);
       let effectiveCheckoutTime = checkoutTimeIso;
 
-      if (isFromPickup) {
-        const targetId = Number(pickupSalesOrderId);
-        if (!targetId) throw new Error("缺少待取訂單 ID。");
-
-        let orig = null;
-        try {
-          const raw = localStorage.getItem("checkoutData");
-          if (raw) orig = JSON.parse(raw);
-        } catch {}
-        if (!orig?.memberId || !orig?.storeId || !orig?.createdAt) {
-          try {
-            const r = await fetch(`${API_BASE}/t_SalesOrder/${targetId}`);
-            if (r.ok) orig = { ...(orig || {}), ...(await r.json()) };
-          } catch {}
-        }
-
-        const safeNum = (v, fb = 0) =>
-          Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : fb;
-
-        const putMemberId = safeNum(
-          orderPayload.memberId,
-          safeNum(orig?.memberId, 0)
-        );
-        const putStoreId = safeNum(
-          orderPayload.storeId,
-          safeNum(orig?.storeId, storeIdFromUser)
-        );
-        const putStaffId = safeNum(staffIdFromUser, 0);
-        if (!putMemberId) throw new Error("無法取得 memberId。");
-        if (!putStoreId) throw new Error("無法取得 storeId。");
-
-        const putOrderNumber =
-          orderPayload.orderNumber || orig?.orderNumber || "";
-        const putDeliveryCode = Number(
-          typeof originalDeliveryCode !== "undefined"
-            ? originalDeliveryCode
-            : orig?.deliveryMethod ?? 5
-        );
-        const putPaymentMethod = Number(
-          orderPayload.paymentMethod ?? toPaymentCode(payment)
-        );
-
-        let putStatus = Number(orderPayload.status ?? 2);
-        const paidOff =
-          Number(orderPayload.totalAmount || 0) <=
-          Number(orderPayload.paymentAmount || 0);
-        const isSelfPickup =
-          putDeliveryCode === DELIVERY_CODE["訂單自取"] ||
-          delivery === "現場帶走";
-        if (paidOff && isSelfPickup) {
-          putStatus = 5;
-        }
-
-        const putOrderDate = orig?.createdAt
-          ? toDateOnly(orig.createdAt)
-          : toDateOnly(new Date());
-
-        const payloadToPut = {
-          id: targetId,
-          orderNumber: putOrderNumber,
-          storeId: putStoreId,
-          memberId: putMemberId,
-          orderDate: putOrderDate,
-
-          originalAmount: Math.round(orderPayload.originalAmount ?? 0),
-          totalAmount: Math.round(orderPayload.totalAmount ?? 0),
-          discountAmount: Math.round(orderPayload.discountAmount ?? 0),
-          offsetAmount: Math.round(orderPayload.offsetAmount ?? 0),
-          paymentAmount: Math.round(orderPayload.paymentAmount ?? 0),
-          creditAmount: Math.round(orderPayload.creditAmount ?? 0),
-          cashbackPoint: Math.round(orderPayload.cashbackPoint ?? 0), // ★ 回扣
-
-          totalQuantity: Math.round(orderPayload.totalQuantity ?? 0),
-          status: putStatus,
-
-          unifiedBusinessNumber: orderPayload.unifiedBusinessNumber || "",
-          invoiceNumber: orderPayload.invoiceNumber || "",
-          note: orderPayload.note || "",
-
-          deliveryMethod: putDeliveryCode,
-          dealerMemberId: orderPayload.dealerMemberId ?? 0,
-          paymentMethod: putPaymentMethod,
-
-          bankCode: Number(orderPayload.bankCode || 0),
-          paymentAccount: orderPayload.paymentAccount || "",
-          payerName: orderPayload.payerName || "",
-          paymentDate: orderPayload.paymentDate || undefined,
-
-          carrierNumber: orderPayload.carrierNumber || "",
-          staffId: putStaffId,
-          operatorName: orderPayload.operatorName || operatorNameFromUser || "",
-
-          pickupInfo: orderPayload.pickupInfo || "",
-          mobile: orderPayload.mobile || "",
-          shippingAddress: orderPayload.shippingAddress || "",
-          signature: orderPayload.signature || "",
-          signatureMime: orderPayload.signatureMime || "",
-          invoiceIssued: !!orderPayload.invoiceIssued,
-          payerIdentity: Number(orderPayload.payerIdentity ?? 1),
-
-          checkoutTime: checkoutTimeIso,
-        };
-
-        const res = await fetch(`${API_BASE}/t_SalesOrder/${targetId}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payloadToPut),
-        });
-        if (!res.ok) {
-          const t = await res.text().catch(() => "");
-          throw new Error(`更新訂單失敗 (${res.status}) ${t}`);
-        }
-
-        let serverCheckoutTime = checkoutTimeIso;
-        try {
-          const text = await res.clone().text();
-          if (text) {
-            try {
-              const json = JSON.parse(text);
-              if (json?.checkoutTime) serverCheckoutTime = json.checkoutTime;
-            } catch {}
-          }
-        } catch {}
-        setCheckoutTime(serverCheckoutTime);
-        effectiveCheckoutTime = serverCheckoutTime;
-
-        try {
-          await refreshUserInfo?.();
-        } catch {}
-      } else {
-        const payloadToPost = {
-          id: 0,
-          ...orderPayload,
-          checkoutTime: checkoutTimeIso,
-        };
-        const res = await fetch(`${API_BASE}/t_SalesOrder`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payloadToPost),
-        });
-        if (!res.ok) {
-          const t = await res.text().catch(() => "");
-          throw new Error(`儲存訂單失敗 (${res.status}) ${t}`);
-        }
-
-        let serverCheckoutTime = checkoutTimeIso;
-        try {
-          const data = await res.clone().json();
-          if (data?.checkoutTime) serverCheckoutTime = data.checkoutTime;
-        } catch {}
-        setCheckoutTime(serverCheckoutTime);
-        effectiveCheckoutTime = serverCheckoutTime;
-
-        const newOrderId = await extractOrderIdFromResponse(
-          res,
-          orderPayload.orderNumber
-        );
-        if (!newOrderId) {
-          throw new Error("建立訂單成功，但無法取得新單 id（無法新增明細）。");
-        }
-
-        // 新增明細
-        for (const item of updatedCartItems) {
-          const isGiftLine = !!item.isGift;
-          const unitPriceForAPI = isGiftLine ? item.__orig : item.__orig; // 主檔 unitPrice 已採用實際下單價，明細這裡沿用基準
-          const subtotalForAPI = Math.round(
-            unitPriceForAPI * Number(item.__qty || 0)
-          );
-          const discountedForAPI = isGiftLine
-            ? 0
-            : Math.round(Number(item.__lineDiscount || 0));
-
-          const payload = {
-            salesOrderId: newOrderId,
-            productId: item.__productId,
-            productName: item.__name,
-            shippingLocation: "", // 如需可填 pickupLocation
-            quantity: item.__qty,
-            unitPrice: unitPriceForAPI,
-            subtotal: subtotalForAPI,
-            discountedAmount: discountedForAPI,
-            status: "正常",
-            isGift: isGiftLine,
-            staffId: staffIdFromUser || 0,
-          };
-
-          const r = await fetch(`${API_BASE}/t_SalesOrderItem`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          });
-          if (!r.ok) {
-            const t = await r.text().catch(() => "");
-            throw new Error(`新增明細失敗 (${r.status}) ${t}`);
-          }
-        }
-
-        try {
-          await refreshUserInfo?.();
-        } catch {}
+      const payloadToPost = { id: 0, ...orderPayload, checkoutTime: checkoutTimeIso };
+      const res = await fetch(`${API_BASE}/t_SalesOrder`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payloadToPost),
+      });
+      if (!res.ok) {
+        const t = await res.text().catch(() => "");
+        throw new Error(`儲存訂單失敗 (${res.status}) ${t}`);
       }
 
-      // 成功 → 列印 & 回首頁
+      let serverCheckoutTime = checkoutTimeIso;
+      try {
+        const data = await res.clone().json();
+        if (data?.checkoutTime) serverCheckoutTime = data.checkoutTime;
+      } catch {}
+      setCheckoutTime(serverCheckoutTime);
+      effectiveCheckoutTime = serverCheckoutTime;
+
+      const newOrderId = await extractOrderIdFromResponse(res, orderPayload.orderNumber);
+      if (!newOrderId) throw new Error("建立訂單成功，但無法取得新單 id（無法新增明細）。");
+
+      for (const item of updatedCartItems) {
+        const isGiftLine = !!item.isGift;
+        const unitPriceForAPI = item.__orig;
+        const subtotalForAPI = Math.round(unitPriceForAPI * Number(item.__qty || 0));
+        const discountedForAPI = isGiftLine ? 0 : Math.round(Number(item.__lineDiscount || 0));
+
+        const payload = {
+          salesOrderId: newOrderId,
+          productId: item.__productId,
+          productName: item.__name,
+          shippingLocation: "",
+          quantity: item.__qty,
+          unitPrice: unitPriceForAPI,
+          subtotal: subtotalForAPI,
+          discountedAmount: discountedForAPI,
+          status: "正常",
+          isGift: isGiftLine,
+          staffId: staffIdFromUser || 0,
+        };
+
+        const r = await fetch(`${API_BASE}/t_SalesOrderItem`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (!r.ok) {
+          const t = await r.text().catch(() => "");
+          throw new Error(`新增明細失敗 (${r.status}) ${t}`);
+        }
+      }
+
+      try {
+        await refreshUserInfo?.();
+      } catch {}
+
       setSubmitting(false);
       setPrinting(true);
       setTimeout(() => {
         setPrinting(false);
-
-        // ✅ 在這裡清空客顯畫面（localStorage 狀態）
         customerBus.checkoutDone();
 
-        // 廣播（可保留，雙保險）
         try {
           const memberIdForRefresh = Number(currentMember?.id ?? 0);
           if (memberIdForRefresh) {
-            localStorage.setItem(
-              "member_points_refresh_id",
-              String(memberIdForRefresh)
-            );
+            localStorage.setItem("member_points_refresh_id", String(memberIdForRefresh));
           }
           localStorage.setItem("checkout_done", String(Date.now()));
-          // 在 CheckoutFlow 結帳完成時，客顯自動清空
           if ("BroadcastChannel" in window) {
             const ch = new BroadcastChannel("pos-events");
             ch.postMessage({
@@ -527,43 +369,26 @@ export default function CheckoutFlow({
     }
   };
 
-  // ====== 送單 ======
   const handleFinish = async () => {
     if (submitting) return;
 
-    if (
-      (payment === "匯款" || payment === "支票") &&
-      Number(paymentAmount) < 0
-    ) {
-      await Swal.fire({
-        icon: "warning",
-        title: "金額錯誤",
-        text: "金額不可為負數。",
-        confirmButtonText: "確定",
-      });
+    if ((payment === "匯款" || payment === "支票") && Number(paymentAmount) < 0) {
+      await Swal.fire({ icon: "warning", title: "金額錯誤", text: "金額不可為負數。", confirmButtonText: "確定" });
       return;
     }
 
     const _discountRate = Number(currentMember?.discountRate ?? 1);
-    const calcDiscountUnit = (p) =>
-      Math.round(Number(p) * (_discountRate || 1));
+    const calcDiscountUnit = (p) => Math.round(Number(p) * (_discountRate || 1));
 
     const updatedCartItems = cartItems.map((item) => {
       const qty = Number(item.quantity ?? 1);
       const productId =
         Number(item.productId ?? item.pid ?? item.product?.id ?? item.id) || 0;
       const name = item.productName ?? item.name ?? "";
-      const origUnit = Number(
-        item.unitPrice ?? item.price ?? item.originalPrice ?? 0
-      );
+      const origUnit = Number(item.unitPrice ?? item.price ?? item.originalPrice ?? 0);
       const isGift = !!item.isGift || origUnit === 0;
       let discUnit = isGift ? 0 : calcDiscountUnit(origUnit);
-      if (
-        !isGift &&
-        (_discountRate || 1) === 1 &&
-        discUnit === 0 &&
-        origUnit > 0
-      ) {
+      if (!isGift && (_discountRate || 1) === 1 && discUnit === 0 && origUnit > 0) {
         discUnit = origUnit;
       }
       const perUnitDiscount = Math.max(0, origUnit - discUnit);
@@ -580,18 +405,10 @@ export default function CheckoutFlow({
       };
     });
 
-    const orderOriginalAmount = updatedCartItems.reduce(
-      (sum, i) => sum + i.__orig * i.__qty,
-      0
-    );
-    const orderDiscountAmount = updatedCartItems.reduce(
-      (sum, i) => sum + i.__lineDiscount,
-      0
-    );
+    const orderOriginalAmount = updatedCartItems.reduce((s, i) => s + i.__orig * i.__qty, 0);
+    const orderDiscountAmount = updatedCartItems.reduce((s, i) => s + i.__lineDiscount, 0);
 
     const total = Number(finalTotal) || 0;
-
-    // 依付款方式計算實收
     const received =
       Number(
         payment === "匯款" || payment === "支票"
@@ -604,11 +421,7 @@ export default function CheckoutFlow({
     const creditAmountValue = Math.max(0, total - received);
     const paymentAmountValue = Math.min(received, total);
 
-    // 不可賒帳：實收不足則擋
-    if (
-      !getCreditAllowed(currentMember, isGuideSelf) &&
-      creditAmountValue > 0
-    ) {
+    if (!getCreditAllowed(currentMember, isGuideSelf) && creditAmountValue > 0) {
       await Swal.fire({
         icon: "warning",
         title: "此身份不可賒帳",
@@ -621,46 +434,67 @@ export default function CheckoutFlow({
     let orderStatus = creditAmountValue > 0 ? 1 : 2; // 1=賒帳, 2=已付款
     if (delivery === "現場帶走" && orderStatus === 2) orderStatus = 5;
 
-    const pickupInfoStr = [
-      pickupLocation ? `地點:${pickupLocation}` : "",
-      pickupTime ? `時間:${pickupTime}` : "",
-    ]
-      .filter(Boolean)
-      .join(", ");
-
-    const paymentMethodCode = toPaymentCode(payment);
-    const deliveryCode = isFromPickup
-      ? Number(originalDeliveryCode ?? 5)
-      : toDeliveryCode(delivery);
-
+    const deliveryCode = toDeliveryCode(delivery);
     const orderDate = toDateOnly(new Date());
+    const paymentMethodCode = toPaymentCode(payment);
 
     // 匯款/支票付款日期
     let paymentDateIso = undefined;
     if (payment === "匯款") {
-      if (creditAmountValue === 0) {
-        paymentDateIso = toIsoLocal(new Date());
-      }
+      if (creditAmountValue === 0) paymentDateIso = toIsoLocal(new Date());
     } else if (payment === "支票") {
       paymentDateIso = toIsoLocal(`${checkDate}T00:00:00`);
     }
 
-    // ★ 計算回扣總額
     const cashbackTotal = calcCashbackTotal();
+
+    // shippingAddress：
+    // 宅配/司機 → 收件人地址（司機配送這次新增地址欄）
+    const shippingAddressValue =
+      delivery === "宅配到府" || delivery === "司機配送" ? (receiverAddress || "") : "";
+
+    // pickupInfo：人性化摘要
+    const pickupInfoParts = [];
+    if (delivery === "訂單自取") {
+      pickupInfoParts.push(pickupLocation ? `自取門市:${pickupLocation}` : "自取");
+      if (pickupTime) pickupInfoParts.push(`時間:${pickupTime}`);
+    }
+    if (delivery === "店到店") {
+      if (pickupTime) pickupInfoParts.push(`時間:${pickupTime}`);
+      if (pickupLocation) pickupInfoParts.push(`店到店備註:${pickupLocation}`);
+      pickupInfoParts.push("店家自行寄貨");
+    }
+    if (delivery === "司機配送") {
+      if (pickupTime) pickupInfoParts.push(`時間:${pickupTime}`);
+      if (pickupLocation) pickupInfoParts.push(`司機/物流:${pickupLocation}`);
+      // 使用聯絡人（第一行）＋ 收件地址
+      pickupInfoParts.push(`聯絡人:${customerName || ""} ${customerPhone || ""}`.trim());
+      if (receiverAddress) pickupInfoParts.push(`地址:${receiverAddress}`);
+    }
+    if (delivery === "宅配到府") {
+      // 宅配仍保留寄件/收件摘要（不含日期/單號）
+      pickupInfoParts.push(
+        `寄件人:${senderName || "本店"} ${senderPhone || ""} ${senderAddress || ""}`.trim()
+      );
+      pickupInfoParts.push(
+        `收件人:${receiverName || ""} ${receiverPhone || ""} ${receiverAddress || ""}`.trim()
+      );
+    }
+    const pickupInfoStr = pickupInfoParts.filter(Boolean).join(" | ");
 
     const orderPayloadBase = {
       orderNumber: "SO" + Date.now(),
       storeId: storeIdFromUser || 1,
       memberId: Number(currentMember?.id ?? 0),
 
-      orderDate, // YYYY-MM-DD
+      orderDate,
       originalAmount: Math.round(orderOriginalAmount),
       totalAmount: total,
       discountAmount: Math.round(orderDiscountAmount),
       offsetAmount: Math.max(0, Number(usedPoints) || 0),
       paymentAmount: paymentAmountValue,
       creditAmount: creditAmountValue,
-      cashbackPoint: cashbackTotal, // ★ 回扣存這裡
+      cashbackPoint: cashbackTotal,
       totalQuantity: updatedCartItems.reduce((sum, i) => sum + i.__qty, 0),
       status: orderStatus,
 
@@ -681,11 +515,18 @@ export default function CheckoutFlow({
       carrierNumber: carrier || "",
       staffId: Number(currentUser?.user?.staffId ?? 0),
       operatorName: operatorNameFromUser,
-      pickupInfo: pickupInfoStr,
-      mobile: customerPhone || "",
-      shippingAddress: "",
-      signature: "",
 
+      pickupInfo: pickupInfoStr,
+
+      // ★ 手機（電話）：宅配用收件人電話；司機配送改用聯絡人電話
+      mobile: delivery === "宅配到府"
+        ? (receiverPhone || "")
+        : (customerPhone || ""),
+
+      // ★ 收件地址：宅配/司機 皆寫入
+      shippingAddress: shippingAddressValue,
+
+      signature: "",
       invoiceIssued: !!openInvoiceNow,
       payerIdentity: isGuideSelf ? 0 : 1, // 0=導遊本人, 1=客人
     };
@@ -701,20 +542,17 @@ export default function CheckoutFlow({
     await submitOrder(orderPayloadBase, updatedCartItems);
   };
 
-  // 同步會員資料（預填）
+  // 預填聯絡窗口
   useEffect(() => {
     const name = currentMember.fullName || currentMember.name || "";
     setCustomerName(name);
     setCustomerPhone(
-      currentMember.contactPhone ||
-        currentMember.phone ||
-        currentMember.mobile ||
-        ""
+      currentMember.contactPhone || currentMember.phone || currentMember.mobile || ""
     );
     if (!payerName) setPayerName(name || "");
   }, [currentMember]); // eslint-disable-line
 
-  // 掛載時讀 localStorage（結帳身份）
+  // 載入導遊/客人身份
   useEffect(() => {
     try {
       const raw = localStorage.getItem("checkoutData");
@@ -735,8 +573,6 @@ export default function CheckoutFlow({
     }
   }, []);
 
-  const payerIdentity = isGuideSelf ? 0 : 1;
-
   return (
     <div style={styles.container}>
       {step === 1 && (
@@ -749,9 +585,7 @@ export default function CheckoutFlow({
           usedPoints={usedPoints}
           finalTotal={finalTotal}
           onNext={() => {
-            setDelivery((prev) =>
-              lockDelivery ? "訂單自取" : prev || "現場帶走"
-            );
+            setDelivery((prev) => (lockDelivery ? "訂單自取" : prev || "現場帶走"));
             setStep(2);
           }}
           styles={styles}
@@ -765,17 +599,40 @@ export default function CheckoutFlow({
           lockDelivery={lockDelivery}
           deliveryOptions={deliveryOptions}
           needExtraInfo={needExtraInfo}
-          memberAddress={currentMember?.contactAddress || ""}
+
+          // 聯絡窗口（宅配時自動隱藏於子元件）
           customerName={customerName}
           setCustomerName={setCustomerName}
           customerPhone={customerPhone}
           setCustomerPhone={setCustomerPhone}
+
+          // 門市/時間/備註
           pickupLocation={pickupLocation}
           setPickupLocation={setPickupLocation}
           pickupTime={pickupTime}
           setPickupTime={setPickupTime}
           note={note}
           setNote={setNote}
+
+          // 會員預設地址
+          memberAddress={currentMember?.contactAddress || ""}
+
+          // 寄件/收件（宅配/司機）
+          senderName={senderName}
+          setSenderName={setSenderName}
+          senderPhone={senderPhone}
+          setSenderPhone={setSenderPhone}
+          senderAddress={senderAddress}
+          setSenderAddress={setSenderAddress}
+          receiverName={receiverName}
+          setReceiverName={setReceiverName}
+          receiverPhone={receiverPhone}
+          setReceiverPhone={setReceiverPhone}
+          receiverAddress={receiverAddress}
+          setReceiverAddress={setReceiverAddress}
+          defaultSenderName={storeNameFromUser}
+          defaultSenderPhone={""}
+
           onBack={() => setStep(1)}
           onNext={() => {
             setPayment(payment || "現金");
@@ -807,7 +664,7 @@ export default function CheckoutFlow({
             finalTotal={finalTotal}
             payment={payment}
             setPayment={setPayment}
-            paymentOptions={paymentOptions}
+            paymentOptions={["現金", "匯款", "支票", "刷卡"]}
             handlePaymentMethodChange={handlePaymentMethodChange}
             cashReceived={cashReceived}
             setCashReceived={setCashReceived}
@@ -822,7 +679,7 @@ export default function CheckoutFlow({
             invoiceTaxId={invoiceTaxId}
             setInvoiceTaxId={setInvoiceTaxId}
             setCustomerPhone={setCustomerPhone}
-            carrierOptions={carrierOptions}
+            carrierOptions={["紙本發票", "手機載具", "自然人憑證", "統一編號"]}
             bankCode={bankCode}
             setBankCode={setBankCode}
             paymentAccount={paymentAccount}

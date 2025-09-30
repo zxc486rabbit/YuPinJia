@@ -1,11 +1,9 @@
 // Step2：配送方式 + 額外資訊
-import { useEffect, useRef, useState } from "react";
-import { FaStore, FaPlane, FaShip, FaHome, FaBuilding, FaClipboard } from "react-icons/fa";
+import { useEffect, useState } from "react";
+import { FaStore, FaPlane, FaShip, FaHome, FaBuilding, FaClipboard, FaTruck } from "react-icons/fa";
 
-/** 後端 API Base */
 const API_BASE = "https://yupinjia.hyjr.com.tw/api/api";
 
-/** 圖示維持你的配置 */
 const icons = {
   現場帶走: <FaStore size={36} />,
   機場提貨: <FaPlane size={36} />,
@@ -13,6 +11,7 @@ const icons = {
   宅配到府: <FaHome size={36} />,
   店到店: <FaBuilding size={36} />,
   訂單自取: <FaClipboard size={36} />,
+  司機配送: <FaTruck size={36} />,
 };
 
 export default function DeliverySelector({
@@ -21,39 +20,51 @@ export default function DeliverySelector({
   lockDelivery = false,
   deliveryOptions,
   needExtraInfo,
+  // 基本聯絡人（宅配隱藏、其他顯示）
   customerName,
   setCustomerName,
   customerPhone,
   setCustomerPhone,
+
+  // 額外欄位
   pickupLocation,
   setPickupLocation,
   pickupTime,
   setPickupTime,
   note,
   setNote,
+
+  // 外觀＆導航
   onBack,
   onNext,
   styles,
-  /** ★ 新增：會員地址，由父層傳入 */
-  memberAddress, // e.g. "台南市善化區 XXX 路 123 號"
+
+  // 會員地址（預設收件地址）
+  memberAddress,
+
+  // 宅配/司機：寄件與收件欄位（司機此次只用到收件地址）
+  senderName,
+  setSenderName,
+  senderPhone,
+  setSenderPhone,
+  senderAddress,
+  setSenderAddress,
+  receiverName,
+  setReceiverName,
+  receiverPhone,
+  setReceiverPhone,
+  receiverAddress,
+  setReceiverAddress,
+
+  // 預設寄件人（本店）
+  defaultSenderName,
+  defaultSenderPhone,
 }) {
-  // ====== 店到店選店相關（原本） ======
-  const [cvsSubtype, setCvsSubtype] = useState("UNIMARTC2C"); // 7-ELEVEN
-  const popupRef = useRef(null);
-
-  const isIOS =
-    /iPad|iPhone|iPod/.test(navigator.userAgent) &&
-    !window.MSStream;
-
-  // ====== 訂單自取 → 後端門市下拉 ======
-  const [storeList, setStoreList] = useState([]); // [{label, value, key}]
+  // ===== 訂單自取：門市清單 =====
+  const [storeList, setStoreList] = useState([]);
   const [storesLoading, setStoresLoading] = useState(false);
   const [storesError, setStoresError] = useState("");
 
-  // ★ 紀錄「宅配到府」下，使用者是否手動改過出貨點，避免自動覆蓋
-  const pickupTouchedRef = useRef(false);
-
-  // 只有在選到「訂單自取」時才拉門市清單；避免每次 render 重抓
   useEffect(() => {
     const fetchStores = async () => {
       try {
@@ -68,239 +79,140 @@ export default function DeliverySelector({
           throw new Error(`GetStoreList 失敗 (${res.status}) ${t}`);
         }
         const data = await res.json();
-        const rows = Array.isArray(data) ? data : [];
-        setStoreList(rows);
+        setStoreList(Array.isArray(data) ? data : []);
       } catch (e) {
         setStoresError(e?.message || "無法取得門市清單");
       } finally {
         setStoresLoading(false);
       }
     };
-
     if (delivery === "訂單自取" && storeList.length === 0 && !storesLoading) {
       fetchStores();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [delivery]);
 
-  // 安全：提供 fallback 的按鈕樣式
-  const secondaryBtnStyle =
-    styles?.secondaryBtn || {
-      ...styles?.primaryBtn,
-      background: "#f1f1f1",
-      color: "#333",
-    };
-  const linkBtnStyle =
-    styles?.linkBtn || {
-      background: "none",
-      border: "none",
-      textDecoration: "underline",
-      padding: "6px 8px",
-      cursor: "pointer",
-    };
-
-  // 切換配送方式：離開「店到店/訂單自取」時，清空已選門市，避免殘留
+  // ===== 宅配/司機：初始預填 =====
   useEffect(() => {
-    if ((delivery !== "店到店" && delivery !== "訂單自取") && pickupLocation) {
-      setPickupLocation("");
-    }
-    // 每次離開「宅配到府」，重置 touched 旗標
-    if (delivery !== "宅配到府") {
-      pickupTouchedRef.current = false;
+    if (delivery === "宅配到府" || delivery === "司機配送") {
+      if (!senderName && defaultSenderName) setSenderName?.(defaultSenderName);
+      if (!senderPhone && defaultSenderPhone) setSenderPhone?.(defaultSenderPhone);
+
+      if (!receiverName && customerName) setReceiverName?.(customerName);
+      if (!receiverPhone && customerPhone) setReceiverPhone?.(customerPhone);
+      if (!receiverAddress && memberAddress) setReceiverAddress?.(memberAddress);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [delivery]);
 
-  // 接收門市回傳（店到店使用）
+  // 切換配送：離開自取就清空自取門市顯示
   useEffect(() => {
-    const onMessage = (e) => {
-      const data = e.data || {};
-      if (data.type === "CVS_STORE_SELECTED" && data.payload) {
-        const { brand, storeId, storeName, address } = data.payload;
-        setPickupLocation(`${brand} ${storeName}（${storeId}）${address}`);
-        if (popupRef.current && !popupRef.current.closed) popupRef.current.close();
-      }
-    };
-    window.addEventListener("message", onMessage);
-
-    // iOS 同頁導轉回來（店到店）
-    const cached = sessionStorage.getItem("CVS_STORE_SELECTED");
-    if (cached) {
-      try {
-        const payload = JSON.parse(cached);
-        setPickupLocation(
-          `${payload.brand} ${payload.storeName}（${payload.storeId}）${payload.address}`
-        );
-      } finally {
-        sessionStorage.removeItem("CVS_STORE_SELECTED");
-      }
-    }
-
-    return () => window.removeEventListener("message", onMessage);
-  }, [setPickupLocation]);
-
-  // 開啟超商門市地圖（店到店）
-  const openCvsMap = () => {
-    const url = `/api/logistics/ecpay/map?subType=${cvsSubtype}`;
-    if (isIOS) {
-      window.location.href = url;
-    } else {
-      popupRef.current = window.open(
-        url,
-        "cvsMap",
-        "width=980,height=720,noopener,noreferrer"
-      );
-    }
-  };
-
-  // ★ 自動帶入宅配到府的出貨點（會員地址）
-  useEffect(() => {
-    if (
-      delivery === "宅配到府" &&
-      !pickupLocation && // 只在目前是空值時帶入，避免覆蓋你手動輸入
-      memberAddress &&   // 有提供會員地址
-      !pickupTouchedRef.current // 使用者尚未手動修改
-    ) {
-      setPickupLocation(memberAddress);
+    if (delivery !== "訂單自取" && pickupLocation) {
+      setPickupLocation("");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [delivery, memberAddress]);
+  }, [delivery]);
 
-  // 下一步前的驗證：自取要選門市；店到店要選門市/有出貨點
+  // ===== 驗證（下一步） =====
   const handleNext = () => {
     if (delivery === "訂單自取" && !pickupLocation) {
       alert("請選擇取貨門市");
       return;
     }
-    if (delivery === "店到店" && !pickupLocation) {
-      alert("請選擇超商門市");
-      return;
+    if (delivery === "宅配到府") {
+      // 宅配：收件人三欄需完整
+      if (!receiverName || !receiverPhone || !receiverAddress) {
+        alert("請完整填寫【收件人】姓名、電話與地址");
+        return;
+      }
+    }
+    if (delivery === "司機配送") {
+      // 司機配送：至少需要收件地址
+      if (!receiverAddress) {
+        alert("請填寫【收件地址】");
+        return;
+      }
     }
     onNext?.();
+  };
+
+  // 4 欄卡片
+  const fourColGrid = {
+    display: "grid",
+    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+    gap: 12,
+    marginBottom: 12,
   };
 
   return (
     <>
       <div style={styles.headerRow}>
         <h2 style={styles.title}>選擇配送方式</h2>
-        <button style={styles.backBtn} onClick={onBack}>
-          ← 返回明細
-        </button>
+        <button style={styles.backBtn} onClick={onBack}>← 返回明細</button>
       </div>
 
-      <div style={styles.cardGrid3}>
-        {(lockDelivery
-          ? deliveryOptions.filter((o) => o.label === "訂單自取")
-          : deliveryOptions
-        ).map((opt) => (
-          <div
-            key={opt.label}
-            style={{
-              ...styles.card,
-              ...(delivery === opt.label ? styles.cardSelected : styles.cardDefault),
-            }}
-            onClick={() => {
-              if (lockDelivery && opt.label !== "訂單自取") return;
-              setDelivery(opt.label);
-            }}
-          >
-            <div>{icons[opt.label]}</div>
-            <div style={{ fontSize: "1.1rem", marginTop: 8 }}>{opt.label}</div>
-          </div>
-        ))}
+      <div style={fourColGrid}>
+        {(lockDelivery ? deliveryOptions.filter((o) => o.label === "訂單自取") : deliveryOptions)
+          .map((opt) => (
+            <div
+              key={opt.label}
+              style={{
+                ...styles.card,
+                ...(delivery === opt.label ? styles.cardSelected : styles.cardDefault),
+                cursor: lockDelivery && opt.label !== "訂單自取" ? "not-allowed" : "pointer",
+              }}
+              onClick={() => {
+                if (lockDelivery && opt.label !== "訂單自取") return;
+                setDelivery(opt.label);
+              }}
+            >
+              <div>{icons[opt.label]}</div>
+              <div style={{ fontSize: "1.1rem", marginTop: 8 }}>{opt.label}</div>
+            </div>
+          ))}
       </div>
 
       {needExtraInfo && (
         <div style={styles.extraInfo}>
-          {/* 基本資料 */}
-          <div style={styles.inputRow}>
-            <input
-              style={styles.halfInput}
-              placeholder="姓名"
-              value={customerName}
-              onChange={(e) => setCustomerName(e.target.value)}
-            />
-            <input
-              style={styles.halfInput}
-              placeholder="聯絡電話"
-              value={customerPhone}
-              onChange={(e) => setCustomerPhone(e.target.value)}
-            />
-          </div>
-
-          {/* 訂單自取：後端門市下拉 */}
-          {delivery === "訂單自取" && (
+          {/* === 基本聯絡窗口 ===
+              宅配到府：收件人區塊已顯示會員姓名/電話 → 隱藏這一行 */}
+          {delivery !== "宅配到府" && (
             <div style={styles.inputRow}>
-              <select
-                style={{ ...styles.halfInput, height: 44 }}
-                value={pickupLocation || ""}
-                onChange={(e) => setPickupLocation(e.target.value)}
-                disabled={storesLoading}
-              >
-                <option value="" disabled>
-                  {storesLoading ? "載入門市中…" : "請選擇取貨門市"}
-                </option>
-                {storeList.map((s) => (
-                  <option key={s.value} value={s.label}>
-                    {s.label}
-                  </option>
-                ))}
-              </select>
-
               <input
                 style={styles.halfInput}
-                type="datetime-local"
-                value={pickupTime}
-                onChange={(e) => setPickupTime(e.target.value)}
+                placeholder="聯絡人姓名"
+                value={customerName}
+                onChange={(e) => setCustomerName(e.target.value)}
+              />
+              <input
+                style={styles.halfInput}
+                placeholder="聯絡人電話"
+                value={customerPhone}
+                onChange={(e) => setCustomerPhone(e.target.value)}
               />
             </div>
           )}
-          {delivery === "訂單自取" && storesError && (
-            <div style={{ color: "#c00", marginTop: 6 }}>{storesError}</div>
-          )}
 
-          {/* 店到店：綠界選店（維持原本） */}
-          {delivery === "店到店" && (
+          {/* 訂單自取：門市下拉 + 時間 */}
+          {delivery === "訂單自取" && (
             <>
-              <div style={{ ...styles.inputRow, alignItems: "center", gap: 12 }}>
-                <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <input
-                    type="radio"
-                    checked={cvsSubtype === "UNIMARTC2C"}
-                    onChange={() => setCvsSubtype("UNIMARTC2C")}
-                  />
-                  7-ELEVEN
-                </label>
-                <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <input
-                    type="radio"
-                    checked={cvsSubtype === "FAMIC2C"}
-                    onChange={() => setCvsSubtype("FAMIC2C")}
-                  />
-                  全家
-                </label>
-
-                <button type="button" style={secondaryBtnStyle} onClick={openCvsMap}>
-                  選擇門市
-                </button>
-                <button
-                  type="button"
-                  style={linkBtnStyle}
-                  onClick={() => setPickupLocation("")}
-                  title="清除已選門市"
-                >
-                  清除
-                </button>
-              </div>
-
               <div style={styles.inputRow}>
-                <input
-                  style={styles.halfInput}
-                  placeholder="出貨點（選店自動帶入）"
-                  value={pickupLocation}
+                <select
+                  style={{ ...styles.halfInput, height: 44 }}
+                  value={pickupLocation || ""}
                   onChange={(e) => setPickupLocation(e.target.value)}
-                  readOnly={true}
-                />
+                  disabled={storesLoading}
+                >
+                  <option value="" disabled>
+                    {storesLoading ? "載入門市中…" : "請選擇取貨門市"}
+                  </option>
+                  {storeList.map((s) => (
+                    <option key={s.value} value={s.label}>
+                      {s.label}
+                    </option>
+                  ))}
+                </select>
+
                 <input
                   style={styles.halfInput}
                   type="datetime-local"
@@ -308,33 +220,110 @@ export default function DeliverySelector({
                   onChange={(e) => setPickupTime(e.target.value)}
                 />
               </div>
+              {storesError && (
+                <div style={{ color: "#c00", marginTop: 6 }}>{storesError}</div>
+              )}
             </>
           )}
 
-          {/* 其他配送（含：宅配到府）：可手動輸入出貨點 */}
-          {delivery !== "店到店" && delivery !== "訂單自取" && (
+          {/* 店到店：與司機配送同版型（左：日期、右：備註/編號） */}
+          {delivery === "店到店" && (
             <div style={styles.inputRow}>
-              <input
-                style={styles.halfInput}
-                placeholder={
-                  delivery === "宅配到府" ? "出貨點（預設為會員地址）" : "出貨點"
-                }
-                value={pickupLocation}
-                onChange={(e) => {
-                  setPickupLocation(e.target.value);
-                  if (delivery === "宅配到府") {
-                    pickupTouchedRef.current = true; // ★ 標記為使用者已手動修改
-                  }
-                }}
-                readOnly={false}
-              />
               <input
                 style={styles.halfInput}
                 type="datetime-local"
                 value={pickupTime}
                 onChange={(e) => setPickupTime(e.target.value)}
               />
+              <input
+                style={styles.halfInput}
+                placeholder="(選填) 便利商店名稱或寄件編號"
+                value={pickupLocation}
+                onChange={(e) => setPickupLocation(e.target.value)}
+              />
             </div>
+          )}
+
+          {/* 司機配送：與店到店同版型 + 收件地址（全寬、必填） */}
+          {delivery === "司機配送" && (
+            <>
+              <div style={styles.inputRow}>
+                <input
+                  style={styles.halfInput}
+                  type="datetime-local"
+                  value={pickupTime}
+                  onChange={(e) => setPickupTime(e.target.value)}
+                />
+                <input
+                  style={styles.halfInput}
+                  placeholder="（選填）司機車號 / 物流單號"
+                  value={pickupLocation}
+                  onChange={(e) => setPickupLocation(e.target.value)}
+                />
+              </div>
+              <div style={styles.inputRow}>
+                <input
+                  style={styles.fullInput}
+                  placeholder="收件地址（必填）"
+                  value={receiverAddress || ""}
+                  onChange={(e) => setReceiverAddress?.(e.target.value)}
+                />
+              </div>
+            </>
+          )}
+
+          {/* 宅配到府：寄件/收件；移除日期與單號；地址改全寬 */}
+          {delivery === "宅配到府" && (
+            <>
+              <div style={{ fontWeight: 700, marginTop: 8 }}>寄件人（本店）</div>
+              <div style={styles.inputRow}>
+                <input
+                  style={styles.halfInput}
+                  placeholder="寄件人姓名（本店）"
+                  value={senderName || ""}
+                  onChange={(e) => setSenderName?.(e.target.value)}
+                />
+                <input
+                  style={styles.halfInput}
+                  placeholder="寄件人電話"
+                  value={senderPhone || ""}
+                  onChange={(e) => setSenderPhone?.(e.target.value)}
+                />
+              </div>
+              <div style={styles.inputRow}>
+                <input
+                  style={styles.fullInput}
+                  placeholder="寄件人地址（可留空）"
+                  value={senderAddress || ""}
+                  onChange={(e) => setSenderAddress?.(e.target.value)}
+                />
+              </div>
+
+              <div style={{ fontWeight: 700, marginTop: 8 }}>收件人（會員）</div>
+              <div style={styles.inputRow}>
+                <input
+                  style={styles.halfInput}
+                  placeholder="收件人姓名"
+                  value={receiverName || ""}
+                  onChange={(e) => setReceiverName?.(e.target.value)}
+                />
+                <input
+                  style={styles.halfInput}
+                  placeholder="收件人電話"
+                  value={receiverPhone || ""}
+                  onChange={(e) => setReceiverPhone?.(e.target.value)}
+                />
+              </div>
+              <div style={styles.inputRow}>
+                <input
+                  style={styles.fullInput}
+                  placeholder="收件人地址（必填）"
+                  value={receiverAddress || ""}
+                  onChange={(e) => setReceiverAddress?.(e.target.value)}
+                />
+              </div>
+              {/* 宅配：不需要日期/單號欄位 */}
+            </>
           )}
 
           <textarea

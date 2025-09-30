@@ -540,6 +540,7 @@ useEffect(() => {
       { value: "宅配到府", label: "宅配到府" },
       { value: "店到店", label: "店到店" },
       { value: "訂單自取", label: "訂單自取" },
+      { value: "司機配送", label: "司機配送" },
     ]}
   />
 
@@ -655,7 +656,7 @@ useEffect(() => {
       </div>
 
       {/* 表格底部：列印與分頁 */}
-      <div className="d-flex align-items-center justify-content-between mt-2 ps-3 pe-3">
+      <div className="d-flex align-items-center justify-content-between mt-2 ps-3 pe-3 mb-3" >
         <div>
           <button className="pink-button me-3" style={{ fontSize: "1.2rem" }}>列印清單</button>
           <button className="pink-button" style={{ fontSize: "1.2rem" }}>列印明細</button>

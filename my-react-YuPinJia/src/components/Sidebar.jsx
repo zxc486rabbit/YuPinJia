@@ -38,6 +38,7 @@ api.interceptors.request.use((config) => {
 export default function Sidebar() {
   const [currentTime, setCurrentTime] = useState("");
   const [viewablePageIds, setViewablePageIds] = useState(new Set());
+  const [permLoaded, setPermLoaded] = useState(false); // ✅ 是否已載入權限
   const location = useLocation();
   const navigate = useNavigate();
   const { currentUser } = useEmployee() || {};
@@ -69,8 +70,10 @@ export default function Sidebar() {
   // 抓取此角色的「可檢視頁面」集合
   useEffect(() => {
     let mounted = true;
+    setPermLoaded(false);
     if (!roleId) {
-      setViewablePageIds(new Set()); // 沒有角色就只顯示首頁
+      setViewablePageIds(new Set());
+      setPermLoaded(true);
       return;
     }
     api
@@ -89,16 +92,19 @@ export default function Sidebar() {
         Swal.fire({
           icon: "warning",
           title: "無法載入權限",
-          text: "目前只顯示首頁；請稍後再試或重新登入。",
+          text: "目前功能按鈕會顯示，但需要權限才能點擊。",
+          timer: 2000,
+          showConfirmButton: false,
         });
         setViewablePageIds(new Set());
-      });
+      })
+      .finally(() => setPermLoaded(true));
     return () => {
       mounted = false;
     };
   }, [roleId]);
 
-  // 你的功能清單（加上 pageId 供過濾；首頁不受控）
+  // 你的功能清單（全顯示；pageId 用於控制可否點擊）
   const rawMenu = useMemo(
     () => [
       { key: "sales", icon: <FaClipboardList />, text: "銷售訂單", path: "/SalesOrder/SalesIndex", pageId: PAGE.SalesOrder },
@@ -109,12 +115,6 @@ export default function Sidebar() {
       { key: "settings", icon: <FaCog />, text: "設定", path: "/Setting/SettingIndex", pageId: PAGE.Settings },
     ],
     []
-  );
-
-  // 依權限過濾（只有具備檢視權的 pageId 會顯示）
-  const visibleMenu = useMemo(
-    () => rawMenu.filter((m) => viewablePageIds.has(m.pageId)),
-    [rawMenu, viewablePageIds]
   );
 
   // 離開結帳確認
@@ -135,13 +135,39 @@ export default function Sidebar() {
     navigate(to);
   };
 
-  // 再保險：阻擋直接點到沒有檢視權的路由（避免權限剛載入前被點擊）
-  const safeGo = (item) => {
-    if (!item.pageId || viewablePageIds.has(item.pageId)) {
-      confirmAndGo(item.path);
-    } else {
-      Swal.fire({ icon: "error", title: "沒有權限", text: "此功能未開啟檢視權限" });
-    }
+  const showNoPermission = () =>
+    Swal.fire({ icon: "error", title: "沒有權限", text: "此功能未開啟檢視權限" });
+
+  // 統一渲染一個 Sidebar 按鈕（可帶禁用狀態與樣式）
+  const renderMenuItem = (item) => {
+    // ✅ 規則：
+    //  - permLoaded=false 時，功能鍵先禁用（避免還沒判斷就點進去）
+    //  - permLoaded=true 時，只有擁有 View 權限的才能點擊
+    const canView = permLoaded && viewablePageIds.has(item.pageId);
+
+    const onClick = () => {
+      if (canView) confirmAndGo(item.path);
+      else showNoPermission();
+    };
+
+    return (
+      <div
+        key={item.key}
+        style={{
+          opacity: canView ? 1 : 0.4,
+          cursor: canView ? "pointer" : "not-allowed",
+          transition: "opacity .2s ease",
+        }}
+      >
+        <SidebarItem
+          icon={item.icon}
+          text={item.text}
+          onClick={onClick}
+          // 若 SidebarItem 支援 disabled，也一起傳（不支援也沒關係）
+          disabled={!canView}
+        />
+      </div>
+    );
   };
 
   return (
@@ -149,13 +175,12 @@ export default function Sidebar() {
       {/* 上方選單 */}
       <div>
         <div className="pt-0" style={{ background: "#275BA3" }}>
+          {/* 首頁永遠可點 */}
           <SidebarItem icon={<FaHome size={50} />} onClick={() => confirmAndGo("/")} />
         </div>
 
-        {/* 依權限渲染其餘功能 */}
-        {visibleMenu.map((m) => (
-          <SidebarItem key={m.key} icon={m.icon} text={m.text} onClick={() => safeGo(m)} />
-        ))}
+        {/* 全部顯示，但依權限決定是否可點 */}
+        {rawMenu.map(renderMenuItem)}
       </div>
 
       {/* 底部資訊 */}

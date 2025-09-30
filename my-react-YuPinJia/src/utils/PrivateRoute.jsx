@@ -1,17 +1,25 @@
-// ./utils/PrivateRoute.jsx
+// src/utils/PrivateRoute.jsx
 import { Navigate, useLocation } from "react-router-dom";
 import { useEmployee } from "./EmployeeContext";
+import { getTokens } from "./apiClient";
+
+function isValidTs(ts) {
+  if (ts == null || ts === "") return true;
+  const n = Number(ts);
+  return Number.isNaN(n) ? true : Date.now() < n;
+}
 
 export default function PrivateRoute({ children }) {
   const { isAuthed, hydrating } = useEmployee();
   const location = useLocation();
 
-  // 還原中：先不渲染任何東西（或回傳一個 Loading 元件）
   if (hydrating) return null;
 
-  return isAuthed ? (
-    children
-  ) : (
-    <Navigate to="/login" replace state={{ from: location }} />
-  );
+  const { accessToken, accessTokenExpiredAt } = getTokens();
+  const tokenLooksValid = !!accessToken && isValidTs(accessTokenExpiredAt);
+
+  // 只要本地有看起來有效的 token，就先讓頁面有機會恢復（避免瞬間導回 /login）
+  if (tokenLooksValid || isAuthed) return children;
+
+  return <Navigate to="/login" replace state={{ from: location }} />;
 }

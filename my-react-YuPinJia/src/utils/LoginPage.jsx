@@ -10,6 +10,7 @@ import styles from "./LoginPage.module.css";
 const LOGIN_URL = "https://yupinjia.hyjr.com.tw/api/api/Account/login";
 const USERINFO_URL = "https://yupinjia.hyjr.com.tw/api/api/Account/userInfo";
 const STORE_LIST_URL = "https://yupinjia.hyjr.com.tw/api/api/Dropdown/GetStoreList";
+const TOKEN_VERSION_KEY = "auth:tokenVersion";
 
 // SHA-256 (hex, lower-case)
 async function sha256Hex(text) {
@@ -23,7 +24,6 @@ async function sha256Hex(text) {
 }
 
 function extractErrorMessage(err) {
-  // 優先取後端回傳的 title/message/details
   const data = err?.response?.data;
   const status = err?.response?.status;
 
@@ -34,12 +34,10 @@ function extractErrorMessage(err) {
     data?.detail ||
     data?.details;
 
-  // 模型驗證錯誤
   const modelStateMsg = data?.errors
     ? Object.values(data.errors).flat().join("；")
     : null;
 
-  // 常見 400 = 帳密錯誤 / 參數錯誤；401 = 未授權
   if (!fromCommonFields && (status === 400 || status === 401)) {
     return "帳號或密碼錯誤，請再試一次。";
   }
@@ -70,7 +68,6 @@ const LoginPage = () => {
   // 登入流程
   const [loading, setLoading] = useState(false);
 
-  // 是否要先做 SHA256（若後端已做 TLS + 不需前端雜湊，可設為 false）
   const HASH_BEFORE_SEND = true;
 
   // 讀取門市清單
@@ -88,7 +85,6 @@ const LoginPage = () => {
         if (!mounted) return;
         setStores(arr);
 
-        // 若本地沒有選擇，預設第一筆
         if (!storeId && arr.length > 0) {
           setStoreId(Number(arr[0].value) || 0);
         }
@@ -131,7 +127,6 @@ const LoginPage = () => {
           username: employeeId,
           password: pwdToSend,
           storeId: Number(storeId),
-          // logoutMessage: "", // 可選
         },
         {
           headers: {
@@ -159,6 +154,9 @@ const LoginPage = () => {
         localStorage.setItem("accessTokenExpiredAt", accessTokenExpiredAt);
       if (refreshTokenExpiredAt)
         localStorage.setItem("refreshTokenExpiredAt", refreshTokenExpiredAt);
+
+      // 廣播 token 已更新（給其他分頁）
+      localStorage.setItem(TOKEN_VERSION_KEY, String(Date.now()));
 
       // 存 storeId（全域使用）
       localStorage.setItem("storeId", String(storeId));

@@ -98,19 +98,15 @@ export default function MemberOverview() {
   const [withdrawMember, setWithdrawMember] = useState(null);
 
   // ── 共用函式 ──────────────────────────────────────────
+  // 只顯示 YYYY/MM/DD
   const formatDate = (iso) => {
     if (!iso) return "-";
-    try {
-      return new Date(iso).toLocaleString("zh-TW", {
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-    } catch {
-      return String(iso);
-    }
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return String(iso);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}/${m}/${day}`;
   };
 
   // 相容舊/新分頁格式的抓取
@@ -495,7 +491,16 @@ export default function MemberOverview() {
       </div>
 
       {/* 分頁器 */}
-      <div className="d-flex align-items-center justify-content-end pe-3 pb-2">
+      <div
+        className="d-flex align-items-center justify-content-end pe-3"
+        style={{
+          marginTop: "-6px", // 稍微往上一點
+          background: "#f5f6f7", // 灰底
+          borderTop: "1px solid #e5e7eb",
+          paddingTop: "12px", // 標籤上方多一點灰底
+          paddingBottom: "10px",
+        }}
+      >
         <span className="me-3">
           共 <strong>{total}</strong> 筆，第 <strong>{page}</strong> /{" "}
           {totalPages} 頁

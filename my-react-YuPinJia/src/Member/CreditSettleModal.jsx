@@ -3,7 +3,12 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import Swal from "sweetalert2";
 
-export default function CreditSettleModal({ show, onClose, creditRecordId, onSettled }) {
+export default function CreditSettleModal({
+  show,
+  onClose,
+  creditRecordId,
+  onSettled,
+}) {
   const [loading, setLoading] = useState(false);
   const [salesOrders, setSalesOrders] = useState([]);
   const [totalSettledAmount, setTotalSettledAmount] = useState(0);
@@ -23,10 +28,9 @@ export default function CreditSettleModal({ show, onClose, creditRecordId, onSet
   // ★ 查詢條件（變動即自動查）
   const [inputFrom, setInputFrom] = useState(""); // yyyy-mm-dd
   const [inputTo, setInputTo] = useState(""); // yyyy-mm-dd
-  const [payerFilter, setPayerFilter] = useState("0"); // ""=全部, "0"=本人, "1"=客人
+  const [payerFilter, setPayerFilter] = useState("0"); // "0"=本人, "1"=客人
 
-  // ★ 回扣點數設定
-  const CASHBACK_RATE = 0.01;
+  // ★ 回扣點數（合計勾選訂單的 cashbackPoint）
   const [cashbackPoint, setCashbackPoint] = useState(0);
 
   // 勾選總金額即時重算
@@ -36,17 +40,22 @@ export default function CreditSettleModal({ show, onClose, creditRecordId, onSet
     );
   }, [selectedOrders]);
 
-  // ★ 客人結帳才計算回扣點數
+  // ★ 合計勾選訂單的 cashbackPoint（改為依每筆訂單欄位，不用比率）
   useEffect(() => {
-    if (payerFilter === "1") {
-      const earned = Math.floor(
-        Number(totalSettledAmount || 0) * CASHBACK_RATE
-      );
-      setCashbackPoint(earned);
-    } else {
+    // 僅在顯示客人結帳時才計算與顯示點數；若不是客人結帳，則歸 0
+    if (payerFilter !== "1") {
       setCashbackPoint(0);
+      return;
     }
-  }, [totalSettledAmount, payerFilter]);
+    const map = new Map(
+      (salesOrders || []).map((o) => [o.id, Number(o.cashbackPoint ?? 0)])
+    );
+    const sum = selectedOrders.reduce(
+      (acc, s) => acc + (map.get(s.orderId) || 0),
+      0
+    );
+    setCashbackPoint(sum);
+  }, [selectedOrders, salesOrders, payerFilter]);
 
   // ★ 自動查詢（400ms debounce + AbortController）
   useEffect(() => {
@@ -76,8 +85,8 @@ export default function CreditSettleModal({ show, onClose, creditRecordId, onSet
         // 新結果 → 清空勾選與金額
         setSelectedOrders([]);
         setTotalSettledAmount(0);
+        setCashbackPoint(0);
       } catch (err) {
-        // 被中止就不報錯
         if (err.name !== "CanceledError") {
           console.error("自動查詢失敗", err);
         }
@@ -185,10 +194,10 @@ export default function CreditSettleModal({ show, onClose, creditRecordId, onSet
   const handleResetClick = () => {
     setInputFrom("");
     setInputTo("");
-    setPayerFilter(""); // 全部
+    setPayerFilter("0"); // 預設本人
     setSelectedOrders([]);
     setTotalSettledAmount(0);
-    // 不用再手動查，清空後會自動觸發 useEffect 查詢
+    setCashbackPoint(0);
   };
 
   const handleConfirmSettle = async () => {
@@ -217,7 +226,8 @@ export default function CreditSettleModal({ show, onClose, creditRecordId, onSet
       remitter: payer || "",
       remittanceDate: payDate || "",
       remittanceImage: paymentImage ? paymentImage.name : "",
-      cashbackPoint: Number(cashbackPoint || 0), // ★ 回扣點數
+      // ★ 直接送合計後的點數（依每筆訂單 cashbackPoint）
+      cashbackPoint: Number(cashbackPoint || 0),
     };
 
     try {
@@ -227,14 +237,13 @@ export default function CreditSettleModal({ show, onClose, creditRecordId, onSet
         payload
       );
       Swal.fire("成功", "結清完成", "success");
-      // ★ 告知父層重抓主表
-    if (typeof onSettled === "function") onSettled();
-    onClose();
+      if (typeof onSettled === "function") onSettled();
+      onClose();
     } catch (error) {
       console.error("結清失敗", error);
       Swal.fire("錯誤", "結清失敗，請稍後再試", "error");
-    }finally {
-    setLoading(false);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -329,6 +338,7 @@ export default function CreditSettleModal({ show, onClose, creditRecordId, onSet
                   <th>訂單編號</th>
                   <th>訂單日期</th>
                   <th>發票</th>
+                  <th>回扣點數</th>
                   <th>賒帳金額</th>
                   <th>選擇</th>
                 </tr>
@@ -367,6 +377,9 @@ export default function CreditSettleModal({ show, onClose, creditRecordId, onSet
                           >
                             {invoiceLabel}
                           </span>
+                        </td>
+                        <td>
+                          {Number(order.cashbackPoint ?? 0).toLocaleString()} 點
                         </td>
                         <td>
                           {Number(order.creditAmount || 0).toLocaleString()}
@@ -445,19 +458,21 @@ export default function CreditSettleModal({ show, onClose, creditRecordId, onSet
                 </Form.Group>
               </Col>
 
-              {/* ★ 客人結帳才顯示回扣點數 */}
+              {/* ★ 客人結帳才顯示「點數（回扣金）」，數值為勾選訂單的 cashbackPoint 合計 */}
               {payerFilter === "1" && (
                 <Col md={12}>
                   <Form.Group>
                     <Form.Label>
                       點數（回扣金）
                       <span className="ms-2 text-muted small">
-                        （目前比率 {CASHBACK_RATE * 100}%）
+                        （依勾選訂單回扣合計）
                       </span>
                     </Form.Label>
                     <Form.Control
                       type="text"
-                      value={`${cashbackPoint.toLocaleString()} 點`}
+                      value={`${Number(
+                        cashbackPoint || 0
+                      ).toLocaleString()} 點`}
                       readOnly
                     />
                   </Form.Group>
