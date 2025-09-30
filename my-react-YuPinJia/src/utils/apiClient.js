@@ -54,90 +54,42 @@ function saveTokens({ accessToken, refreshToken, accessTokenExpiredAt, refreshTo
   localStorage.setItem(TOKEN_VERSION_KEY, String(Date.now()));
 }
 
-// ===== 主動呼叫 Refresh API（相容兩種規格；不旋轉 RT 也可）=====
+// ===== 主動呼叫 Refresh API（★加上 __skipAuthRefresh 避免被攔截器再攔一次）=====
 export async function refreshAccessToken() {
-  const { refreshToken } = getTokens();
+  const { accessToken, refreshToken } = getTokens();
   if (!refreshToken) throw new Error("No refreshToken to refresh.");
 
-  // 方案 A：body 只帶 refreshToken
-  try {
-    const resA = await axios.post(
-      REFRESH_URL,
-      { refreshToken }, // ★ 不要帶 accessToken
-      {
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        __skipAuthRefresh: true,
-      }
-    );
-
-    const {
-      accessToken: newAT,
-      accessTokenExpiredAt,
-      refreshToken: maybeNewRT,
-      refreshTokenExpiredAt: maybeRtAt,
-    } = resA?.data || {};
-
-    if (!newAT) throw new Error("Refresh response missing accessToken.");
-
-    saveTokens({
-      accessToken: newAT,
-      refreshToken: maybeNewRT || refreshToken,
-      accessTokenExpiredAt,
-      refreshTokenExpiredAt: maybeRtAt || localStorage.getItem("refreshTokenExpiredAt"),
-    });
-
-    return {
-      accessToken: newAT,
-      refreshToken: maybeNewRT || refreshToken,
-      accessTokenExpiredAt: tsToMs(accessTokenExpiredAt),
-      refreshTokenExpiredAt: tsToMs(maybeRtAt || localStorage.getItem("refreshTokenExpiredAt")),
-    };
-  } catch (errA) {
-    // 方案 B：Authorization: Bearer <refreshToken>；body 可為 null
-    try {
-      const resB = await axios.post(
-        REFRESH_URL,
-        null,
-        {
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-            Authorization: `Bearer ${refreshToken}`,
-          },
-          __skipAuthRefresh: true,
-        }
-      );
-
-      const {
-        accessToken: newAT,
-        accessTokenExpiredAt,
-        refreshToken: maybeNewRT,
-        refreshTokenExpiredAt: maybeRtAt,
-      } = resB?.data || {};
-
-      if (!newAT) throw new Error("Refresh response missing accessToken.");
-
-      saveTokens({
-        accessToken: newAT,
-        refreshToken: maybeNewRT || refreshToken,
-        accessTokenExpiredAt,
-        refreshTokenExpiredAt: maybeRtAt || localStorage.getItem("refreshTokenExpiredAt"),
-      });
-
-      return {
-        accessToken: newAT,
-        refreshToken: maybeNewRT || refreshToken,
-        accessTokenExpiredAt: tsToMs(accessTokenExpiredAt),
-        refreshTokenExpiredAt: tsToMs(maybeRtAt || localStorage.getItem("refreshTokenExpiredAt")),
-      };
-    } catch (errB) {
-      const e = errB?.response?.data || errB || errA;
-      throw e;
+  const res = await axios.post(
+    REFRESH_URL,
+    { accessToken, refreshToken },
+    {
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      __skipAuthRefresh: true, // ★ 關鍵
     }
-  }
+  );
+
+  const {
+    accessToken: newAT,
+    refreshToken: newRT,
+    accessTokenExpiredAt,
+    refreshTokenExpiredAt,
+  } = res?.data || {};
+
+  if (!newAT) throw new Error("Refresh response missing accessToken.");
+
+  saveTokens({
+    accessToken: newAT,
+    refreshToken: newRT || undefined,
+    accessTokenExpiredAt,
+    refreshTokenExpiredAt,
+  });
+
+  return {
+    accessToken: newAT,
+    refreshToken: newRT || undefined,
+    accessTokenExpiredAt: tsToMs(accessTokenExpiredAt),
+    refreshTokenExpiredAt: tsToMs(refreshTokenExpiredAt),
+  };
 }
 
 // ===== 基本帶 Token（雙保險）=====

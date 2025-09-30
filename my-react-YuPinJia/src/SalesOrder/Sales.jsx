@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import axios from "axios";
 import "../components/Search.css";
 import SearchField from "../components/SearchField";
-import { Modal, Button, Pagination, Form } from "react-bootstrap";
+import { Modal, Button, Pagination } from "react-bootstrap";
 import Swal from "sweetalert2";
 import ReturnOrderForm from "./ReturnOrderModal";
 
@@ -16,6 +16,8 @@ export default function Sales() {
   const [status, setStatus] = useState("all");
   const [month, setMonth] = useState("");
   const [memberName, setMemberName] = useState("");
+  // ✅ 進階條件開/關
+  const [showMoreFilters, setShowMoreFilters] = useState(false);
 
   // ===== 清單資料 =====
   const [tableData, setTableData] = useState([]);
@@ -158,8 +160,6 @@ export default function Sales() {
       const res = await axios.get(`${API_BASE}/t_SalesOrder`, { params });
 
       // --- 相容處理 ---
-      // 舊：res.data 為 array
-      // 新：res.data = { total, offset, limit, items }, 且 items[0] 為原本清單
       let list = [];
       let newTotal = 0;
       let newLimit = _limit;
@@ -207,7 +207,10 @@ export default function Sales() {
       orderNumber: qs.get("orderNumber") || undefined,
       createdAt: qs.get("createdAt") || undefined,
       memberName: qs.get("memberName") || undefined,
-      deliveryMethod: (qs.get("deliveryMethod") || undefined) === "all" ? undefined : qs.get("deliveryMethod") || undefined,
+      deliveryMethod:
+        (qs.get("deliveryMethod") || undefined) === "all"
+          ? undefined
+          : qs.get("deliveryMethod") || undefined,
       status: (() => {
         const sv = qs.get("status");
         if (!sv || sv === "all") return undefined;
@@ -228,41 +231,42 @@ export default function Sales() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-
   // 🔎 條件變動即自動搜尋（含防抖 debounce）
-useEffect(() => {
-  // 組參數（同你原本的 handleSearch）
-  const rawParams = {
-    orderNumber: orderId || undefined,
-    createdAt: month || undefined,
-    memberName: memberName || undefined,
-    deliveryMethod: pickupMethod !== "all" ? pickupMethod : undefined,
-    status: status !== "all" ? Number(status) : undefined,
-  };
-  const params = Object.fromEntries(Object.entries(rawParams).filter(([, v]) => v !== undefined));
+  useEffect(() => {
+    // 組參數（同你原本的 handleSearch）
+    const rawParams = {
+      orderNumber: orderId || undefined,
+      createdAt: month || undefined,
+      memberName: memberName || undefined,
+      deliveryMethod: pickupMethod !== "all" ? pickupMethod : undefined,
+      status: status !== "all" ? Number(status) : undefined,
+    };
+    const params = Object.fromEntries(
+      Object.entries(rawParams).filter(([, v]) => v !== undefined)
+    );
 
-  // 同步 URL
-  const queryString = new URLSearchParams({
-    ...(params.orderNumber ? { orderNumber: params.orderNumber } : {}),
-    ...(params.createdAt ? { createdAt: params.createdAt } : {}),
-    ...(params.memberName ? { memberName: params.memberName } : {}),
-    ...(pickupMethod ? { deliveryMethod: pickupMethod } : {}),
-    ...(status ? { status } : {}),
-  }).toString();
-  window.history.pushState({}, "", `?${queryString}`);
+    // 同步 URL
+    const queryString = new URLSearchParams({
+      ...(params.orderNumber ? { orderNumber: params.orderNumber } : {}),
+      ...(params.createdAt ? { createdAt: params.createdAt } : {}),
+      ...(params.memberName ? { memberName: params.memberName } : {}),
+      ...(pickupMethod ? { deliveryMethod: pickupMethod } : {}),
+      ...(status ? { status } : {}),
+    }).toString();
+    window.history.pushState({}, "", `?${queryString}`);
 
-  // 記住條件、回到第 1 頁
-  setLastQuery(params);
-  setPage(1);
+    // 記住條件、回到第 1 頁
+    setLastQuery(params);
+    setPage(1);
 
-  // debounce：350ms 後才打 API，避免每敲一字就請求
-  const t = setTimeout(() => {
-    fetchOrders(params, 1, limit);
-  }, 350);
+    // debounce：350ms 後才打 API，避免每敲一字就請求
+    const t = setTimeout(() => {
+      fetchOrders(params, 1, limit);
+    }, 350);
 
-  return () => clearTimeout(t);
-  // ⚠️ 僅在條件改變時觸發，不含 limit/page（翻頁另有函式）
-}, [orderId, month, memberName, pickupMethod, status]);
+    return () => clearTimeout(t);
+    // ⚠️ 僅在條件改變時觸發，不含 limit/page（翻頁另有函式）
+  }, [orderId, month, memberName, pickupMethod, status]);
 
   // ===== 分頁動作 =====
   const goPage = (p) => {
@@ -500,106 +504,104 @@ useEffect(() => {
   // ====== UI ======
   return (
     <>
-      {/* 搜尋列 */}
+      {/* 搜尋列（保留原樣 + 進階條件可收合；已移除"每頁筆數"） */}
       <div className="search-container d-flex flex-wrap gap-3 px-4 py-3 rounded align-items-center">
-  {/* 訂單編號 */}
-  <SearchField
-    label="訂單編號"
-    type="text"
-    value={orderId}
-    onChange={(e) => setOrderId(e.target.value)}
-  />
+        {/* 訂單編號 */}
+        <SearchField
+          label="訂單編號"
+          type="text"
+          value={orderId}
+          onChange={(e) => setOrderId(e.target.value)}
+        />
 
-  {/* 訂單成立月份 */}
-  <SearchField
-    label="訂單成立月份"
-    type="month"
-    value={month}
-    onChange={(e) => setMonth(e.target.value)}
-  />
+        {/* 訂單成立月份 */}
+        <SearchField
+          label="訂單成立月份"
+          type="month"
+          value={month}
+          onChange={(e) => setMonth(e.target.value)}
+        />
 
-  {/* 會員名稱 */}
-  <SearchField
-    label="會員名稱"
-    type="text"
-    value={memberName}
-    onChange={(e) => setMemberName(e.target.value)}
-  />
+        {/* 會員名稱 */}
+        <SearchField
+          label="會員名稱"
+          type="text"
+          value={memberName}
+          onChange={(e) => setMemberName(e.target.value)}
+        />
 
-  {/* 取貨方式 */}
-  <SearchField
-    label="取貨方式"
-    type="select"
-    value={pickupMethod}
-    onChange={(e) => setPickupMethod(e.target.value)}
-    options={[
-      { value: "all", label: "全部" },
-      { value: "現場帶走", label: "現場帶走" },
-      { value: "機場提貨", label: "機場提貨" },
-      { value: "碼頭提貨", label: "碼頭提貨" },
-      { value: "宅配到府", label: "宅配到府" },
-      { value: "店到店", label: "店到店" },
-      { value: "訂單自取", label: "訂單自取" },
-      { value: "司機配送", label: "司機配送" },
-    ]}
-  />
+        {/* 進階條件切換按鈕（外觀延續你的風格） */}
+        <button
+          className="btn btn-outline-secondary btn-sm"
+          onClick={() => setShowMoreFilters((v) => !v)}
+        >
+          {showMoreFilters ? "收合進階" : "進階條件"}
+        </button>
 
-  {/* 狀態 */}
-  <SearchField
-    label="狀態"
-    type="select"
-    value={status}
-    onChange={(e) => setStatus(e.target.value)}
-    options={[
-      { value: "all", label: "全部" },
-      { value: "0", label: "已作廢" },
-      { value: "1", label: "賒帳" },
-      { value: "2", label: "已付款" },
-      { value: "3", label: "已出貨" },
-      { value: "4", label: "配送中" },
-      { value: "5", label: "已完成" },
-    ]}
-  />
+        {/* 只有在展開時才顯示：取貨方式、狀態 */}
+        {showMoreFilters && (
+          <>
+            {/* 取貨方式 */}
+            <SearchField
+              label="取貨方式"
+              type="select"
+              value={pickupMethod}
+              onChange={(e) => setPickupMethod(e.target.value)}
+              options={[
+                { value: "all", label: "全部" },
+                { value: "現場帶走", label: "現場帶走" },
+                { value: "機場提貨", label: "機場提貨" },
+                { value: "碼頭提貨", label: "碼頭提貨" },
+                { value: "宅配到府", label: "宅配到府" },
+                { value: "店到店", label: "店到店" },
+                { value: "訂單自取", label: "訂單自取" },
+                { value: "司機配送", label: "司機配送" },
+              ]}
+            />
 
-  {/* 右側：清除 + 每頁筆數（同一行） */}
-  <div className="d-flex align-items-center ms-auto gap-2">
-    <button
-      className="btn btn-outline-secondary"
-      onClick={() => {
-        setOrderId("");
-        setMonth("");
-        setMemberName("");
-        setPickupMethod("all");
-        setStatus("all");
-        setPage(1);
-        setTotal(0);
-        // 清掉 URL
-        window.history.pushState({}, "", window.location.pathname);
-        // 以空參數重新抓第一頁
-        const empty = {};
-        setLastQuery(empty);
-        fetchOrders(empty, 1, limit);
-      }}
-    >
-      清除搜尋
-    </button>
+            {/* 狀態 */}
+            <SearchField
+              label="狀態"
+              type="select"
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+              options={[
+                { value: "all", label: "全部" },
+                { value: "0", label: "已作廢" },
+                { value: "1", label: "賒帳" },
+                { value: "2", label: "已付款" },
+                { value: "3", label: "已出貨" },
+                { value: "4", label: "配送中" },
+                { value: "5", label: "已完成" },
+              ]}
+            />
+          </>
+        )}
 
-    <div className="d-flex align-items-center">
-      <span className="me-2">每頁</span>
-      <select
-        className="form-select form-select-sm"
-        style={{ width: 100 }}
-        value={limit}
-        onChange={handleChangePageSize}
-      >
-        {[10, 20, 30, 50, 100].map((n) => (
-          <option key={n} value={n}>{n}</option>
-        ))}
-      </select>
-      <span className="ms-2">筆</span>
-    </div>
-  </div>
-</div>
+        {/* 右側：只保留清除搜尋（每頁筆數已移到下方分頁列） */}
+        <div className="d-flex align-items-center ms-auto gap-2">
+          <button
+            className="btn btn-outline-secondary"
+            onClick={() => {
+              setOrderId("");
+              setMonth("");
+              setMemberName("");
+              setPickupMethod("all");
+              setStatus("all");
+              setPage(1);
+              setTotal(0);
+              // 清掉 URL
+              window.history.pushState({}, "", window.location.pathname);
+              // 以空參數重新抓第一頁
+              const empty = {};
+              setLastQuery(empty);
+              fetchOrders(empty, 1, limit);
+            }}
+          >
+            清除搜尋
+          </button>
+        </div>
+      </div>
 
       {/* 表格 */}
       <div className="table-container position-relative" style={{ maxHeight: "73vh", overflowY: "auto" }}>
@@ -655,16 +657,32 @@ useEffect(() => {
         </table>
       </div>
 
-      {/* 表格底部：列印與分頁 */}
+      {/* 表格底部：列印與分頁 + ✅ 每頁筆數放在這裡 */}
       <div className="d-flex align-items-center justify-content-between mt-2 ps-3 pe-3 mb-3" >
         <div>
           <button className="pink-button me-3" style={{ fontSize: "1.2rem" }}>列印清單</button>
           <button className="pink-button" style={{ fontSize: "1.2rem" }}>列印明細</button>
         </div>
 
-        {/* 分頁器 */}
-        <div className="d-flex align-items-center">
-          <span className="me-3">
+        <div className="d-flex align-items-center flex-wrap gap-2 justify-content-end">
+          {/* 每頁筆數（下方） */}
+          <div className="d-flex align-items-center">
+            <span className="me-2">每頁</span>
+            <select
+              className="form-select form-select-sm"
+              style={{ width: 100 }}
+              value={limit}
+              onChange={handleChangePageSize}
+            >
+              {[10, 20, 30, 50, 100].map((n) => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
+            <span className="ms-2">筆</span>
+          </div>
+
+          {/* 分頁器 */}
+          <span className="ms-3 me-2">
             共 <strong>{total}</strong> 筆，第 <strong>{page}</strong> / {totalPages} 頁
           </span>
           <Pagination className="mb-0">

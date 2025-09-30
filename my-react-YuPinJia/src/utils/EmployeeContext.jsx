@@ -34,7 +34,8 @@ const TOKEN_VERSION_KEY = "auth:tokenVersion";
 function iAmLeader() {
   const now = Date.now();
   const stamp = Number(localStorage.getItem(LEADER_KEY) || 0);
-  return now - stamp < 6000; // 6 秒內有心跳就視為已有 leader
+  // 6 秒內有心跳就視為已有 leader
+  return now - stamp < 6000;
 }
 function beatLeader() {
   localStorage.setItem(LEADER_KEY, String(Date.now()));
@@ -50,7 +51,7 @@ export const EmployeeProvider = ({ children }) => {
   const heartbeatTimerRef = useRef(null);
   const didInitRef = useRef(false);
 
-  /** 登出：清空所有快取與計時器（不主動 redirect） */
+  /** 強制登出（不主動 redirect，交由 PrivateRoute 判斷） */
   const logout = () => {
     setCurrentUser(null);
     setOrders([]);
@@ -143,7 +144,8 @@ export const EmployeeProvider = ({ children }) => {
 
   const scheduleRefresh = () => {
     stopRefreshTimer();
-    if (!iAmLeader()) return; // 非 leader 不排程
+    // 非 leader 就不排程
+    if (!iAmLeader()) return;
 
     const { accessTokenExpiredAt } = getTokens();
     const now = Date.now();
@@ -159,10 +161,10 @@ export const EmployeeProvider = ({ children }) => {
       try {
         const r = await refreshAccessToken();
         if (!r?.accessToken) throw new Error("no AT after refresh");
-        // apiClient.saveTokens 會廣播 tokenVersion
+        // 通知其他分頁（apiClient 已寫入 TOKEN_VERSION_KEY，這裡不必重複）
       } catch (err) {
         console.error("[auto refresh] failed", err);
-        // 不立刻踢出，留給攔截器或用戶操作時再決定
+        // 不立刻硬踢，留待攔截器或頁面操作再決定
       } finally {
         scheduleRefresh(); // 排下一輪
       }
@@ -173,9 +175,11 @@ export const EmployeeProvider = ({ children }) => {
   useEffect(() => {
     heartbeatTimerRef.current = setInterval(() => {
       if (!iAmLeader()) {
-        beatLeader(); // 取得領導權
+        // 取得領導權
+        beatLeader();
       } else {
-        beatLeader(); // 維持領導權
+        // 維持領導權
+        beatLeader();
       }
     }, 3000);
     return () => clearInterval(heartbeatTimerRef.current);
@@ -275,7 +279,7 @@ export const EmployeeProvider = ({ children }) => {
   const recordOrder = (order) =>
     setOrders((prev) => [...prev, order]);
 
-  // 登入條件：token 看起來可用 + 有 user
+  // 嚴格化登入條件：token 看起來可用 + 有 user
   const { accessToken, accessTokenExpiredAt } = getTokens();
   const tokenLooksValid =
     !!accessToken && isTimestampValid(accessTokenExpiredAt);

@@ -48,7 +48,8 @@ async function shouldRefreshByResponse(res) {
     if (!res) return false;
     if (res.status === 401 || res.status === 600) return true;
 
-    const cloned = res.clone?.() ?? res; // axios 沒有 clone，但有 data
+    // 嘗試解析 body 內容
+    const cloned = res.clone?.() ?? res; // axios res 沒有 clone，但有 data
     if ("data" in cloned && cloned.data != null) {
       const json = cloned.data;
       const bodyCode =
@@ -181,6 +182,7 @@ api.interceptors.response.use(
 );
 
 // ======================= 3) 全域 fetch shim =======================
+// 讓任何 window.fetch(...) 自動：帶 Bearer、偵測 600/401 → refresh → 重送一次
 if (typeof window !== "undefined" && !window.__FETCH_AUTH_SHIM_INSTALLED__) {
   const _origFetch = window.fetch?.bind(window);
   if (_origFetch) {

@@ -82,7 +82,6 @@ export default function Cart({
 
   async function fetchDistributorByMemberId(memberId) {
     try {
-      // 1) 先用 ?memberId= 查
       const tryQuery = await axios
         .get(`${API_BASE}/t_Distributor`, { params: { memberId } })
         .catch(() => null);
@@ -92,7 +91,7 @@ export default function Cart({
       } else if (tryQuery?.data?.memberId === memberId) {
         return tryQuery.data;
       }
-      // 2) 退而求其次：/t_Distributor/{id}（若後端把 id == memberId）
+
       const tryPath = await axios
         .get(`${API_BASE}/t_Distributor/${memberId}`)
         .catch(() => null);
@@ -124,7 +123,6 @@ export default function Cart({
       base?.cashbackPoint ?? base?.rewardPoints ?? base?.points ?? 0
     );
 
-    // ✅ 帶入賒帳權限（API 欄位以後端回傳為準，這裡同時容忍 isSelfCredit/IsSelfCredit）
     const isSelfCredit =
       typeof dist?.isSelfCredit === "boolean"
         ? dist.isSelfCredit
@@ -154,7 +152,6 @@ export default function Cart({
       discountRate: Number(discountRate || 1),
       type: isDistributor ? "VIP" : "一般",
       level: `LV${base?.memberLevel ?? 0}`,
-      // ✅ 賒帳權限
       isSelfCredit,
       isGuestCredit,
       distributorId: dist?.id ?? null,
@@ -226,9 +223,10 @@ export default function Cart({
     }
   };
 
-  const actuallyRestore = (order) => {
+  const actuallyRestore = async (order) => {
+    // 點數安全檢查（通常 usedPoints 於切換後已為 0，保留容錯）
     if ((currentMember?.cashbackPoint || 0) < usedPoints) {
-      Swal.fire({
+      await Swal.fire({
         title: "點數不足",
         text: "會員點數不足以折抵",
         icon: "warning",
@@ -236,26 +234,61 @@ export default function Cart({
       return;
     }
 
-    const outOfStock = order.items.find((it) => {
-      const key = it.productId ?? it.id;
-      return (
-        stockMap[key] !== undefined &&
-        Number(it.quantity ?? 0) > Number(stockMap[key] ?? 0)
-      );
-    });
-    if (outOfStock) {
-      const key = outOfStock.productId ?? outOfStock.id;
-      Swal.fire({
-        title: "庫存不足",
-        text: `商品「${outOfStock.name}」庫存不足，剩餘 ${stockMap[key] || 0}`,
-        icon: "warning",
-      });
-      return;
-    }
-
+    // 檢查庫存，但不阻擋；只做提醒並可強制取回
+    const insuff = [];
     order.items.forEach((it) => {
       const key = it.productId ?? it.id;
-      updateQuantity(key, Number(it.quantity ?? 0), true, it);
+      const stockLeft =
+        stockMap[key] === undefined ? Infinity : Number(stockMap[key] ?? 0);
+      const qty = Number(it.quantity ?? 0);
+      if (qty > stockLeft) {
+        insuff.push({
+          name: it.name ?? it.productName ?? `#${key}`,
+          want: qty,
+          left: isFinite(stockLeft) ? stockLeft : "未知",
+          key,
+        });
+      }
+    });
+
+    if (insuff.length > 0) {
+      const htmlList = insuff
+        .map(
+          (x) =>
+            `<div style="text-align:left">• ${x.name}：需求 ${x.want}，庫存 ${x.left}</div>`
+        )
+        .join("");
+      const { isConfirmed } = await Swal.fire({
+        icon: "warning",
+        title: "部分品項庫存不足",
+        html:
+          `<div style="margin-bottom:.5rem;">仍要取回並繼續結帳嗎？（將標記為「超售」）</div>` +
+          htmlList,
+        showCancelButton: true,
+        confirmButtonText: "繼續取回",
+        cancelButtonText: "取消",
+      });
+      if (!isConfirmed) return;
+    }
+
+    // 強制取回；不足的品項加上 oversell 標記與備註，方便前端顯示
+    order.items.forEach((it) => {
+      const key = it.productId ?? it.id;
+      const stockLeft =
+        stockMap[key] === undefined ? Infinity : Number(stockMap[key] ?? 0);
+      const qty = Number(it.quantity ?? 0);
+      const isOversell = qty > stockLeft;
+
+      const payload = {
+        ...it,
+        // 讓下游（CartTable/結帳）可讀到提示，不影響計算
+        oversell: isOversell || it.oversell === true,
+        inventoryNote: isOversell
+          ? `庫存不足（剩餘 ${isFinite(stockLeft) ? stockLeft : "未知"}）`
+          : it.inventoryNote,
+      };
+
+      updateQuantity(key, qty, true, payload); // replace=true，帶入 payload
     });
 
     const remain = savedOrders.filter((o) => o.key !== order.key);
@@ -263,11 +296,10 @@ export default function Cart({
     localStorage.setItem("savedOrders", JSON.stringify(remain));
     setShowReserved(false);
 
-    Swal.fire({ title: "成功", text: "已取回暫存訂單", icon: "success" });
+    Swal.fire({ title: "已取回", text: "暫存訂單已加入購物車", icon: "success" });
   };
 
   const handleSwitchByInput = async (member, afterSelect) => {
-    // 若已帶齊身份/折扣就直接用；否則查 t_Distributor 後標準化
     let normalized = member;
     const needEnrich =
       member?.discountRate == null &&
@@ -317,28 +349,21 @@ export default function Cart({
         didOpen: () => {
           const popup = Swal.getPopup();
 
-          // 導遊本人（經銷價）
           popup?.querySelector("#guideSelf")?.addEventListener("click", () => {
             Swal.close();
             setIsGuideSelf(true);
             localStorage.setItem("checkout_payer", "guide");
-
-            // 折扣率對定價無影響（Home 會以身份決定價源），但保留以供其它流程使用
             const updatedMember = { ...normalized };
             setCurrentMember(updatedMember);
-
             if (afterSelect) afterSelect();
           });
 
-          // 客人結帳（門市價/原價）
           popup?.querySelector("#customer")?.addEventListener("click", () => {
             Swal.close();
             setIsGuideSelf(false);
             localStorage.setItem("checkout_payer", "customer");
-
             const updatedMember = { ...normalized };
             setCurrentMember(updatedMember);
-
             if (afterSelect) afterSelect();
           });
         },
@@ -349,7 +374,7 @@ export default function Cart({
     }
   };
 
-  // 畫面上的賒帳狀態提示
+  // 畫面上的賒帳狀態提示（目前僅供顯示，未顯示在 UI）
   const creditAllowed = currentMember?.isDistributor
     ? isGuideSelf
       ? !!currentMember?.isSelfCredit
@@ -378,27 +403,14 @@ export default function Cart({
             </div>
             {currentMember && (
               <div className="d-flex align-items-center text-muted small">
-                {/* VIP 改成顯示 memberType（若沒有才退回舊的 type） */}
                 <FaGem className="me-1" />{" "}
                 {currentMember?.memberType ?? currentMember?.type}
-                {/* 等級顯示 levelCode（若沒有才退回舊的 level） */}
                 <span className="mx-3">
                   <FaMedal className="me-1" />{" "}
                   {currentMember?.levelCode ?? currentMember?.level}
                 </span>
-                {/* 點數顯示 cashbackPoint（你原本就是用這個，保留） */}
                 <FaTicketAlt className="me-1" /> 點數：
                 {currentMember?.cashbackPoint}
-                {/* {currentMember?.isDistributor && (
-                  <span className="ms-3">
-                    賒帳：
-                    {creditAllowed ? (
-                      <b className="text-success">可</b>
-                    ) : (
-                      <b className="text-danger">不可</b>
-                    )}
-                  </span>
-                )} */}
               </div>
             )}
           </div>
