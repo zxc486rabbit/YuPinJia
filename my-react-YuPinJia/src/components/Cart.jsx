@@ -389,7 +389,7 @@ export default function Cart({
                 {/* 點數顯示 cashbackPoint（你原本就是用這個，保留） */}
                 <FaTicketAlt className="me-1" /> 點數：
                 {currentMember?.cashbackPoint}
-                {currentMember?.isDistributor && (
+                {/* {currentMember?.isDistributor && (
                   <span className="ms-3">
                     賒帳：
                     {creditAllowed ? (
@@ -398,7 +398,7 @@ export default function Cart({
                       <b className="text-danger">不可</b>
                     )}
                   </span>
-                )}
+                )} */}
               </div>
             )}
           </div>
