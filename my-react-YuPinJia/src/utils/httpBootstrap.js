@@ -23,7 +23,7 @@ async function ensureAccessToken() {
   try {
     const rt = readRefreshToken();
     if (!rt) throw new Error("NO_REFRESH_TOKEN");
-    const r = await refreshAccessToken(); // 寫回 localStorage + 設定 Authorization
+    const r = await refreshAccessToken(); // 會寫回 localStorage + 設定 Authorization
     const at = r?.accessToken || readAccessToken();
     waitQueue.forEach((p) => p.resolve(at));
     waitQueue = [];
@@ -31,11 +31,12 @@ async function ensureAccessToken() {
   } catch (err) {
     waitQueue.forEach((p) => p.reject(err));
     waitQueue = [];
-    // refresh 失敗：清掉，但不要立刻 redirect，交由介面邏輯決定
+    // refresh 失敗：清掉並導回登入
     localStorage.removeItem("accessToken");
     localStorage.removeItem("refreshToken");
     localStorage.removeItem("accessTokenExpiredAt");
     localStorage.removeItem("refreshTokenExpiredAt");
+    if (typeof window !== "undefined") window.location.assign("/login");
     throw err;
   } finally {
     refreshing = false;
@@ -50,7 +51,9 @@ async function shouldRefreshByResponse(res) {
 
     // 嘗試解析 body 內容
     const cloned = res.clone?.() ?? res; // axios res 沒有 clone，但有 data
+    let text;
     if ("data" in cloned && cloned.data != null) {
+      // axios
       const json = cloned.data;
       const bodyCode =
         json?.code ??
@@ -64,7 +67,8 @@ async function shouldRefreshByResponse(res) {
         return true;
       }
     } else if (cloned?.text) {
-      const text = await cloned.text();
+      // fetch
+      text = await cloned.text();
       if (!text) return false;
       try {
         const json = JSON.parse(text);
@@ -80,6 +84,7 @@ async function shouldRefreshByResponse(res) {
           return true;
         }
       } catch {
+        // 純文字時，嘗試抓常見 pattern
         if (/\b(?:code|status)\s*[:=]\s*["']?600["']?/i.test(text)) return true;
       }
     }
@@ -105,6 +110,7 @@ axios.interceptors.request.use((config) => {
 
 axios.interceptors.response.use(
   async (res) => {
+    // ★ 跳過被標記 __skipAuthRefresh 的請求（例如 refresh API）
     if (res?.config?.__skipAuthRefresh) return res;
 
     if (await shouldRefreshByResponse(res)) {
@@ -204,7 +210,7 @@ if (typeof window !== "undefined" && !window.__FETCH_AUTH_SHIM_INSTALLED__) {
         headers.set("Content-Type", "application/json");
       }
 
-      // 避開 refresh 端點（讓 refreshAccessToken 自己處理）
+      // ★ 避開 refresh 端點（讓 refreshAccessToken 自己處理）
       if (String(url).includes("/Account/refresh")) {
         return _origFetch(url, { ...init, headers });
       }
@@ -223,7 +229,7 @@ if (typeof window !== "undefined" && !window.__FETCH_AUTH_SHIM_INSTALLED__) {
           if (newToken) headers2.set("Authorization", `Bearer ${newToken}`);
           res = await _origFetch(url, { ...init, headers: headers2, _retry: true });
         } catch (e) {
-          // 交由上層介面決定是否導回登入
+          // ensureAccessToken 已處理清 Token + 導回 /login
           throw e;
         }
       }

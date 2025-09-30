@@ -13,13 +13,16 @@ import api, {
   refreshAccessToken,
 } from "./apiClient";
 
-const USERINFO_URL = "https://yupinjia.hyjr.com.tw/api/api/Account/userInfo";
+const USERINFO_URL =
+  "https://yupinjia.hyjr.com.tw/api/api/Account/userInfo";
 
 const EmployeeContext = createContext();
 export const useEmployee = () => useContext(EmployeeContext);
 
-// ───── 小工具 ─────
+// 小工具：sleep
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// 沒提供過期時間就先視為有效，避免開頁抖動／誤登出
 const isTimestampValid = (ts) => {
   if (ts === undefined || ts === null || ts === "") return true;
   const n = Number(ts);
@@ -27,42 +30,24 @@ const isTimestampValid = (ts) => {
   return Date.now() < n;
 };
 
-// ───── 多分頁「領導鎖」：只有 leader 排程自動刷新 ─────
-const LEADER_KEY = "auth:refreshLeader";
-const TOKEN_VERSION_KEY = "auth:tokenVersion";
-
-function iAmLeader() {
-  const now = Date.now();
-  const stamp = Number(localStorage.getItem(LEADER_KEY) || 0);
-  // 6 秒內有心跳就視為已有 leader
-  return now - stamp < 6000;
-}
-function beatLeader() {
-  localStorage.setItem(LEADER_KEY, String(Date.now()));
-}
+// ──────────────────────────────────────────────────────────────
 
 export const EmployeeProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null); // { user, privileges? }
   const [orders, setOrders] = useState([]);
   const [hydrating, setHydrating] = useState(true);
 
-  // 排程刷新使用 setTimeout（可依到期時間彈性安排）
+  // 15 分鐘刷新計時器
   const refreshTimerRef = useRef(null);
-  const heartbeatTimerRef = useRef(null);
-  const didInitRef = useRef(false);
+  const didInitRef = useRef(false); // 防止 StrictMode 重跑
 
-  /** 強制登出（不主動 redirect，交由 PrivateRoute 判斷） */
-  const logout = () => {
-    setCurrentUser(null);
-    setOrders([]);
-    stopRefreshTimer();
-
-    localStorage.removeItem("currentUser");
-    localStorage.removeItem("accessToken");
-    localStorage.removeItem("refreshToken");
-    localStorage.removeItem("accessTokenExpiredAt");
-    localStorage.removeItem("refreshTokenExpiredAt");
-    setAuthHeader("");
+  /** 強制登出並導回登入 */
+  const hardLogoutToLogin = () => {
+    logout();
+    if (typeof window !== "undefined") {
+      // 用 assign 以防止返回上一頁繼續用舊 token
+      window.location.assign("/login");
+    }
   };
 
   /** 撈使用者資料（帶目前 accessToken） */
@@ -95,36 +80,46 @@ export const EmployeeProvider = ({ children }) => {
 
       return latestUser;
     } catch (e) {
+      // 讓 httpBootstrap 的攔截器先處理 401/600 → 若仍拋出，這裡視為失敗
       console.error("[refreshUserInfo] failed", e);
       return null;
     }
   };
 
-  /** 下單後同步贈送額度（保留你的原流程） */
+  /** 下單後同步贈送額度（保留你原有流程） */
   const optimisticGiftDeduct = (amount) => {
     const delta = Math.max(0, Number(amount) || 0);
+    let before = 0;
     let after = 0;
 
     setCurrentUser((prev) => {
       if (!prev?.user) return prev;
-      const before = Number(prev.user.monthRemainGift ?? prev.user.giftAmount ?? 0);
+      before = Number(
+        prev.user.monthRemainGift ?? prev.user.giftAmount ?? 0
+      );
       after = Math.max(0, before - delta);
-      const merged = { ...prev, user: { ...prev.user, monthRemainGift: after } };
+      const merged = {
+        ...prev,
+        user: { ...prev.user, monthRemainGift: after },
+      };
       localStorage.setItem("currentUser", JSON.stringify(merged));
       return merged;
     });
 
-    return { after };
+    return { before, after };
   };
 
   const syncGiftAfterOrder = async (usedGiftAmount) => {
-    const { after: optimisticRemain } = optimisticGiftDeduct(usedGiftAmount);
+    const { after: optimisticRemain } =
+      optimisticGiftDeduct(usedGiftAmount);
     try {
       await refreshAccessToken().catch(() => {});
       for (let i = 0; i < 6; i++) {
         const latestUser = await refreshUserInfo();
         if (latestUser) {
-          const serverRemain = Number(latestUser.monthRemainGift ?? 0);
+          const serverRemain = Number(
+            latestUser.monthRemainGift ?? 0
+          );
           if (serverRemain <= optimisticRemain) break;
         }
         await sleep(400);
@@ -134,76 +129,36 @@ export const EmployeeProvider = ({ children }) => {
     }
   };
 
-  // ───── 自動刷新：依到期時間排程 + 只有 leader 執行 ─────
+  /** 啟動 15 分鐘自動刷新（後端要求每 15 分鐘打 /Account/refresh） */
+  const startRefreshTimer = () => {
+    stopRefreshTimer();
+    refreshTimerRef.current = setInterval(async () => {
+      try {
+        const r = await refreshAccessToken();
+        // 正常成功後不需額外動作；httpBootstrap/apiClient 已寫回 token
+        if (!r?.accessToken) throw new Error("No accessToken after refresh");
+      } catch (err) {
+        console.error("[auto refresh] failed → force logout", err);
+        hardLogoutToLogin();
+      }
+    }, 15 * 60 * 1000); // 15 分鐘
+  };
+
   const stopRefreshTimer = () => {
     if (refreshTimerRef.current) {
-      clearTimeout(refreshTimerRef.current);
+      clearInterval(refreshTimerRef.current);
       refreshTimerRef.current = null;
     }
   };
 
-  const scheduleRefresh = () => {
-    stopRefreshTimer();
-    // 非 leader 就不排程
-    if (!iAmLeader()) return;
-
-    const { accessTokenExpiredAt } = getTokens();
-    const now = Date.now();
-    const fallback = 10 * 60 * 1000; // 沒到期資訊時，10 分鐘後嘗試
-    const buffer = 90 * 1000; // 提前 90 秒刷新
-    let waitMs = fallback;
-
-    if (accessTokenExpiredAt && Number(accessTokenExpiredAt) > now) {
-      waitMs = Math.max(30_000, Number(accessTokenExpiredAt) - now - buffer);
-    }
-
-    refreshTimerRef.current = setTimeout(async () => {
-      try {
-        const r = await refreshAccessToken();
-        if (!r?.accessToken) throw new Error("no AT after refresh");
-        // 通知其他分頁（apiClient 已寫入 TOKEN_VERSION_KEY，這裡不必重複）
-      } catch (err) {
-        console.error("[auto refresh] failed", err);
-        // 不立刻硬踢，留待攔截器或頁面操作再決定
-      } finally {
-        scheduleRefresh(); // 排下一輪
-      }
-    }, waitMs);
-  };
-
-  // ───── 領導鎖：維持心跳、偵測 token 更新（跨分頁同步） ─────
-  useEffect(() => {
-    heartbeatTimerRef.current = setInterval(() => {
-      if (!iAmLeader()) {
-        // 取得領導權
-        beatLeader();
-      } else {
-        // 維持領導權
-        beatLeader();
-      }
-    }, 3000);
-    return () => clearInterval(heartbeatTimerRef.current);
-  }, []);
-
-  useEffect(() => {
-    function onStorage(e) {
-      if (e.key === TOKEN_VERSION_KEY) {
-        const { accessToken } = getTokens();
-        if (accessToken) setAuthHeader(accessToken);
-      }
-    }
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
-  }, []);
-
-  /** 初始化流程 */
+  /** 初始化：還原 currentUser、若有 token 則撈 userInfo，最後啟動 15 分鐘刷新 */
   useEffect(() => {
     if (didInitRef.current) return;
     didInitRef.current = true;
 
     (async () => {
       try {
-        // 還原快取的 user（僅作 UI 初值）
+        // 還原快取的 user（僅作 UI 初值，最後仍會以 server 為準）
         const saved = localStorage.getItem("currentUser");
         if (saved) {
           try {
@@ -217,31 +172,20 @@ export const EmployeeProvider = ({ children }) => {
 
         if (tokenLooksValid || !!accessToken) {
           setAuthHeader(accessToken);
-          // 先撈 userInfo
-          let ok = await refreshUserInfo();
+          const ok = await refreshUserInfo();
           if (!ok) {
-            // 補打一輪 refresh 再試一次
-            try {
-              await refreshAccessToken();
-              ok = await refreshUserInfo();
-            } catch {
-              ok = null;
-            }
-          }
-
-          if (!ok) {
-            // 確認真的不行再清
+            // token 形同不可用（撈不到 user），清乾淨
             localStorage.removeItem("accessToken");
             localStorage.removeItem("refreshToken");
             localStorage.removeItem("accessTokenExpiredAt");
             localStorage.removeItem("refreshTokenExpiredAt");
             setCurrentUser(null);
           } else {
-            // 成功才排程自動刷新（由 leader 執行）
-            scheduleRefresh();
+            // 僅在成功取得 userInfo 後，才啟動 15 分鐘刷新
+            startRefreshTimer();
           }
         } else {
-          // 無 token：清乾淨
+          // 無 token：確保乾淨
           localStorage.removeItem("accessToken");
           localStorage.removeItem("refreshToken");
           localStorage.removeItem("accessTokenExpiredAt");
@@ -257,7 +201,7 @@ export const EmployeeProvider = ({ children }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /** 手動登入：寫入 user 與 token（token 由 LoginPage 寫），並排程刷新 */
+  /** 手動登入：寫入 user 與 token（token 由 LoginPage 寫），並啟動刷新 */
   const login = (employee) => {
     const normalized = employee?.user
       ? employee
@@ -272,8 +216,22 @@ export const EmployeeProvider = ({ children }) => {
     const { accessToken } = getTokens();
     if (accessToken) {
       setAuthHeader(accessToken);
-      scheduleRefresh(); // 由 leader 進行
+      startRefreshTimer();
     }
+  };
+
+  /** 登出：清空所有快取與計時器 */
+  const logout = () => {
+    setCurrentUser(null);
+    setOrders([]);
+    stopRefreshTimer();
+
+    localStorage.removeItem("currentUser");
+    localStorage.removeItem("accessToken");
+    localStorage.removeItem("refreshToken");
+    localStorage.removeItem("accessTokenExpiredAt");
+    localStorage.removeItem("refreshTokenExpiredAt");
+    setAuthHeader("");
   };
 
   const recordOrder = (order) =>

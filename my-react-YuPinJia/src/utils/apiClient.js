@@ -4,9 +4,6 @@ import axios from "axios";
 const API_BASE = "https://yupinjia.hyjr.com.tw/api/api";
 const REFRESH_URL = `${API_BASE}/Account/refresh`;
 
-// 通知其他分頁有新 token
-const TOKEN_VERSION_KEY = "auth:tokenVersion";
-
 const api = axios.create({
   baseURL: API_BASE,
   headers: { Accept: "application/json" },
@@ -49,9 +46,6 @@ function saveTokens({ accessToken, refreshToken, accessTokenExpiredAt, refreshTo
   if (atMs) localStorage.setItem("accessTokenExpiredAt", String(atMs));
   if (rtMs) localStorage.setItem("refreshTokenExpiredAt", String(rtMs));
   if (accessToken) setAuthHeader(accessToken);
-
-  // ★ 通知其他分頁 token 已更新
-  localStorage.setItem(TOKEN_VERSION_KEY, String(Date.now()));
 }
 
 // ===== 主動呼叫 Refresh API（★加上 __skipAuthRefresh 避免被攔截器再攔一次）=====

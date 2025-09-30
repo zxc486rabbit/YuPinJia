@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState, Fragment } from "react";
 import { useNavigate } from "react-router-dom";
 import "../components/Search.css";
 import SearchField from "../components/SearchField";
+import { Pagination } from "react-bootstrap";
 import Swal from "sweetalert2";
 import axios from "axios";
 
@@ -44,22 +45,14 @@ const toYMD = (d) => {
 // 狀態碼轉中文（可依你的系統調整）
 const statusToLabel = (s) => {
   switch (Number(s)) {
-    case 0:
-      return "已取消";
-    case 1:
-      return "未付款／賒帳";
-    case 2:
-      return "已付款";
-    case 3:
-      return "已出貨";
-    case 4:
-      return "配送中";
-    case 5:
-      return "已完成";
-    case 6:
-      return "退貨";
-    default:
-      return String(s ?? "");
+    case 0: return "已取消";
+    case 1: return "未付款／賒帳";
+    case 2: return "已付款";
+    case 3: return "已出貨";
+    case 4: return "配送中";
+    case 5: return "已完成";
+    case 6: return "退貨";
+    default: return String(s ?? "");
   }
 };
 
@@ -81,19 +74,20 @@ const normalizeOrder = (raw) => {
     totalQuantity: Number(raw?.totalQuantity ?? 0),
     statusCode: Number(raw?.status ?? 0),
     statusLabel: statusToLabel(raw?.status),
-    memberId: Number(raw?.memberId ?? 0), // 可能後端沒回，沒有就 0
-    deliveryMethod: Number(raw?.deliveryMethod ?? 0),
-    paymentMethodLabel: raw?.paymentMethod ?? "", // PendingOrder 這裡多半是字串（如「現金」）
+    memberId: Number(raw?.memberId ?? 0),
+    deliveryMethod: raw?.deliveryMethod,
+    paymentMethodLabel: raw?.paymentMethod ?? "",
     carrierNumber: raw?.carrierNumber ?? "",
     operatorName: raw?.operatorName ?? "",
     pickupInfo: raw?.pickupInfo ?? "",
     signature: raw?.signature ?? "",
     shippingAddress: raw?.shippingAddress ?? "",
     note: raw?.note ?? "",
+    storeId: raw?.storeId ?? "",
 
-    // 明細（優先採用後端 subtotal）
+    // 明細
     items: items.map((it) => ({
-      id: it?.id, // orderItemId
+      id: it?.id,
       salesOrderId: it?.salesOrderId,
       productId: it?.productId,
       name: it?.productName ?? "-",
@@ -115,13 +109,34 @@ const normalizeOrder = (raw) => {
 export default function PickupOrders() {
   const navigate = useNavigate();
 
-  const [date, setDate] = useState(toYMD(new Date())); // 預設今天
+  // ===== 查詢欄位（全部後端查詢）=====
+  const [date, setDate] = useState(toYMD(new Date())); // createdAt
+  const [orderNumber, setOrderNumber] = useState("");
+  const [memberName, setMemberName] = useState("");
+  const [mobile, setMobile] = useState("");
+  const [storeId, setStoreId] = useState("all");
+
+  // 門市下拉資料
+  const [stores, setStores] = useState([]);
+
+  // ===== 清單 / 載入 =====
   const [orders, setOrders] = useState([]);
-  const [expandedId, setExpandedId] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [expandedId, setExpandedId] = useState(null);
   const [updatingId, setUpdatingId] = useState(null);
 
-  // 取 Bearer（若 API 不驗證可拿掉這行 header）
+  // ===== 分頁狀態 =====
+  const [total, setTotal] = useState(0);
+  const [limit, setLimit] = useState(20);
+  const [page, setPage] = useState(1); // 1-based
+  const totalPages = Math.max(1, Math.ceil(total / Math.max(1, limit)));
+
+  // 記住最後一次查詢參數（翻頁共用）
+  const lastQueryRef = useMemo(() => ({ current: {} }), []);
+  const setLastQuery = (obj) => (lastQueryRef.current = obj);
+  const getLastQuery = () => lastQueryRef.current || {};
+
+  // 取 Bearer（若 API 不驗證可拿掉）
   const authHeader = () => {
     const t = localStorage.getItem("accessToken");
     return t ? { Authorization: `Bearer ${t}` } : {};
@@ -130,63 +145,158 @@ export default function PickupOrders() {
   // 直接用 query 帶 status=5，body 為 null
   async function updateOrderStatusToDone(orderId) {
     const url = `${API_BASE}/t_SalesOrder/UpdateStatus/${orderId}?status=5`;
-    const res = await axios.put(url, null, {
-      headers: { ...authHeader() },
-    });
-    // 後端通常回 200/204，這裡簡單視為成功
+    const res = await axios.put(url, null, { headers: { ...authHeader() } });
     return res?.status;
   }
 
-  // 載入待取訂單
+  // ===== 取得門市清單（載入一次）=====
   useEffect(() => {
-    const load = async () => {
-      try {
-        setLoading(true);
-        const { data } = await axios.get(
-          `${API_BASE}/t_SalesOrder/PendingOrder`
-        );
-        const rows = Array.isArray(data) ? data.map(normalizeOrder) : [];
-        // 偵錯
-        console.log("[PendingOrder] count =", rows.length);
-        rows.forEach((o) =>
-          console.log(
-            `[Order] id=${o.id} number=${o.orderNumber} items=${
-              o.items?.length ?? 0
-            }`
-          )
-        );
-        setOrders(rows);
-      } catch (err) {
-        console.error("取得待取訂單失敗：", err);
-        Swal.fire("載入失敗", "無法取得待取訂單，請稍後再試。", "error");
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
+    let mounted = true;
+    axios
+      .get(`${API_BASE}/Dropdown/GetStoreList`)
+      .then((res) => {
+        if (!mounted) return;
+        const arr = Array.isArray(res.data) ? res.data : [];
+        // 轉成 {value,label}
+        setStores(arr.map((s) => ({ value: String(s.value), label: s.label })));
+      })
+      .catch((err) => {
+        console.error("載入門市清單失敗：", err);
+        setStores([]); // 失敗就給空陣列
+      });
+    return () => (mounted = false);
   }, []);
 
-  const currentStoreId = ""; // 如需依門市過濾可放 storeId，先保留空字串=不過濾
+  // ===== 後端查詢（支援分頁）=====
+  const fetchPending = async (query, _page = 1, _limit = limit) => {
+    setLoading(true);
+    try {
+      const offset = (_page - 1) * _limit;
+      const rawParams = {
+        createdAt: query.createdAt || undefined,      // YYYY-MM-DD
+        orderNumber: query.orderNumber || undefined,
+        memberName: query.memberName || undefined,
+        mobile: query.mobile || undefined,
+        storeId: query.storeId && query.storeId !== "all" ? query.storeId : undefined,
+        offset,
+        limit: _limit,
+      };
+      const params = Object.fromEntries(
+        Object.entries(rawParams).filter(([, v]) => v !== undefined && v !== "")
+      );
 
-  // 依日期（createdAt→orderDate）與門市過濾
-  const filtered = useMemo(() => {
-    return orders.filter((o) => {
-      const isDate = String(o.orderDate).startsWith(date);
-      const isPickupHere =
-        !currentStoreId ||
-        String(o.pickupStoreId || "") === String(currentStoreId);
-      return isDate && (isPickupHere || !currentStoreId);
-    });
-  }, [orders, date, currentStoreId]);
+      const res = await axios.get(`${API_BASE}/t_SalesOrder/PendingOrder`, { params });
+
+      // 相容：可能回傳 array 或 { total, limit, items }
+      let list = [];
+      let newTotal = 0;
+      let newLimit = _limit;
+
+      if (Array.isArray(res.data)) {
+        list = res.data;
+        newTotal = list.length; // 舊格式沒有 total，只能估
+      } else if (res.data && typeof res.data === "object") {
+        const { total: t, limit: l, items } = res.data;
+        newTotal = typeof t === "number" ? t : 0;
+        newLimit = typeof l === "number" && l > 0 ? l : _limit;
+
+        if (Array.isArray(items)) {
+          list = items;
+        } else if (Array.isArray(items?.[0])) {
+          list = items[0];
+        } else {
+          list = [];
+        }
+      }
+
+      const rows = list.map(normalizeOrder);
+      rows.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+      setOrders(rows);
+      setTotal(newTotal);
+      setLimit(newLimit);
+    } catch (err) {
+      console.error("取得待取訂單失敗：", err);
+      Swal.fire("載入失敗", "無法取得待取訂單，請稍後再試。", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ===== 初次載入：帶 URL 初值 =====
+  useEffect(() => {
+    const qs = new URLSearchParams(window.location.search);
+    const init = {
+      createdAt: qs.get("createdAt") || toYMD(new Date()),
+      orderNumber: qs.get("orderNumber") || "",
+      memberName: qs.get("memberName") || "",
+      mobile: qs.get("mobile") || "",
+      storeId: qs.get("storeId") || "all",
+    };
+
+    setDate(init.createdAt);
+    setOrderNumber(init.orderNumber);
+    setMemberName(init.memberName);
+    setMobile(init.mobile);
+    setStoreId(init.storeId || "all");
+
+    setLastQuery(init);
+    setPage(1);
+    fetchPending(init, 1, limit);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ===== 條件變動 -> 自動搜尋（debounce 350ms）=====
+  useEffect(() => {
+    const query = {
+      createdAt: date || "",
+      orderNumber: orderNumber || "",
+      memberName: memberName || "",
+      mobile: mobile || "",
+      storeId: storeId || "all",
+    };
+
+    // 同步 URL
+    const qs = new URLSearchParams({
+      ...(query.createdAt ? { createdAt: query.createdAt } : {}),
+      ...(query.orderNumber ? { orderNumber: query.orderNumber } : {}),
+      ...(query.memberName ? { memberName: query.memberName } : {}),
+      ...(query.mobile ? { mobile: query.mobile } : {}),
+      ...(query.storeId ? { storeId: query.storeId } : {}),
+    }).toString();
+    window.history.pushState({}, "", `?${qs}`);
+
+    setLastQuery(query);
+    setPage(1);
+
+    const t = setTimeout(() => fetchPending(query, 1, limit), 350);
+    return () => clearTimeout(t);
+    // 不含 page/limit（翻頁另處理）
+  }, [date, orderNumber, memberName, mobile, storeId]);
+
+  // ===== 分頁動作 =====
+  const totalPagesMemo = useMemo(
+    () => Math.max(1, Math.ceil(total / Math.max(1, limit))),
+    [total, limit]
+  );
+  const goPage = (p) => {
+    const safe = Math.min(Math.max(1, p), totalPagesMemo);
+    setPage(safe);
+    fetchPending(getLastQuery(), safe, limit);
+  };
+  const handleChangePageSize = (e) => {
+    const newLimit = Number(e.target.value) || 20;
+    setLimit(newLimit);
+    setPage(1);
+    fetchPending(getLastQuery(), 1, newLimit);
+  };
 
   const formatMoney = (n) =>
     Number(n || 0).toLocaleString("zh-TW", { minimumFractionDigits: 0 });
 
-  const toggleExpand = (id) => {
-    setExpandedId((prev) => (prev === id ? null : id));
-  };
+  const toggleExpand = (id) => setExpandedId((prev) => (prev === id ? null : id));
 
-  // 已付款 → 手動完成（此處僅前端更新；若有正式 API 可在這裡串接更新）
+  // 已付款 → 手動完成
   const markDone = async (order) => {
     const res = await Swal.fire({
       icon: "question",
@@ -208,11 +318,7 @@ export default function PickupOrders() {
           o.id === order.id ? { ...o, statusCode: 5, statusLabel: "已完成" } : o
         )
       );
-      await Swal.fire({
-        icon: "success",
-        title: "已完成",
-        text: "狀態已更新為已完成。",
-      });
+      await Swal.fire({ icon: "success", title: "已完成", text: "狀態已更新為已完成。" });
     } catch (err) {
       console.error("更新狀態失敗：", err?.response || err);
       const msg =
@@ -226,11 +332,10 @@ export default function PickupOrders() {
     }
   };
 
-  // 未付款 → 帶商品去結帳（直接到結帳頁，並鎖定為訂單自取）
-  const goCheckout = (order) => {
-    // 轉成 CheckoutFlow 期望的欄位（這裡帶完整一點，結帳頁會沿用）
+  // 未付款 → 帶商品去結帳
+  const navigateToCheckout = (order) => {
     const cartItems = order.items.map((i) => ({
-      id: i.productId ?? i.id, // 優先產品 id
+      id: i.productId ?? i.id,
       name: i.name,
       unitPrice: Number(i.unitPrice) || 0,
       quantity: Number(i.quantity) || 0,
@@ -246,14 +351,11 @@ export default function PickupOrders() {
     };
 
     const subtotal = cartItems.reduce(
-      (sum, i) =>
-        sum + (i.isGift ? 0 : Number(i.unitPrice) * Number(i.quantity)),
+      (sum, i) => sum + (i.isGift ? 0 : Number(i.unitPrice) * Number(i.quantity)),
       0
     );
-
     const finalTotal = Number(order.totalAmount ?? subtotal) || 0;
 
-    // 寫入 localStorage，讓 /checkout 讀得到
     const payload = {
       fromPickup: true,
 
@@ -264,7 +366,6 @@ export default function PickupOrders() {
       pickupSalesOrderId: order.id,
       orderNumber: order.orderNumber,
 
-      // 其餘欄位（盡量帶齊）
       storeName: order.orderStoreName,
       memberId: order.memberId ?? 0,
       memberName: order.customerName,
@@ -274,10 +375,10 @@ export default function PickupOrders() {
       creditAmount: order.creditAmount,
       totalQuantity: order.totalQuantity,
       status: order.statusCode,
-      unifiedBusinessNumber: "", // 待取回傳多半為 null，留空字串
+      unifiedBusinessNumber: "",
       invoiceNumber: order.invoiceNumber ?? "",
       note: order.note ?? "",
-      deliveryMethod: order.deliveryMethod, // 數字碼（5=訂單自取）
+      deliveryMethod: order.deliveryMethod,
       paymentMethodLabel: order.paymentMethodLabel ?? "",
 
       createdAt: order.createdAt,
@@ -292,12 +393,11 @@ export default function PickupOrders() {
       usedPoints: 0,
       subtotal,
       finalTotal,
-      delivery: "訂單自取", // UI 顯示
+      delivery: "訂單自取",
       pickupLocation: order.pickupStoreName || order.orderStoreName || "",
       customerName: order.customerName || "",
       customerPhone: order.phone || "",
 
-      // UI 行為
       prefillDelivery: "訂單自取",
     };
 
@@ -313,6 +413,7 @@ export default function PickupOrders() {
 
   return (
     <>
+      {/* 上方搜尋：輸入/選擇即自動查詢（無搜尋按鈕） */}
       <div className="search-container d-flex flex-wrap gap-3 px-4 py-3 rounded">
         <SearchField
           label="日期"
@@ -320,14 +421,64 @@ export default function PickupOrders() {
           value={date}
           onChange={(e) => setDate(e.target.value)}
         />
+        <SearchField
+          label="訂單編號"
+          type="text"
+          value={orderNumber}
+          onChange={(e) => setOrderNumber(e.target.value)}
+        />
+        <SearchField
+          label="會員姓名"
+          type="text"
+          value={memberName}
+          onChange={(e) => setMemberName(e.target.value)}
+        />
+        <SearchField
+          label="手機"
+          type="text"
+          value={mobile}
+          onChange={(e) => setMobile(e.target.value)}
+        />
+
+        {/* 門市：從後端下拉，含「全部」 */}
+        <SearchField
+          label="門市"
+          type="select"
+          value={storeId}
+          onChange={(e) => setStoreId(e.target.value)}
+          options={[
+            { value: "all", label: "全部" },
+            ...stores.map((s) => ({ value: s.value, label: s.label })),
+          ]}
+        />
+
+        {/* 右側：清除搜尋 */}
+        <div className="d-flex align-items-center ms-auto gap-2">
+          <button
+            className="btn btn-outline-secondary"
+            onClick={() => {
+              setDate(toYMD(new Date()));
+              setOrderNumber("");
+              setMemberName("");
+              setMobile("");
+              setStoreId("all");
+              setPage(1);
+              setTotal(0);
+              window.history.pushState({}, "", window.location.pathname);
+              const empty = {};
+              setLastQuery(empty);
+              fetchPending(empty, 1, limit);
+            }}
+          >
+            清除搜尋
+          </button>
+        </div>
       </div>
 
-      <div
-        className="table-container"
-        style={{ maxHeight: "79vh", overflowY: "auto" }}
-      >
+      {/* 表格 */}
+      <div className="table-container" style={{ maxHeight: "73vh", overflowY: "auto" }}>
         {loading ? (
-          <div>載入中…</div>
+          <div style={{ padding: "2rem", textAlign: "center" }}>載入中…</div>
         ) : (
           <table className="table text-center" style={{ fontSize: "1.05rem" }}>
             <thead
@@ -353,14 +504,14 @@ export default function PickupOrders() {
               </tr>
             </thead>
             <tbody>
-              {filtered.length > 0 ? (
-                filtered.map((o) => (
+              {orders.length > 0 ? (
+                orders.map((o) => (
                   <Fragment key={o.id}>
                     <tr>
                       <td>
                         <button
                           className="check-button"
-                          onClick={() => toggleExpand(o.id)}
+                          onClick={() => setExpandedId((prev) => (prev === o.id ? null : o.id))}
                         >
                           {expandedId === o.id ? "收合" : "展開"}
                         </button>
@@ -393,14 +544,12 @@ export default function PickupOrders() {
                               padding: "6px 12px",
                               borderRadius: "8px",
                             }}
-                            onClick={() => goCheckout(o)}
+                            onClick={() => navigateToCheckout(o)}
                           >
                             去結帳
                           </button>
                         )}
-                        {isCompleted(o) && (
-                          <span className="text-muted">—</span>
-                        )}
+                        {isCompleted(o) && <span className="text-muted">—</span>}
                       </td>
                     </tr>
 
@@ -439,12 +588,57 @@ export default function PickupOrders() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan="9">此日期沒有待取訂單</td>
+                  <td colSpan="9">沒有符合條件的待取訂單</td>
                 </tr>
               )}
             </tbody>
           </table>
         )}
+      </div>
+
+      {/* 表格底部：每頁筆數 + 分頁器 */}
+      <div className="d-flex align-items-center justify-content-end mt-2 ps-3 pe-3 mb-3">
+        <div className="d-flex align-items-center flex-wrap gap-2 justify-content-end">
+          {/* 每頁筆數 */}
+          <div className="d-flex align-items-center">
+            <span className="me-2">每頁</span>
+            <select
+              className="form-select form-select-sm"
+              style={{ width: 100 }}
+              value={limit}
+              onChange={handleChangePageSize}
+            >
+              {[10, 20, 30, 50, 100].map((n) => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
+            <span className="ms-2">筆</span>
+          </div>
+
+          {/* 分頁器 */}
+          <span className="ms-3 me-2">
+            共 <strong>{total}</strong> 筆，第 <strong>{page}</strong> / {totalPages} 頁
+          </span>
+          <Pagination className="mb-0">
+            <Pagination.First disabled={page <= 1} onClick={() => goPage(1)} />
+            <Pagination.Prev disabled={page <= 1} onClick={() => goPage(page - 1)} />
+            {(() => {
+              const pages = [];
+              const start = Math.max(1, page - 2);
+              const end = Math.min(totalPages, start + 4);
+              for (let p = start; p <= end; p++) {
+                pages.push(
+                  <Pagination.Item key={p} active={p === page} onClick={() => goPage(p)}>
+                    {p}
+                  </Pagination.Item>
+                );
+              }
+              return pages;
+            })()}
+            <Pagination.Next disabled={page >= totalPages} onClick={() => goPage(page + 1)} />
+            <Pagination.Last disabled={page >= totalPages} onClick={() => goPage(totalPages)} />
+          </Pagination>
+        </div>
       </div>
     </>
   );

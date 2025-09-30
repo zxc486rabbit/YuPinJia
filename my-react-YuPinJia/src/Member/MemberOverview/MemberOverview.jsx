@@ -97,7 +97,6 @@ export default function MemberOverview() {
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
   const [withdrawMember, setWithdrawMember] = useState(null);
 
-  // ── 共用函式 ──────────────────────────────────────────
   // 只顯示 YYYY/MM/DD
   const formatDate = (iso) => {
     if (!iso) return "-";
@@ -121,14 +120,12 @@ export default function MemberOverview() {
         offset,
         limit: _limit,
       };
-      // 移除 undefined
       Object.keys(params).forEach(
         (k) => params[k] === undefined && delete params[k]
       );
 
       const { data } = await axios.get(`${API_BASE}/t_Member`, { params });
 
-      // 相容：舊為陣列；新為 { total, offset, limit, items }，且 items[0] 可能是原本陣列
       let list = [];
       let newTotal = 0;
       let newLimit = _limit;
@@ -146,7 +143,6 @@ export default function MemberOverview() {
         }
       }
 
-      // 排序（建立日期新到舊）
       list.sort(
         (a, b) => new Date(b.createdAt ?? 0) - new Date(a.createdAt ?? 0)
       );
@@ -221,7 +217,7 @@ export default function MemberOverview() {
     fetchMembers(getLastQuery(), safe, limit);
   };
 
-  // 每頁筆數
+  // 每頁筆數（已移到下方分頁器）
   const handleChangePageSize = (e) => {
     const newLimit = Number(e.target.value) || 20;
     setLimit(newLimit);
@@ -318,7 +314,7 @@ export default function MemberOverview() {
         .row-highlight td { animation: rowFlash 1.8s ease-out 0s 1 both; }
       `}</style>
 
-      {/* 搜尋列（即時搜尋，無按鈕；右側放每頁筆數） */}
+      {/* 搜尋列（即時搜尋，無按鈕） */}
       <div className="search-container d-flex flex-wrap gap-3 px-4 py-3 rounded align-items-center">
         <SearchField
           label="會員編號"
@@ -345,7 +341,7 @@ export default function MemberOverview() {
           ]}
         />
 
-        {/* 右側：清除 + 每頁筆數 */}
+        {/* 右側：清除（頁數選擇已移至下方） */}
         <div className="d-flex align-items-center ms-auto gap-2">
           <button
             className="btn btn-outline-secondary"
@@ -363,23 +359,6 @@ export default function MemberOverview() {
           >
             清除搜尋
           </button>
-
-          <div className="d-flex align-items-center">
-            <span className="me-2">每頁</span>
-            <Form.Select
-              size="sm"
-              value={limit}
-              onChange={handleChangePageSize}
-              style={{ width: 100 }}
-            >
-              {[10, 20, 30, 50, 100].map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </Form.Select>
-            <span className="ms-2">筆</span>
-          </div>
         </div>
       </div>
 
@@ -490,20 +469,40 @@ export default function MemberOverview() {
         )}
       </div>
 
-      {/* 分頁器 */}
+      {/* 底部：每頁筆數 + 分頁器（已把「每頁」移到這裡） */}
       <div
         className="d-flex align-items-center justify-content-end pe-3"
         style={{
-          marginTop: "-6px", // 稍微往上一點
-          background: "#f5f6f7", // 灰底
+          marginTop: "-6px",
+          background: "#f5f6f7",
           borderTop: "1px solid #e5e7eb",
-          paddingTop: "12px", // 標籤上方多一點灰底
+          paddingTop: "12px",
           paddingBottom: "10px",
+          gap: "12px",
+          flexWrap: "wrap",
         }}
       >
-        <span className="me-3">
-          共 <strong>{total}</strong> 筆，第 <strong>{page}</strong> /{" "}
-          {totalPages} 頁
+        {/* 每頁筆數 */}
+        <div className="d-flex align-items-center">
+          <span className="me-2">每頁</span>
+          <Form.Select
+            size="sm"
+            value={limit}
+            onChange={handleChangePageSize}
+            style={{ width: 100 }}
+          >
+            {[10, 20, 30, 50, 100].map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </Form.Select>
+          <span className="ms-2">筆</span>
+        </div>
+
+        {/* 分頁器 */}
+        <span className="ms-2 me-2">
+          共 <strong>{total}</strong> 筆，第 <strong>{page}</strong> / {totalPages} 頁
         </span>
         <Pagination className="mb-0">
           <Pagination.First disabled={page <= 1} onClick={() => goPage(1)} />
