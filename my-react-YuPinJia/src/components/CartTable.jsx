@@ -59,7 +59,7 @@ export default function CartTable({
   };
 
   return (
-    <table className="table m-0" style={{ fontSize: "1.3rem" }}>
+    <table className="table m-0 sticky-head" style={{ fontSize: "1.3rem" }}>
       <thead
         className="table-light"
         

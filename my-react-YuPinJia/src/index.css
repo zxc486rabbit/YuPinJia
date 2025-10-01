@@ -72,6 +72,13 @@ label, input, textarea, .form-select{ font-size:1.05rem !important; }
   padding-block:12px!important;
 }
 
+/* 讓表頭 sticky；外層容器必須是可滾動區（你購物車已用 .no-scrollbar 包住） */
+.table.sticky-head thead th{
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #f6f8fb; /* 請與 .table thead th 底色一致 */
+}
 
 /* 你原本 bootstrap .table-info → 保持藍，但用品牌藍 */
 .table-info{
