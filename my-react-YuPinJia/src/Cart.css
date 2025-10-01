@@ -56,7 +56,6 @@
   border-radius: 10px;
   overflow: hidden;
   box-shadow: var(--shadow-sm);
-  table-layout: fixed;
 }
 
 .cart table th{
@@ -88,11 +87,7 @@
   border-bottom: 1px solid var(--soft-border);
 }
 
-/* 推薦的欄寬（可微調，總和約 100%） */
-.cart .col-name     { width: 52%; }
-.cart .col-qty      { width: 28%; }
-.cart .col-subtotal { width: 16%; }
-.cart .col-remove   { width: 4%; min-width: 40px; max-width: 48px; }
+
 
 /* 只保留上邊框（配合你原本 .cartTr） */
 .cart .cartTr{
