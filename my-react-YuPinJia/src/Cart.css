@@ -76,12 +76,6 @@
   border-bottom: 1px solid var(--soft-border);
 }
 
-/* 欄位之間加右框線（最後一欄不畫） */
-.cart table thead th:not(:last-child),
-.cart table tbody td:not(:last-child){
-  border-right: 1px solid var(--soft-border);
-}
-
 /* 內容列底線（穩定顯示） */
 .cart table tbody td{
   border-bottom: 1px solid var(--soft-border);
