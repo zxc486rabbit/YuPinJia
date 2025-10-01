@@ -22,7 +22,7 @@ td{ font-size:1.05rem; color: var(--text); }
 label, input, textarea, .form-select{ font-size:1.05rem !important; }
 
 /* grid 間距一致 */
-.row>*{ padding: 0 6px; }
+.row>*{ padding: 0; }
 
 /* 滾動條優化（保留你的無滾動條設定） */
 .no-scrollbar{
