@@ -503,7 +503,8 @@ export default function Cart({
                 onClick={() => setShowModal(true)}
                 title="切換會員"
               >
-                <FaSyncAlt className="me-1" /> 切換會員
+                {/* <FaSyncAlt className="me-1" />  */}
+                切換會員
               </button>
 
               {currentMember?.subType === "導遊" && (
