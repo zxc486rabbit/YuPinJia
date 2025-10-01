@@ -188,7 +188,8 @@ export default function CheckoutFlow({
   const totalDiscounted = showDiscount
     ? cartItems.reduce(
         (sum, i) =>
-          sum + calcDiscountPrice(Number(i.unitPrice ?? 0)) * Number(i.quantity ?? 1),
+          sum +
+          calcDiscountPrice(Number(i.unitPrice ?? 0)) * Number(i.quantity ?? 1),
         0
       )
     : totalOriginal;
@@ -224,9 +225,12 @@ export default function CheckoutFlow({
     try {
       const data = await res.clone().json();
       if (typeof data === "number") newOrderId = Number(data);
-      else if (Array.isArray(data) && data[0]?.id) newOrderId = Number(data[0].id);
+      else if (Array.isArray(data) && data[0]?.id)
+        newOrderId = Number(data[0].id);
       else if (data && typeof data === "object")
-        newOrderId = Number(data.id ?? data.Id ?? data.orderId ?? data.OrderId ?? 0);
+        newOrderId = Number(
+          data.id ?? data.Id ?? data.orderId ?? data.OrderId ?? 0
+        );
     } catch {}
     if (!newOrderId) {
       try {
@@ -268,7 +272,11 @@ export default function CheckoutFlow({
       const checkoutTimeIso = toIsoLocal(now);
       let effectiveCheckoutTime = checkoutTimeIso;
 
-      const payloadToPost = { id: 0, ...orderPayload, checkoutTime: checkoutTimeIso };
+      const payloadToPost = {
+        id: 0,
+        ...orderPayload,
+        checkoutTime: checkoutTimeIso,
+      };
       const res = await fetch(`${API_BASE}/t_SalesOrder`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -287,14 +295,22 @@ export default function CheckoutFlow({
       setCheckoutTime(serverCheckoutTime);
       effectiveCheckoutTime = serverCheckoutTime;
 
-      const newOrderId = await extractOrderIdFromResponse(res, orderPayload.orderNumber);
-      if (!newOrderId) throw new Error("建立訂單成功，但無法取得新單 id（無法新增明細）。");
+      const newOrderId = await extractOrderIdFromResponse(
+        res,
+        orderPayload.orderNumber
+      );
+      if (!newOrderId)
+        throw new Error("建立訂單成功，但無法取得新單 id（無法新增明細）。");
 
       for (const item of updatedCartItems) {
         const isGiftLine = !!item.isGift;
         const unitPriceForAPI = item.__orig;
-        const subtotalForAPI = Math.round(unitPriceForAPI * Number(item.__qty || 0));
-        const discountedForAPI = isGiftLine ? 0 : Math.round(Number(item.__lineDiscount || 0));
+        const subtotalForAPI = Math.round(
+          unitPriceForAPI * Number(item.__qty || 0)
+        );
+        const discountedForAPI = isGiftLine
+          ? subtotalForAPI
+          : Math.round(Number(item.__lineDiscount || 0));
 
         const payload = {
           salesOrderId: newOrderId,
@@ -334,7 +350,10 @@ export default function CheckoutFlow({
         try {
           const memberIdForRefresh = Number(currentMember?.id ?? 0);
           if (memberIdForRefresh) {
-            localStorage.setItem("member_points_refresh_id", String(memberIdForRefresh));
+            localStorage.setItem(
+              "member_points_refresh_id",
+              String(memberIdForRefresh)
+            );
           }
           localStorage.setItem("checkout_done", String(Date.now()));
           if ("BroadcastChannel" in window) {
@@ -372,23 +391,40 @@ export default function CheckoutFlow({
   const handleFinish = async () => {
     if (submitting) return;
 
-    if ((payment === "匯款" || payment === "支票") && Number(paymentAmount) < 0) {
-      await Swal.fire({ icon: "warning", title: "金額錯誤", text: "金額不可為負數。", confirmButtonText: "確定" });
+    if (
+      (payment === "匯款" || payment === "支票") &&
+      Number(paymentAmount) < 0
+    ) {
+      await Swal.fire({
+        icon: "warning",
+        title: "金額錯誤",
+        text: "金額不可為負數。",
+        confirmButtonText: "確定",
+      });
       return;
     }
 
     const _discountRate = Number(currentMember?.discountRate ?? 1);
-    const calcDiscountUnit = (p) => Math.round(Number(p) * (_discountRate || 1));
+    const calcDiscountUnit = (p) =>
+      Math.round(Number(p) * (_discountRate || 1));
 
     const updatedCartItems = cartItems.map((item) => {
       const qty = Number(item.quantity ?? 1);
       const productId =
         Number(item.productId ?? item.pid ?? item.product?.id ?? item.id) || 0;
       const name = item.productName ?? item.name ?? "";
-      const origUnit = Number(item.unitPrice ?? item.price ?? item.originalPrice ?? 0);
-      const isGift = !!item.isGift || origUnit === 0;
+      // 1) 組 updatedCartItems
+      const origUnit = Number(
+        item.originalPrice ?? item.price ?? item.unitPrice ?? 0
+      );
+      const isGift = !!item.isGift;
       let discUnit = isGift ? 0 : calcDiscountUnit(origUnit);
-      if (!isGift && (_discountRate || 1) === 1 && discUnit === 0 && origUnit > 0) {
+      if (
+        !isGift &&
+        (_discountRate || 1) === 1 &&
+        discUnit === 0 &&
+        origUnit > 0
+      ) {
         discUnit = origUnit;
       }
       const perUnitDiscount = Math.max(0, origUnit - discUnit);
@@ -405,8 +441,14 @@ export default function CheckoutFlow({
       };
     });
 
-    const orderOriginalAmount = updatedCartItems.reduce((s, i) => s + i.__orig * i.__qty, 0);
-    const orderDiscountAmount = updatedCartItems.reduce((s, i) => s + i.__lineDiscount, 0);
+    const orderOriginalAmount = updatedCartItems.reduce(
+      (s, i) => s + i.__orig * i.__qty,
+      0
+    );
+    const orderDiscountAmount = updatedCartItems.reduce(
+      (s, i) => s + i.__lineDiscount,
+      0
+    );
 
     const total = Number(finalTotal) || 0;
     const received =
@@ -421,7 +463,10 @@ export default function CheckoutFlow({
     const creditAmountValue = Math.max(0, total - received);
     const paymentAmountValue = Math.min(received, total);
 
-    if (!getCreditAllowed(currentMember, isGuideSelf) && creditAmountValue > 0) {
+    if (
+      !getCreditAllowed(currentMember, isGuideSelf) &&
+      creditAmountValue > 0
+    ) {
       await Swal.fire({
         icon: "warning",
         title: "此身份不可賒帳",
@@ -451,12 +496,16 @@ export default function CheckoutFlow({
     // shippingAddress：
     // 宅配/司機 → 收件人地址（司機配送這次新增地址欄）
     const shippingAddressValue =
-      delivery === "宅配到府" || delivery === "司機配送" ? (receiverAddress || "") : "";
+      delivery === "宅配到府" || delivery === "司機配送"
+        ? receiverAddress || ""
+        : "";
 
     // pickupInfo：人性化摘要
     const pickupInfoParts = [];
     if (delivery === "訂單自取") {
-      pickupInfoParts.push(pickupLocation ? `自取門市:${pickupLocation}` : "自取");
+      pickupInfoParts.push(
+        pickupLocation ? `自取門市:${pickupLocation}` : "自取"
+      );
       if (pickupTime) pickupInfoParts.push(`時間:${pickupTime}`);
     }
     if (delivery === "店到店") {
@@ -468,16 +517,22 @@ export default function CheckoutFlow({
       if (pickupTime) pickupInfoParts.push(`時間:${pickupTime}`);
       if (pickupLocation) pickupInfoParts.push(`司機/物流:${pickupLocation}`);
       // 使用聯絡人（第一行）＋ 收件地址
-      pickupInfoParts.push(`聯絡人:${customerName || ""} ${customerPhone || ""}`.trim());
+      pickupInfoParts.push(
+        `聯絡人:${customerName || ""} ${customerPhone || ""}`.trim()
+      );
       if (receiverAddress) pickupInfoParts.push(`地址:${receiverAddress}`);
     }
     if (delivery === "宅配到府") {
       // 宅配仍保留寄件/收件摘要（不含日期/單號）
       pickupInfoParts.push(
-        `寄件人:${senderName || "本店"} ${senderPhone || ""} ${senderAddress || ""}`.trim()
+        `寄件人:${senderName || "本店"} ${senderPhone || ""} ${
+          senderAddress || ""
+        }`.trim()
       );
       pickupInfoParts.push(
-        `收件人:${receiverName || ""} ${receiverPhone || ""} ${receiverAddress || ""}`.trim()
+        `收件人:${receiverName || ""} ${receiverPhone || ""} ${
+          receiverAddress || ""
+        }`.trim()
       );
     }
     const pickupInfoStr = pickupInfoParts.filter(Boolean).join(" | ");
@@ -519,9 +574,8 @@ export default function CheckoutFlow({
       pickupInfo: pickupInfoStr,
 
       // ★ 手機（電話）：宅配用收件人電話；司機配送改用聯絡人電話
-      mobile: delivery === "宅配到府"
-        ? (receiverPhone || "")
-        : (customerPhone || ""),
+      mobile:
+        delivery === "宅配到府" ? receiverPhone || "" : customerPhone || "",
 
       // ★ 收件地址：宅配/司機 皆寫入
       shippingAddress: shippingAddressValue,
@@ -547,7 +601,10 @@ export default function CheckoutFlow({
     const name = currentMember.fullName || currentMember.name || "";
     setCustomerName(name);
     setCustomerPhone(
-      currentMember.contactPhone || currentMember.phone || currentMember.mobile || ""
+      currentMember.contactPhone ||
+        currentMember.phone ||
+        currentMember.mobile ||
+        ""
     );
     if (!payerName) setPayerName(name || "");
   }, [currentMember]); // eslint-disable-line
@@ -585,7 +642,9 @@ export default function CheckoutFlow({
           usedPoints={usedPoints}
           finalTotal={finalTotal}
           onNext={() => {
-            setDelivery((prev) => (lockDelivery ? "訂單自取" : prev || "現場帶走"));
+            setDelivery((prev) =>
+              lockDelivery ? "訂單自取" : prev || "現場帶走"
+            );
             setStep(2);
           }}
           styles={styles}
@@ -599,13 +658,11 @@ export default function CheckoutFlow({
           lockDelivery={lockDelivery}
           deliveryOptions={deliveryOptions}
           needExtraInfo={needExtraInfo}
-
           // 聯絡窗口（宅配時自動隱藏於子元件）
           customerName={customerName}
           setCustomerName={setCustomerName}
           customerPhone={customerPhone}
           setCustomerPhone={setCustomerPhone}
-
           // 門市/時間/備註
           pickupLocation={pickupLocation}
           setPickupLocation={setPickupLocation}
@@ -613,10 +670,8 @@ export default function CheckoutFlow({
           setPickupTime={setPickupTime}
           note={note}
           setNote={setNote}
-
           // 會員預設地址
           memberAddress={currentMember?.contactAddress || ""}
-
           // 寄件/收件（宅配/司機）
           senderName={senderName}
           setSenderName={setSenderName}
@@ -632,7 +687,6 @@ export default function CheckoutFlow({
           setReceiverAddress={setReceiverAddress}
           defaultSenderName={storeNameFromUser}
           defaultSenderPhone={""}
-
           onBack={() => setStep(1)}
           onNext={() => {
             setPayment(payment || "現金");

@@ -193,3 +193,50 @@ button{ border:none; }
 /* ====================== 行為：數字輸入不顯示箭頭（保留你的設定） ====================== */
 input[type="number"]::-webkit-outer-spin-button,
 input[type="number"]::-webkit-inner-spin-button{ -webkit-appearance: none; }
+
+
+/* ========= 底部兩顆大按鈕（全站共用風格） ========= */
+.open-button,
+.checkout-button{
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 70px;
+  border-radius: 14px;
+  border: 1px solid var(--soft-border);
+  color: #fff;
+  font-weight: 800;
+  font-size: 1.2rem;
+  letter-spacing: .3px;
+  box-shadow: var(--shadow);
+  transition: transform .08s ease, filter .2s, box-shadow .2s;
+  min-width: 0;
+}
+
+/* 開錢櫃：中性灰（固定寬度） */
+.open-button{
+  flex: 0 0 150px;
+  background: linear-gradient(180deg, #8d8d8d, #6f6f6f);
+  border-color: #bdbdbd;
+}
+.open-button:hover{ filter: brightness(1.04); transform: translateY(-1px); }
+.open-button:active{ transform: translateY(0); }
+.open-button:focus-visible{ outline: 3px solid rgba(0,0,0,.12); }
+
+/* 結帳：品牌橘（主動作） */
+.checkout-button{
+  flex: 1;
+  background: linear-gradient(180deg, #ff8a3a, var(--accent-2));
+  border-color: #ffa669;
+}
+.checkout-button:hover{ filter: brightness(1.05); transform: translateY(-1px); }
+.checkout-button:active{ transform: translateY(0); }
+.checkout-button:focus-visible{ outline: 3px solid rgba(230,115,39,.25); }
+.checkout-button:disabled{ opacity:.6; cursor:not-allowed; }
+
+/* 小螢幕微調 */
+@media (max-width: 991px){
+  .open-button{ height: 64px; }
+  .checkout-button{ height: 64px; font-size: 1.1rem; }
+}

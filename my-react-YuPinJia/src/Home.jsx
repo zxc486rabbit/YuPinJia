@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Swal from "sweetalert2";
 import { useEmployee } from "./utils/EmployeeContext";
 import axios from "axios";
+
 import Cart from "./components/Cart";
 import Navbar from "./components/Navbar";
 import CardTable from "./components/CardTable";
@@ -13,7 +14,7 @@ import GiftTable from "./components/GiftTable";
 import CategoryProductTable from "./components/CategoryProductTable";
 
 /* =========================
-   價格規則與 URL 工具
+   價格規則與工具
 ========================= */
 
 const num = (v) => {
@@ -53,24 +54,18 @@ const pickPriceForPayer = (p, currentMember, isGuideSelf) => {
 };
 
 /* =========================
-   產品 URL：所有分頁都必須帶 memberId
+   產品 URL（所有請求都要帶 memberId）
 ========================= */
 const buildProductUrl = (searchType, categoryId, memberId) => {
-  // ★ 必須有 memberId，沒有就不呼叫 API
-  if (memberId == null) return null;
+  if (memberId == null) return null; // 沒 memberId 不打
 
   const base = "https://yupinjia.hyjr.com.tw/api/api/t_Product";
   const params = new URLSearchParams();
 
-  // 固定帶 searchType
   if (searchType != null) params.set("searchType", String(searchType));
-
-  // 只有「產品分類」(searchType===3) 需要帶 categoryId
   if (searchType === 3 && categoryId != null) {
     params.set("categoryId", String(categoryId));
   }
-
-  // 一律帶 memberId
   params.set("memberId", String(memberId));
 
   return `${base}?${params.toString()}`;
@@ -82,7 +77,7 @@ const buildProductUrl = (searchType, categoryId, memberId) => {
 
 const fetchProductsBySearchType = async (searchType, categoryId, memberId) => {
   const url = buildProductUrl(searchType, categoryId, memberId);
-  if (!url) return []; // 沒 memberId 直接回空陣列
+  if (!url) return [];
   const res = await axios.get(url);
   return res.data || [];
 };
@@ -104,16 +99,32 @@ async function fetchMemberSummaryById(id) {
 }
 
 function mergeMemberSummary(prev, summary) {
-  if (!summary) return prev || null;
-  const point = Number(summary.Point ?? prev?.cashbackPoint ?? 0);
+  // ① 先把 point 讀對（支援大小寫與相容欄位）
+  const rawPt =
+    summary?.point ??
+    summary?.Point ??
+    summary?.cashbackPoint ??
+    summary?.CashbackPoint ??
+    summary?.rewardPoints ??
+    0;
+  const point = Number.isFinite(Number(rawPt)) ? Number(rawPt) : 0;
+
+  // ② 其他欄位也做大小寫相容（避免之後 API 改動）
+  const id = summary?.id ?? summary?.Id ?? prev?.id ?? prev?.memberId;
+  const fullName = summary?.fullName ?? summary?.FullName ?? prev?.fullName;
+  const memberType = summary?.memberType ?? summary?.MemberType ?? prev?.memberType;
+  const levelName = summary?.levelName ?? summary?.LevelName ?? prev?.levelName;
+
   return {
     ...(prev || {}),
-    id: summary.Id ?? prev?.id,
-    memberId: summary.Id ?? prev?.memberId,
-    fullName: summary.FullName ?? prev?.fullName,
-    memberType: summary.MemberType ?? prev?.memberType, // 中文
-    levelName: summary.LevelName ?? prev?.levelName,
-    levelCode: summary.LevelName ?? prev?.levelCode,
+    id,
+    memberId: id,
+    fullName,
+    memberType,
+    levelName,
+    levelCode: levelName,          // 舊畫面用到的別名
+    // ③ 三個點數欄位都一起覆蓋，確保前台任何讀法都會拿到 98
+    point,
     cashbackPoint: point,
     rewardPoints: point,
   };
@@ -139,6 +150,7 @@ export default function Home() {
 
   const navigate = useNavigate();
 
+  // 計算購物車中贈品的原價合計
   const calcGiftValue = (items) =>
     (items || [])
       .filter((i) => i.isGift)
@@ -153,6 +165,7 @@ export default function Home() {
     localStorage.setItem("currentMember", JSON.stringify(member));
   };
 
+  // 還原 localStorage 的會員資料
   const memberInitRef = useRef(false);
   useEffect(() => {
     if (memberInitRef.current) return;
@@ -165,6 +178,7 @@ export default function Home() {
     memberInitRef.current = true;
   }, []);
 
+  // 還原結帳身份（導遊/客人）
   useEffect(() => {
     const saved = localStorage.getItem("checkout_payer");
     if (saved === "guide") setIsGuideSelf(true);
@@ -174,7 +188,7 @@ export default function Home() {
     localStorage.setItem("checkout_payer", isGuideSelf ? "guide" : "customer");
   }, [isGuideSelf]);
 
-  /* ========== Tab → searchType ========== */
+  // Tab → searchType
   useEffect(() => {
     switch (activeTab) {
       case "熱銷排行":
@@ -184,7 +198,7 @@ export default function Home() {
         setSearchType(2);
         break;
       case "贈送":
-        setSearchType(4); // 保留你的設定
+        setSearchType(4);
         break;
       case "產品分類":
         setSearchType(3);
@@ -194,14 +208,14 @@ export default function Home() {
     }
   }, [activeTab]);
 
-  /* ========== 取得分類 ========== */
+  // 取得分類
   const { data: categories = [] } = useQuery({
     queryKey: ["categories"],
     queryFn: fetchCategories,
   });
 
   /* ========== 贈送額度（員工） ========== */
-  // 修正 staffId 來源：staffId > employeeId > id
+  // staffId 來源：staffId > employeeId > id
   const rawStaffId =
     employeeUser?.staffId ?? employeeUser?.employeeId ?? employeeUser?.id ?? null;
   const staffId =
@@ -215,7 +229,8 @@ export default function Home() {
     isFetching: isFetchingGift,
   } = useQuery({
     queryKey: ["staffGiftAmount", staffId],
-    enabled: activeTab === "贈送" && staffId != null,
+    // ✅ 放寬條件，只要有 staffId 就抓；如果要節省請求可改回 activeTab === "贈送" && staffId != null
+    enabled: staffId != null,
     queryFn: async () => {
       try {
         const res = await axios.get(
@@ -225,7 +240,11 @@ export default function Home() {
             params: { ts: Date.now() },
           }
         );
-        const val = Number(res.data?.monthRemainGift);
+        const d = res.data ?? {};
+        // ✅ 相容大小寫與其他命名
+        const val = Number(
+          d.MonthRemainGift ?? d.monthRemainGift ?? d.GiftAmount ?? d.giftAmount ?? 0
+        );
         return Number.isFinite(val) ? val : 0;
       } catch (err) {
         console.warn("[GetGiftAmount] error:", err?.response?.status, err?.message);
@@ -237,7 +256,16 @@ export default function Home() {
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
   });
-  const getGiftQuota = () => (typeof giftAmountData === "number" ? giftAmountData : 0);
+
+  const getGiftQuota = () =>
+    typeof giftAmountData === "number" ? giftAmountData : 0;
+
+  // 只要切到「贈送」分頁就重抓一次（避免快取造成舊數字）
+  useEffect(() => {
+    if (activeTab === "贈送" && staffId != null) {
+      refetchGiftAmount?.();
+    }
+  }, [activeTab, staffId, refetchGiftAmount]);
 
   /* ========== memberId → 取得產品 ========== */
   const memberId = useMemo(
@@ -252,7 +280,7 @@ export default function Home() {
   } = useQuery({
     queryKey: ["products", searchType, selectedCategoryId, memberId],
     queryFn: () => fetchProductsBySearchType(searchType, selectedCategoryId, memberId),
-    // ★ 必須有 memberId 才打 API；產品分類還需要選了 categoryId
+    // 需要 memberId；產品分類還需要選 categoryId
     enabled:
       memberId != null &&
       searchType !== null &&
@@ -261,12 +289,16 @@ export default function Home() {
     staleTime: 1000 * 60 * 5,
   });
 
-  // 注入實際用價
+  // 注入實際用價（由 Home 統一計價）
   const allProducts = useMemo(() => {
     return (rawProducts || []).map((p) => {
       const dealerPick = pickPriceGeneral(p);
       const storePick = pickPriceStoreOnly(p);
-      const { price: calculatedPrice, source } = pickPriceForPayer(p, currentMember, isGuideSelf);
+      const { price: calculatedPrice, source } = pickPriceForPayer(
+        p,
+        currentMember,
+        isGuideSelf
+      );
       return {
         ...p,
         productId: p.productId ?? p.id,
@@ -278,7 +310,7 @@ export default function Home() {
     });
   }, [rawProducts, currentMember, isGuideSelf]);
 
-  /* ========== 切換導遊本人/客人 → 重估購物車內非贈品單價 ========== */
+  // 切換導遊本人/客人 → 重估購物車內非贈品單價
   useEffect(() => {
     if (!allProducts?.length) return;
     setCartItems((prev) =>
@@ -319,7 +351,9 @@ export default function Home() {
       );
     }
     if (activeTab === "新品排行") {
-      return [...filtered].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      return [...filtered].sort(
+        (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+      );
     }
     return filtered;
   }, [searchKeyword, allProducts, activeTab]);
@@ -344,7 +378,9 @@ export default function Home() {
 
       const quota = getGiftQuota();
       const currentGiftSum = calcGiftValue(cartItems);
-      const original = Number(item.originalPrice ?? item.price ?? item.calculatedPrice ?? 0);
+      const original = Number(
+        item.originalPrice ?? item.price ?? item.calculatedPrice ?? 0
+      );
       const addValue = original;
 
       if (quota >= 0 && currentGiftSum + addValue > quota) {
@@ -418,7 +454,9 @@ export default function Home() {
         if (exist.isGift && quantity > Number(exist.quantity ?? 1)) {
           const quota = getGiftQuota();
           const currentGiftSum = calcGiftValue(prev);
-          const price = Number(exist.originalPrice ?? exist.price ?? exist.calculatedPrice ?? 0);
+          const price = Number(
+            exist.originalPrice ?? exist.price ?? exist.calculatedPrice ?? 0
+          );
           const addQty = quantity - Number(exist.quantity ?? 1);
           const addValue = price * addQty;
           if (quota >= 0 && currentGiftSum + addValue > quota) {
@@ -442,8 +480,12 @@ export default function Home() {
             ...fullItem,
             quantity,
             unitPrice: Number(fullItem.calculatedPrice ?? fullItem.price ?? 0),
-            __dealerPrice: num(fullItem.__dealerPrice ?? pickPriceGeneral(fullItem).price),
-            __storePrice: num(fullItem.__storePrice ?? pickPriceStoreOnly(fullItem).price),
+            __dealerPrice: num(
+              fullItem.__dealerPrice ?? pickPriceGeneral(fullItem).price
+            ),
+            __storePrice: num(
+              fullItem.__storePrice ?? pickPriceStoreOnly(fullItem).price
+            ),
           },
         ];
       }
@@ -451,57 +493,77 @@ export default function Home() {
     });
   };
 
-  /* ========== 結帳後：會員點數/等級自動刷新（重點） ========== */
-  useEffect(() => {
-    let channel;
-    const maybeRefreshMemberPoints = async () => {
-      try {
-        const midFromFlag = Number(localStorage.getItem("member_points_refresh_id") || 0);
-        const cid = Number(currentMember?.id ?? currentMember?.memberId ?? 0);
-        const id = midFromFlag || cid;
-        if (!id) return;
+  // ========== 結帳後/回首頁：會員點數自動刷新 ==========
+useEffect(() => {
+  let channel;
 
-        const summary = await fetchMemberSummaryById(id);
-        if (summary) {
-          setCurrentMember((prev) => {
-            const merged = mergeMemberSummary(prev, summary);
-            localStorage.setItem("currentMember", JSON.stringify(merged));
-            return merged;
-          });
-        }
-        localStorage.removeItem("member_points_refresh_id");
-      } catch (e) {
-        console.warn("refresh MemberSummary 失敗", e);
+  const fetchMemberSummaryByIdNoCache = async (id) => {
+    if (!id) return null;
+    const res = await axios.get(
+      `${API_BASE}/t_Member/MemberSummary/${id}`,
+      {
+        headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
+        params: { ts: Date.now() }, // 破快取
       }
-    };
+    );
+    return res.data || null;
+  };
 
-    if (localStorage.getItem("checkout_done")) {
-      maybeRefreshMemberPoints();
+  const maybeRefreshMemberPoints = async () => {
+    try {
+      const midFromFlag = Number(localStorage.getItem("member_points_refresh_id") || 0);
+      const cid = Number(currentMember?.id ?? currentMember?.memberId ?? 0);
+      const id = midFromFlag || cid;
+      if (!id) return;
+
+      const summary = await fetchMemberSummaryByIdNoCache(id);
+      if (summary) {
+        setCurrentMember((prev) => {
+          const merged = mergeMemberSummary(prev, summary);
+          localStorage.setItem("currentMember", JSON.stringify(merged));
+          return merged;
+        });
+      }
+      localStorage.removeItem("member_points_refresh_id");
+    } catch (e) {
+      console.warn("refresh MemberSummary 失敗", e);
     }
+  };
 
-    if ("BroadcastChannel" in window) {
-      channel = new BroadcastChannel("pos-events");
-      channel.onmessage = (ev) => {
-        if (ev?.data?.type === "checkout_done") {
-          maybeRefreshMemberPoints();
-        }
-      };
-    }
+  // A) 進到首頁就先刷新一次（若有 currentMember）
+  if (currentMember?.id || currentMember?.memberId) {
+    maybeRefreshMemberPoints();
+  }
 
-    const onStorage = (e) => {
-      if (e.key === "checkout_done" || e.key === "member_points_refresh_id") {
+  // B) 視窗獲得焦點時也刷新（避免漏抓）
+  const onFocus = () => maybeRefreshMemberPoints();
+  window.addEventListener("focus", onFocus);
+
+  // C) checkout 廣播 / localStorage 旗標 觸發刷新
+  if ("BroadcastChannel" in window) {
+    channel = new BroadcastChannel("pos-events");
+    channel.onmessage = (ev) => {
+      if (ev?.data?.type === "checkout_done") {
         maybeRefreshMemberPoints();
       }
     };
-    window.addEventListener("storage", onStorage);
+  }
 
-    return () => {
-      window.removeEventListener("storage", onStorage);
-      if (channel) channel.close();
-    };
-  }, [currentMember?.id, currentMember?.memberId]);
+  const onStorage = (e) => {
+    if (e.key === "checkout_done" || e.key === "member_points_refresh_id") {
+      maybeRefreshMemberPoints();
+    }
+  };
+  window.addEventListener("storage", onStorage);
 
-  /* ========== 結帳後：贈送額度重抓（沿用你的行為） ========== */
+  return () => {
+    window.removeEventListener("focus", onFocus);
+    window.removeEventListener("storage", onStorage);
+    if (channel) channel.close();
+  };
+}, [currentMember?.id, currentMember?.memberId, setCurrentMember]);
+
+  /* ========== 結帳後：贈送額度重抓 ========== */
   useEffect(() => {
     if (activeTab === "贈送" && localStorage.getItem("checkout_done")) {
       refetchGiftAmount?.();
@@ -529,16 +591,19 @@ export default function Home() {
       id: currentMember?.id ?? currentMember?.memberId ?? 0,
       fullName: currentMember?.fullName ?? currentMember?.name ?? "",
       contactPhone:
-        currentMember?.contactPhone ?? currentMember?.phone ?? currentMember?.mobile ?? "",
-      contactAddress: currentMember?.contactAddress ?? currentMember?.address ?? "",
+        currentMember?.contactPhone ??
+        currentMember?.phone ??
+        currentMember?.mobile ??
+        "",
+      contactAddress:
+        currentMember?.contactAddress ?? currentMember?.address ?? "",
       subType: currentMember?.subType ?? "",
       discountRate: currentMember?.discountRate ?? 1,
-      creditEligible:
-        currentMember?.isDistributor
-          ? isGuideSelf
-            ? !!currentMember?.isSelfCredit
-            : !!currentMember?.isGuestCredit
-          : false,
+      creditEligible: currentMember?.isDistributor
+        ? isGuideSelf
+          ? !!currentMember?.isSelfCredit
+          : !!currentMember?.isGuestCredit
+        : false,
       distributorId: currentMember?.distributorId ?? null,
     };
 
@@ -547,7 +612,9 @@ export default function Home() {
       productId: i.productId ?? i.id,
       name: i.name,
       unitPrice: Number(i.unitPrice ?? i.calculatedPrice ?? i.price ?? 0),
-      originalPrice: Number(i.originalPrice ?? i.price ?? i.unitPrice ?? i.msrp ?? 0),
+      originalPrice: Number(
+        i.originalPrice ?? i.price ?? i.unitPrice ?? i.msrp ?? 0
+      ),
       quantity: Number(i.quantity ?? 1),
       isGift: !!i.isGift,
       __dealerPrice: num(i.__dealerPrice),
@@ -577,6 +644,7 @@ export default function Home() {
   return (
     <div className="container-fluid">
       <div className="row">
+        {/* 左側：購物車 */}
         <div className="col-5">
           <Cart
             items={cartItems}
@@ -594,6 +662,7 @@ export default function Home() {
           />
         </div>
 
+        {/* 右側：商品區 */}
         <div className="col-7">
           <Navbar
             activeTab={activeTab}

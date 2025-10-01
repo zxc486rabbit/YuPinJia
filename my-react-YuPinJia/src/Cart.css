@@ -196,39 +196,7 @@
 }
 .cart .pinkButton:hover{ filter: brightness(1.03); transform: translateY(-1px); }
 
-/* ========= 底部兩顆大按鈕 ========= */
-.cart .open-button{
-  width: 150px;
-  height: 70px;
-  background: #737272;
-  border-radius: 12px;
-  color: #fff;
-  font-weight: 800;
-  font-size: 1.2rem;
-  border: 0;
-  box-shadow: var(--shadow);
-  transition: transform .08s ease, filter .2s;
-  flex-shrink: 0;
-}
-.cart .open-button:hover{ filter: brightness(1.03); transform: translateY(-1px); }
-.cart .open-button:active{ transform: translateY(0); }
 
-.cart .checkout-button{
-  flex: 1;
-  height: 70px;
-  background: var(--accent-2);
-  border-radius: 12px;
-  color: #fff;
-  font-weight: 800;
-  font-size: 1.25rem;
-  border: 0;
-  box-shadow: var(--shadow);
-  transition: transform .08s ease, filter .2s;
-  min-width: 0;
-}
-.cart .checkout-button:hover{ filter: brightness(1.05); transform: translateY(-1px); }
-.cart .checkout-button:active{ transform: translateY(0); }
-.cart .checkout-button:disabled{ opacity:.6; cursor:not-allowed; }
 
 /* ========= 滾動區域（只作用在購物車） ========= */
 .cart .no-scrollbar{

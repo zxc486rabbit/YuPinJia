@@ -18,14 +18,14 @@ import {
 import axios from "axios";
 
 export default function Cart({
-  items,
-  updateQuantity,
-  currentMember,
-  setCurrentMember,
-  onCartSummaryChange,
+  items = [],
+  updateQuantity = () => {},
+  currentMember = null,
+  setCurrentMember = () => {},
+  onCartSummaryChange = () => {},
   stockMap = {},
-  isGuideSelf,
-  setIsGuideSelf,
+  isGuideSelf = false,
+  setIsGuideSelf = () => {},
 }) {
   const [showModal, setShowModal] = useState(false);
   const [showReserved, setShowReserved] = useState(false);
@@ -34,11 +34,11 @@ export default function Cart({
 
   const discountPerPoint = 1;
 
-  const totalQuantity = items.reduce(
+  const totalQuantity = (items || []).reduce(
     (sum, item) => sum + Number(item.quantity ?? 0),
     0
   );
-  const subtotal = items.reduce((sum, item) => {
+  const subtotal = (items || []).reduce((sum, item) => {
     const unit = Number(
       item.unitPrice ?? item.calculatedPrice ?? item.price ?? 0
     );
@@ -488,7 +488,7 @@ export default function Cart({
                     }}
                     title="可折抵點數"
                   >
-                    <FaTicketAlt className="me-1" /> 點數 {points}
+                    <FaTicketAlt className="me-1" /> 點數 {points.toLocaleString()}
                   </span>
                 </div>
               ) : (
@@ -521,7 +521,7 @@ export default function Cart({
         </div>
 
         {/* 購物車明細 */}
-        <div className="no-scrollbar mt-3" style={{ height: "43vh" }}>
+        <div className="no-scrollbar mt-3" style={{ height: "45vh" }}>
           <CartTable
             items={items}
             updateQuantity={updateQuantity}
