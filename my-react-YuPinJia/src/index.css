@@ -65,6 +65,19 @@ label, input, textarea, .form-select{ font-size:1.05rem !important; }
   border-bottom:1px solid var(--soft-border);
   padding:12px 10px;
 }
+/* 只要是要做 sticky 的表格，加上 sticky-head 類別即可 */
+.table.sticky-head { 
+  overflow: initial;           /* 覆蓋你原本 .table 的 overflow:hidden */
+}
+
+.table.sticky-head thead th{
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: #f6f8fb;         /* 跟你的表頭底色一致 */
+  border-bottom: 1px solid var(--soft-border);
+  box-shadow: 0 1px 0 rgba(0,0,0,0.04);  /* 讓表頭與內容的交界不會看起來像邊框消失 */
+}
 /* .table tbody tr:nth-child(odd){ background:#fbfcfd; }
 .table tbody tr:hover{ background:#eef4fb; } */
 .table td{

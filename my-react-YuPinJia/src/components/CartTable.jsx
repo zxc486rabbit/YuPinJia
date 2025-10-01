@@ -6,18 +6,16 @@ export default function CartTable({
   items,
   updateQuantity,
   removeItem,
-  currentMember, // 目前不需要，但保留參數相容
+  currentMember,
 }) {
-  // 金額格式
   const money = (n) => `\$${Number(n || 0).toLocaleString()}`;
 
-  // 單列小計：一律用 unitPrice（Home 已計算好的最終價；贈品為 0）
   const getRowSubtotal = (item) => {
     if (item.isGift) return 0;
     const unit = Number(item.unitPrice ?? 0);
     const qty = Number(item.quantity ?? 0);
     return unit * qty;
-  };
+    };
 
   const handleClearCart = () => {
     if ((items?.length || 0) === 0) {
@@ -60,15 +58,12 @@ export default function CartTable({
 
   return (
     <table className="table m-0 sticky-head" style={{ fontSize: "1.3rem" }}>
-      <thead
-        className="table-light"
-        
-      >
+      <thead className="table-light">
         <tr>
-          <th scope="col">名稱</th>
-          <th scope="col">數量</th>
-          <th scope="col">小計</th>
-          <th scope="col" style={{ width: "40px", textAlign: "center" }}>
+          <th scope="col" className="col-name">名稱</th>
+          <th scope="col" className="col-qty">數量</th>
+          <th scope="col" className="col-subtotal">小計</th>
+          <th scope="col" className="col-remove" style={{ textAlign: "center" }}>
             <FaTimes
               className="text-danger"
               style={{ cursor: "pointer" }}
@@ -85,26 +80,33 @@ export default function CartTable({
 
           return (
             <tr key={key} className="cartTr">
-              <td>
+              <td className="col-name">
                 {item.name}
                 {item.isGift && (
-                  <span className="badge text-bg-info ms-2" title={`原價 ${money(item.originalPrice ?? item.price ?? 0)}`}>
+                  <span
+                    className="badge text-bg-info ms-2"
+                    title={`原價 ${money(item.originalPrice ?? item.price ?? 0)}`}
+                  >
                     贈品
                   </span>
                 )}
               </td>
 
-              <td className="quantity-control">
-                <QuantityControl
-                  defaultValue={item.quantity}
-                  onChange={(value) => updateQuantity(key, value)}
-                  onRemove={() => handleRemoveItem(item)}
-                />
+              <td className="col-qty">
+                <div className="quantity-control">
+                  <QuantityControl
+                    defaultValue={item.quantity}
+                    onChange={(value) => updateQuantity(key, value)}
+                    onRemove={() => handleRemoveItem(item)}
+                  />
+                </div>
               </td>
 
-              <td>{item.isGift ? "免費" : money(subtotal)}</td>
+              <td className="col-subtotal">
+                {item.isGift ? "免費" : money(subtotal)}
+              </td>
 
-              <td style={{ textAlign: "center" }}>
+              <td className="col-remove" style={{ textAlign: "center" }}>
                 <FaTimes
                   className="text-danger"
                   style={{ cursor: "pointer" }}

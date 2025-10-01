@@ -56,6 +56,7 @@
   border-radius: 10px;
   overflow: hidden;
   box-shadow: var(--shadow-sm);
+  table-layout: fixed;
 }
 
 .cart table th{
@@ -75,6 +76,23 @@
   color: #39414a;
   border-bottom: 1px solid var(--soft-border);
 }
+
+/* 欄位之間加右框線（最後一欄不畫） */
+.cart table thead th:not(:last-child),
+.cart table tbody td:not(:last-child){
+  border-right: 1px solid var(--soft-border);
+}
+
+/* 內容列底線（穩定顯示） */
+.cart table tbody td{
+  border-bottom: 1px solid var(--soft-border);
+}
+
+/* 推薦的欄寬（可微調，總和約 100%） */
+.cart .col-name     { width: 52%; }
+.cart .col-qty      { width: 28%; }
+.cart .col-subtotal { width: 16%; }
+.cart .col-remove   { width: 4%; min-width: 40px; max-width: 48px; }
 
 /* 只保留上邊框（配合你原本 .cartTr） */
 .cart .cartTr{
