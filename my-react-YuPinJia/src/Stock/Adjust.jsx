@@ -1,12 +1,9 @@
 import { useState, useEffect, useMemo } from "react";
-// ❌ 移除：import axios from "axios";
 import Swal from "sweetalert2";
 import { FaSearch, FaTimes } from "react-icons/fa";
 import SearchField from "../components/SearchField";
 import AdjustRecordModal from "./AdjustRecordModal";
 import { useEmployee } from "../utils/EmployeeContext";
-
-// ✅ 改用共用 api（內含 Token/600/401 自動處理）
 import api from "../utils/apiClient";
 
 // 狀態常數
@@ -18,19 +15,54 @@ export default function Adjust() {
   const { user } = useEmployee(); // user.storeId / user.storeName
 
   // ====== 基本狀態 ======
-  const [orderId, setOrderId] = useState("");
+  const [categoryId, setCategoryId] = useState(""); // ★ 分類（Dropdown/GetCategoryList）
+  const [categoryOptions, setCategoryOptions] = useState([
+    { value: "", label: "全部商品種類" },
+  ]);
+  const [categoryLoading, setCategoryLoading] = useState(false);
+
   const [products, setProducts] = useState([]);
   const [keyword, setKeyword] = useState("");
+  const [debouncedKeyword, setDebouncedKeyword] = useState(""); // ★ 防抖
   const [inputValues, setInputValues] = useState({});
   const [adjustList, setAdjustList] = useState([]);
   const [showModal, setShowModal] = useState(false);
 
   // ====== 門市下拉（來源/目標）======
-  const [stores, setStores] = useState([]);             
-  const [fromStoreId, setFromStoreId] = useState("");   
-  const [toStoreId, setToStoreId] = useState("");       
+  const [stores, setStores] = useState([]);
+  const [fromStoreId, setFromStoreId] = useState("");
+  const [toStoreId, setToStoreId] = useState("");
 
-  // 初始化：載入門市清單 & 商品清單
+  // ========== 載入分類清單（Dropdown/GetCategoryList）==========
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      setCategoryLoading(true);
+      try {
+        const { data } = await api.get("/Dropdown/GetCategoryList");
+        const arr = Array.isArray(data) ? data : [];
+        const opts = arr
+          .map((x) => ({
+            value: String(x.value ?? ""),
+            label: String(x.label ?? x.key ?? x.value ?? ""),
+          }))
+          .filter((o) => o.value !== "");
+        if (!alive) return;
+        setCategoryOptions([{ value: "", label: "全部商品種類" }, ...opts]);
+      } catch (e) {
+        console.warn("分類清單讀取失敗：", e);
+        if (!alive) return;
+        setCategoryOptions([{ value: "", label: "全部商品種類" }]);
+      } finally {
+        if (alive) setCategoryLoading(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // 初始化：載入門市清單
   useEffect(() => {
     (async () => {
       try {
@@ -41,11 +73,9 @@ export default function Adjust() {
         Swal.fire("門市讀取失敗", e?.message || "請稍後再試", "error");
       }
     })();
-    fetchProducts();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ★ 當 stores 或 user 更新時，設定 from/to 預設值
+  // ★ 設定 from/to 預設值
   useEffect(() => {
     const uid =
       user?.storeId != null
@@ -63,12 +93,22 @@ export default function Adjust() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stores, user]);
 
-  // 商品查詢
-  const fetchProducts = async () => {
+  // ========== 關鍵字防抖 ==========
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedKeyword(keyword.trim()), 300);
+    return () => clearTimeout(t);
+  }, [keyword]);
+
+  // ========== 商品查詢（分類 + 模糊關鍵字）==========
+  async function fetchProducts() {
     try {
-      const { data } = await api.get(`/t_Product`, {
-        params: { keyword, offset: 0, limit: 20 },
-      });
+      const params = { offset: 0, limit: 50 };
+      if (debouncedKeyword) params.keyword = debouncedKeyword; // 模糊
+      if (categoryId) params.categoryId = Number(categoryId);  // 分類
+      // 若未來要依門市查熱門品，可加：params.storeId = fromStoreId;
+
+      // ★ 統一走 QueryProducts（支援 keyword / categoryId）
+      const { data } = await api.get("/t_Product/QueryProducts", { params });
       const list = Array.isArray(data?.items)
         ? data.items
         : Array.isArray(data)
@@ -84,12 +124,18 @@ export default function Adjust() {
       }));
       setProducts(normalized);
     } catch (e) {
-      console.error("載入商品失敗:", e?.message);
+      console.warn("載入商品失敗：", e?.message);
       setProducts([]);
     }
-  };
+  }
 
-  const handleSearch = () => fetchProducts();
+  // 初次載入 & 條件變更即查
+  useEffect(() => {
+    fetchProducts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [categoryId, debouncedKeyword]);
+
+  const handleSearch = () => fetchProducts(); // 仍保留按鈕手動觸發
 
   // ====== 左側：加入明細 ======
   const handleAdd = (item) => {
@@ -304,7 +350,7 @@ export default function Adjust() {
             </button>
           </div>
 
-          {/* ★ 主畫面不顯示來源門市；只顯示「目標門市」選擇 */}
+          {/* 主畫面不顯示來源門市；只顯示「目標門市」選擇 */}
           <div className="mx-4 mt-2">
             <div className="row g-2 align-items-center">
               <div className="col-12">
@@ -355,23 +401,19 @@ export default function Adjust() {
         {/* ===== 右側：商品清單 ===== */}
         <div className="col-7">
           <div className="search-container d-flex gap-3 px-5 pt-4 pb-3">
+            {/* ★ 分類下拉（動態） */}
             <SearchField
               type="select"
-              value={orderId}
-              onChange={(e) => setOrderId(e.target.value)}
-              options={[
-                { value: "none", label: "請選擇商品種類" },
-                { value: "all", label: "全部" },
-                { value: "store", label: "門市熱銷" },
-                { value: "delivery", label: "冷凍海鮮" },
-                { value: "dry", label: "乾貨" },
-              ]}
+              value={categoryId}
+              onChange={(e) => setCategoryId(e.target.value)}
+              options={categoryOptions}
+              disabled={categoryLoading}
             />
             <div className="search-bar ms-auto">
               <FaSearch className="search-icon" />
               <input
                 type="text"
-                placeholder="搜尋商品編號 / 名稱..."
+                placeholder="搜尋商品編號 / 名稱…"
                 value={keyword}
                 onChange={(e) => setKeyword(e.target.value)}
               />

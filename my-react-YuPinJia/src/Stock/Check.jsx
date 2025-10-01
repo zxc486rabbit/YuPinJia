@@ -1,16 +1,8 @@
-// Check.jsx — 前台盤點（未建單先列全商品；暫存/送出才建單；含備註/刪除/新增盤點單/紀錄 remark & inventoryBy）
+// Check.jsx — 前台盤點（未建單先列全商品；暫存/送出才建單；含備註/刪除/新增盤點單/紀錄）
 // API_BASE = https://yupinjia.hyjr.com.tw/api/api
 
 import React, { useEffect, useState, useMemo } from "react";
-import {
-  FaSearch,
-  FaHistory,
-  FaSave,
-  FaBroom,
-  FaPaperPlane,
-  FaTrash,
-  FaPlus,
-} from "react-icons/fa";
+import { FaSearch, FaHistory, FaSave, FaBroom, FaPaperPlane, FaTrash, FaPlus } from "react-icons/fa";
 import Swal from "sweetalert2";
 import "sweetalert2/dist/sweetalert2.min.css";
 
@@ -21,20 +13,14 @@ const API_BASE = "https://yupinjia.hyjr.com.tw/api/api";
 const ITEMS_PER_PAGE = 24;
 
 const STATUS = {
-  0: { text: "暫存", color: "#6c757d" },   // 0=暫存(暫存)
-  1: { text: "盤點中", color: "#f0ad4e" }, // 保留不用
+  0: { text: "暫存", color: "#6c757d" },
+  1: { text: "盤點中", color: "#f0ad4e" },
   2: { text: "已結算", color: "#5cb85c" },
 };
 
 const isoNow = () => new Date().toISOString();
-
 const getUserName = (user) =>
-  user?.name ||
-  user?.username ||
-  user?.account ||
-  user?.displayName ||
-  user?.fullName ||
-  "";
+  user?.name || user?.username || user?.account || user?.displayName || user?.fullName || "";
 
 export default function Check() {
   const { user, hydrating } = useEmployee(); // user.storeId / user.id
@@ -42,34 +28,29 @@ export default function Check() {
   const userId = user?.id;
   const inventoryBy = getUserName(user);
 
-  // ====== UI & Data State ======
+  // ====== 查詢條件：分類 + 關鍵字（自動送出）======
+  const [categoryId, setCategoryId] = useState("");
+  const [categoryOptions, setCategoryOptions] = useState([{ value: "", label: "全部商品種類" }]);
+  const [categoryLoading, setCategoryLoading] = useState(false);
   const [keyword, setKeyword] = useState("");
+  const [debouncedKeyword, setDebouncedKeyword] = useState("");
+
+  // ====== 分頁 / 主檔 / 明細 ======
   const [currentPage, setCurrentPage] = useState(1);
-
-  // 主檔（未建單為 null）
   const [record, setRecord] = useState(null);
-
-  // 備註（主檔 remark；未建單時先填，建單時帶上去）
   const [remark, setRemark] = useState("");
 
-  // 當頁 24 筆（未建單=商品；已建單=明細）
   const [pagedItems, setPagedItems] = useState([]);
   const [totalItems, setTotalItems] = useState(0);
 
-  // 未建單：輸入暫存（以 productId 為 key）
   const [edited, setEdited] = useState({}); // { [productId]: { countedQuantity } }
 
-  // Loading flags
+  // Flags
   const [loadingItems, setLoadingItems] = useState(false);
   const [saving, setSaving] = useState(false);
   const [finalizing, setFinalizing] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [deleting, setDeleting] = useState(false);
-
-  // 搜尋模式（未建單）
-  const [clientFilterMode, setClientFilterMode] = useState(false);
-  const [allProducts, setAllProducts] = useState([]);
-  const [filteredProducts, setFilteredProducts] = useState([]);
 
   // 盤點紀錄 Modal
   const [showRecordModal, setShowRecordModal] = useState(false);
@@ -82,7 +63,6 @@ export default function Check() {
 
   const totalPages = Math.max(1, Math.ceil(totalItems / ITEMS_PER_PAGE));
   const isLocked = record?.status === 2;
-  const isLastPage = currentPage === totalPages;
 
   // 即時計數（未建單）：有輸入數字(含0)就算已盤
   const localCounted = useMemo(
@@ -97,33 +77,62 @@ export default function Check() {
     [edited]
   );
 
-  // ====== 資料映射 ======
-  // /t_Product/StoreProducts => { id, name, unit, stock, price }
+  // ====== 資料映射（/t_Product/StoreProducts）======
   const mapProductToRow = (p) => ({
     id: `p_${p.id}`,
     productId: p.id,
-    productNumber: String(p.id), // 若沒有 productNumber 就以 id 代替
+    productNumber: String(p.productNumber ?? p.id),
     productName: p.name,
     unit: p.unit,
-    stockQuantity: p.stock,
+    stockQuantity: Number(p.stock ?? p.stockQuantity ?? 0),
     countedQuantity: null,
   });
 
-  // ====== 抓商品（未建單 → 伺服器分頁） ======
+  // ====== 載入分類清單 ======
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      setCategoryLoading(true);
+      try {
+        const { data } = await api.get(`${API_BASE}/Dropdown/GetCategoryList`);
+        const arr = Array.isArray(data) ? data : [];
+        const opts = arr
+          .map((x) => ({ value: String(x.value ?? ""), label: String(x.label ?? x.key ?? x.value ?? "") }))
+          .filter((o) => o.value !== "");
+        if (alive) setCategoryOptions([{ value: "", label: "全部商品種類" }, ...opts]);
+      } catch (e) {
+        if (alive) setCategoryOptions([{ value: "", label: "全部商品種類" }]);
+      } finally {
+        if (alive) setCategoryLoading(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  // ====== 未建單：伺服器分頁查商品（支援 keyword / categoryId）======
   const fetchProductPage = async (page = 1) => {
     if (!storeId) return;
     setLoadingItems(true);
     try {
       const offset = (page - 1) * ITEMS_PER_PAGE;
-      const { data } = await api.get(`${API_BASE}/t_Product/StoreProducts`, {
-        params: { storeId, offset, limit: ITEMS_PER_PAGE },
-      });
-      const items = (data?.items || []).map(mapProductToRow);
+      const params = {
+        storeId,
+        offset,
+        limit: ITEMS_PER_PAGE,
+        // 伺服器若不支援可忽略，多數情況接受 keyword / productName 皆可
+        keyword: debouncedKeyword || undefined,
+        productName: debouncedKeyword || undefined,
+        categoryId: categoryId || undefined,
+      };
+      const { data } = await api.get(`${API_BASE}/t_Product/StoreProducts`, { params });
+      // 相容 {items,total} 與 純陣列
+      const items = (Array.isArray(data?.items) ? data.items : Array.isArray(data) ? data : []).map(
+        mapProductToRow
+      );
+      const total = typeof data?.total === "number" ? data.total : items.length;
       setPagedItems(items);
-      setTotalItems(data?.total ?? items.length);
-      setClientFilterMode(false);
+      setTotalItems(total);
     } catch (e) {
-      console.error(e);
       setPagedItems([]);
       setTotalItems(0);
       Swal.fire("讀取失敗", "無法載入商品清單。", "error");
@@ -132,54 +141,30 @@ export default function Check() {
     }
   };
 
-  // ====== 抓全部商品（未建單 → 客端搜尋會用到） ======
-  const fetchAllProductsForClientFilter = async () => {
-    if (!storeId) return [];
-    const pageSize = 500;
-    let offset = 0;
-    let total = 0;
-    let all = [];
-    while (true) {
-      const { data } = await api.get(`${API_BASE}/t_Product/StoreProducts`, {
-        params: { storeId, offset, limit: pageSize },
+  // ====== 已建單：伺服器分頁查明細（支援 keyword）======
+  const fetchRecordItems = async (page = 1, kw = "", inventoryIdParam) => {
+    const inventoryId = inventoryIdParam ?? record?.id;
+    if (!inventoryId) return;
+    setLoadingItems(true);
+    try {
+      const offset = (page - 1) * ITEMS_PER_PAGE;
+      const { data } = await api.get(`${API_BASE}/t_InventoryRecordItem`, {
+        params: { inventoryId, keyword: kw || undefined, offset, limit: ITEMS_PER_PAGE },
       });
-      const pageItems = (data?.items || []).map(mapProductToRow);
-      total = data?.total ?? (offset === 0 ? pageItems.length : total);
-      all = all.concat(pageItems);
-      offset += pageSize;
-      if (all.length >= total || pageItems.length === 0) break;
+      const items = (data?.items || []).map((it) => ({
+        ...it,
+        stockQuantity: Number(it.stockQuantity ?? it.systemQuantity ?? 0),
+      }));
+      setPagedItems(items);
+      setTotalItems(data?.total ?? items.length);
+    } catch (e) {
+      setPagedItems([]);
+      setTotalItems(0);
+      Swal.fire("讀取失敗", "無法載入盤點明細。", "error");
+    } finally {
+      setLoadingItems(false);
     }
-    setAllProducts(all);
-    return all;
   };
-
-  // ====== 抓盤點明細（已建單） ======
-  // 抓盤點明細（已建單）
-const fetchRecordItems = async (page = 1, kw = "", inventoryIdParam) => {
-  const inventoryId = inventoryIdParam ?? record?.id;
-  if (!inventoryId) return;
-  setLoadingItems(true);
-  try {
-    const offset = (page - 1) * ITEMS_PER_PAGE;
-    const { data } = await api.get(`${API_BASE}/t_InventoryRecordItem`, {
-      params: { inventoryId, keyword: kw || undefined, offset, limit: ITEMS_PER_PAGE },
-    });
-    const items = (data?.items || []).map((it) => ({
-      ...it,
-      stockQuantity: it.stockQuantity ?? it.systemQuantity ?? 0,
-    }));
-    setPagedItems(items);
-    setTotalItems(data?.total ?? 0);
-  } catch (e) {
-    console.error(e);
-    setPagedItems([]);
-    setTotalItems(0);
-    Swal.fire("讀取失敗", "無法載入盤點明細。", "error");
-  } finally {
-    setLoadingItems(false);
-  }
-};
-
 
   const fetchRecord = async (id) => {
     const { data } = await api.get(`${API_BASE}/t_InventoryRecord/${id}`);
@@ -187,7 +172,6 @@ const fetchRecordItems = async (page = 1, kw = "", inventoryIdParam) => {
     setRemark(data?.remark ?? "");
   };
 
-  // 重新計算指定盤點單的「總項 / 已盤」並更新 record（用於暫存/送出後避免 0/0）
   const recomputeCountsFromItems = async (id) => {
     try {
       const { data } = await api.get(`${API_BASE}/t_InventoryRecordItem`, {
@@ -198,68 +182,36 @@ const fetchRecordItems = async (page = 1, kw = "", inventoryIdParam) => {
       const counted = all.filter(
         (it) => it.countedQuantity !== null && it.countedQuantity !== undefined
       ).length;
-
-      setRecord((prev) =>
-        prev && prev.id === id
-          ? { ...prev, totalItemCount: total, countedItemCount: counted }
-          : prev
-      );
-    } catch (e) {
-      console.warn("recomputeCountsFromItems failed", e);
-    }
+      setRecord((prev) => (prev && prev.id === id ? { ...prev, totalItemCount: total, countedItemCount: counted } : prev));
+    } catch {}
   };
 
-  // ====== 初始化（等 user/storeId 就緒） ======
+  // ====== 初始化 ======
   useEffect(() => {
     if (hydrating) return;
-    if (storeId) {
-      resetToNewLocal();
-    }
+    if (storeId) resetToNewLocal();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrating, storeId]);
 
-  // 換頁：依狀態抓資料
+  // ====== 關鍵字防抖（無搜尋按鈕，輸入即查）======
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedKeyword(keyword.trim()), 300);
+    return () => clearTimeout(t);
+  }, [keyword]);
+
+  // ====== 依狀態載入（換頁 / 條件變更）======
   useEffect(() => {
     if (hydrating) return;
     if (record?.id) {
-      fetchRecordItems(currentPage, keyword);
+      // 已建單：只吃關鍵字，不吃分類
+      fetchRecordItems(currentPage, debouncedKeyword);
     } else {
-      if (!clientFilterMode) fetchProductPage(currentPage);
-      else {
-        const start = (currentPage - 1) * ITEMS_PER_PAGE;
-        setPagedItems(filteredProducts.slice(start, start + ITEMS_PER_PAGE));
-      }
+      fetchProductPage(currentPage);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage]);
+  }, [currentPage, debouncedKeyword, categoryId]);
 
-  // ====== 搜尋 ======
-  const onSearch = async () => {
-    setCurrentPage(1);
-    if (record?.id) {
-      await fetchRecordItems(1, keyword);
-    } else {
-      if (!keyword.trim()) {
-        setClientFilterMode(false);
-        await fetchProductPage(1);
-        return;
-      }
-      const all =
-        allProducts.length ? allProducts : await fetchAllProductsForClientFilter();
-      const k = keyword.trim().toLowerCase();
-      const filtered = all.filter(
-        (it) =>
-          (it.productNumber || "").toLowerCase().includes(k) ||
-          (it.productName || "").toLowerCase().includes(k)
-      );
-      setFilteredProducts(filtered);
-      setClientFilterMode(true);
-      setTotalItems(filtered.length);
-      setPagedItems(filtered.slice(0, ITEMS_PER_PAGE));
-    }
-  };
-
-  // ====== 編輯（以 productId 為 key） ======
+  // ====== 編輯（以 productId 為 key）======
   const onChangeCount = (row, val) => {
     const v = val === "" ? "" : Number(val);
     if (v === "" || Number.isFinite(v)) {
@@ -274,11 +226,11 @@ const fetchRecordItems = async (page = 1, kw = "", inventoryIdParam) => {
     return e === undefined ? (row.countedQuantity ?? "") : e;
   };
 
-  // ====== 建主檔（POST /t_InventoryRecord） ======
+  // ====== 建主檔（POST /t_InventoryRecord）======
   const postRecord = async (status = 0) => {
     const payload = {
       id: 0,
-      inventoryNumber: "", // 讓後端產
+      inventoryNumber: "",
       inventoryDate: isoNow(),
       storeId,
       userId,
@@ -295,15 +247,29 @@ const fetchRecordItems = async (page = 1, kw = "", inventoryIdParam) => {
     return data;
   };
 
-  // ====== 首次建單 & 批次 PUT 全量明細（允許 null / 0） ======
+  // ====== 首次建單：全量明細（以目前「有取回的商品集合」為基準批次 PUT）======
   const putAllItemsArray = async (inventoryId) => {
-    // 全量商品（已有快取就用）
-    const all =
-      allProducts.length || clientFilterMode
-        ? allProducts.length
-          ? allProducts
-          : await fetchAllProductsForClientFilter()
-        : await fetchAllProductsForClientFilter();
+    // 依目前條件把所有頁面拉一輪（伺服器分頁）
+    const pageSize = 500;
+    let offset = 0;
+    let total = 0;
+    let all = [];
+    while (true) {
+      const params = {
+        storeId,
+        offset,
+        limit: pageSize,
+        keyword: debouncedKeyword || undefined,
+        productName: debouncedKeyword || undefined,
+        categoryId: categoryId || undefined,
+      };
+      const { data } = await api.get(`${API_BASE}/t_Product/StoreProducts`, { params });
+      const pageItems = (Array.isArray(data?.items) ? data.items : []).map(mapProductToRow);
+      if (offset === 0) total = typeof data?.total === "number" ? data.total : pageItems.length;
+      all = all.concat(pageItems);
+      offset += pageSize;
+      if (all.length >= total || pageItems.length === 0) break;
+    }
 
     const putArray = all.map((it) => {
       const e = edited[it.productId];
@@ -316,8 +282,7 @@ const fetchRecordItems = async (page = 1, kw = "", inventoryIdParam) => {
         productName: it.productName,
         unit: it.unit,
         stockQuantity: Number(it.stockQuantity ?? 0),
-        countedQuantity:
-          c === undefined || c === "" ? null : Number(c), // null=未填；0=真的0
+        countedQuantity: c === undefined || c === "" ? null : Number(c),
         remark: "",
       };
     });
@@ -325,16 +290,12 @@ const fetchRecordItems = async (page = 1, kw = "", inventoryIdParam) => {
     await api.put(`${API_BASE}/t_InventoryRecordItem/${inventoryId}`, putArray);
   };
 
-  // ====== 已建單：只送異動（也需帶齊欄位） ======
+  // ====== 已建單：只送異動 ======
   const putChangedItemsArray = async (inventoryId) => {
     const changedIds = Object.keys(edited);
     if (!changedIds.length) return false;
 
-    // 盡量補齊欄位
-    const getSource = (pid) =>
-      pagedItems.find((r) => r.productId === pid) ||
-      allProducts.find((r) => r.productId === pid) || {};
-
+    const getSource = (pid) => pagedItems.find((r) => r.productId === pid) || {};
     const putArray = changedIds.map((pidStr) => {
       const pid = Number(pidStr);
       const src = getSource(pid);
@@ -356,31 +317,34 @@ const fetchRecordItems = async (page = 1, kw = "", inventoryIdParam) => {
     return true;
   };
 
-  // ====== 送出/暫存前：統計摘要（顯示在 SweetAlert2） ======
+  // ====== 摘要（SweetAlert2）======
   const summarizeForConfirm = async () => {
     if (!record) {
-      // 未建單：以全量商品為基準
-      const base =
-        allProducts.length || clientFilterMode
-          ? allProducts.length
-            ? allProducts
-            : await fetchAllProductsForClientFilter()
-          : await fetchAllProductsForClientFilter();
-      const total = base.length;
+      // 未建單：抓目前條件的首頁總數即可給概況（不掃全部以節省時間）
+      const { data } = await api.get(`${API_BASE}/t_Product/StoreProducts`, {
+        params: {
+          storeId,
+          offset: 0,
+          limit: ITEMS_PER_PAGE,
+          keyword: debouncedKeyword || undefined,
+          productName: debouncedKeyword || undefined,
+          categoryId: categoryId || undefined,
+        },
+      });
+      const total = typeof data?.total === "number" ? data.total : (data?.items?.length ?? 0);
       let filled = 0;
       let diff = 0;
-      for (const it of base) {
+      pagedItems.forEach((it) => {
         const e = edited[it.productId];
         if (e && e.countedQuantity !== "" && e.countedQuantity !== null) {
           filled += 1;
           if (Number(e.countedQuantity) !== Number(it.stockQuantity || 0)) diff += 1;
         }
-      }
+      });
       return { total, filled, diff };
     } else {
-      // 已建單：合併「後端明細」與「前端未儲存編輯」
       const { data } = await api.get(`${API_BASE}/t_InventoryRecordItem`, {
-        params: { inventoryId: record.id, offset: 0, limit: 5000 },
+        params: { inventoryId: record.id, offset: 0, limit: 5000, keyword: debouncedKeyword || undefined },
       });
       const all = data?.items || [];
       const total = data?.total ?? all.length;
@@ -388,10 +352,7 @@ const fetchRecordItems = async (page = 1, kw = "", inventoryIdParam) => {
       let diff = 0;
       for (const it of all) {
         const override = edited[it.productId];
-        const counted =
-          override && override.countedQuantity !== undefined
-            ? override.countedQuantity
-            : it.countedQuantity;
+        const counted = override?.countedQuantity ?? it.countedQuantity;
         const base = Number(it.stockQuantity ?? it.systemQuantity ?? 0);
         if (counted !== null && counted !== undefined && counted !== "") {
           filled += 1;
@@ -423,7 +384,7 @@ const fetchRecordItems = async (page = 1, kw = "", inventoryIdParam) => {
     return res.isConfirmed;
   };
 
-  // ====== 暫存（status=0） ======
+  // ====== 暫存 ======
   const handleSave = async () => {
     if (saving || !storeId || !userId) return;
     const ok = await confirmWithSummary("暫存");
@@ -435,38 +396,28 @@ const fetchRecordItems = async (page = 1, kw = "", inventoryIdParam) => {
         const newRec = await postRecord(0);
         await putAllItemsArray(newRec.id);
         await fetchRecord(newRec.id);
-        await recomputeCountsFromItems(newRec.id); // 回填總項/已盤
-        setRecord((prev) => prev || newRec);
+        await recomputeCountsFromItems(newRec.id);
         setEdited({});
         await fetchRecordItems(1, "");
         setCurrentPage(1);
         Swal.fire("已暫存", "本次暫存已完成。", "success");
       } else {
         const sent = await putChangedItemsArray(record.id);
-        if (!sent) {
-          Swal.fire("沒有變更", "目前沒有需要儲存的變更。", "info");
-          return;
-        }
+        if (!sent) return Swal.fire("沒有變更", "目前沒有需要儲存的變更。", "info");
         setEdited({});
-        await Promise.all([
-          fetchRecordItems(currentPage, keyword),
-          fetchRecord(record.id),
-          recomputeCountsFromItems(record.id),
-        ]);
+        await Promise.all([fetchRecordItems(currentPage, debouncedKeyword), fetchRecord(record.id), recomputeCountsFromItems(record.id)]);
         Swal.fire("已暫存", "變更已儲存。", "success");
       }
     } catch (e) {
-      console.error(e);
       Swal.fire("儲存失敗", "請稍後再試。", "error");
     } finally {
       setSaving(false);
     }
   };
 
-  // ====== 送出（status=2） ======
+  // ====== 送出 ======
   const handleFinalize = async () => {
     if (finalizing) return;
-
     const ok = await confirmWithSummary("送出");
     if (!ok) return;
 
@@ -477,7 +428,6 @@ const fetchRecordItems = async (page = 1, kw = "", inventoryIdParam) => {
         await putAllItemsArray(newRec.id);
         await fetchRecord(newRec.id);
         await recomputeCountsFromItems(newRec.id);
-        setRecord((prev) => prev || newRec);
         setEdited({});
         await fetchRecordItems(1, "");
         setCurrentPage(1);
@@ -493,21 +443,18 @@ const fetchRecordItems = async (page = 1, kw = "", inventoryIdParam) => {
         Swal.fire("已結算", "盤點單已送出。", "success");
       }
     } catch (e) {
-      console.error(e);
       Swal.fire("送出失敗", "請稍後再試。", "error");
     } finally {
       setFinalizing(false);
     }
   };
 
-  // ====== 一鍵清空（PUT /Clear）→ 全部 countedQuantity 改為 null ======
+  // ====== 一鍵清空 ======
   const handleClear = async () => {
     if (isLocked) return;
     const res = await Swal.fire({
       title: "一鍵清空？",
-      text: record
-        ? "將把此盤點單所有盤點數量改為未填（null）。"
-        : "將清除目前畫面上尚未送出的輸入。",
+      text: record ? "將把此盤點單所有盤點數量改為未填（null）。" : "將清除目前畫面上尚未送出的輸入。",
       icon: "warning",
       showCancelButton: true,
       confirmButtonText: "確認清空",
@@ -524,14 +471,9 @@ const fetchRecordItems = async (page = 1, kw = "", inventoryIdParam) => {
       try {
         await api.put(`${API_BASE}/t_InventoryRecordItem/Clear/${record.id}`);
         setEdited({});
-        await Promise.all([
-          fetchRecordItems(currentPage, keyword),
-          fetchRecord(record.id),
-          recomputeCountsFromItems(record.id),
-        ]);
+        await Promise.all([fetchRecordItems(currentPage, debouncedKeyword), fetchRecord(record.id), recomputeCountsFromItems(record.id)]);
         Swal.fire("已清空", "此盤點單的盤點數量已設為未填（null）。", "success");
-      } catch (e) {
-        console.error(e);
+      } catch {
         Swal.fire("清空失敗", "請稍後再試。", "error");
       } finally {
         setClearing(false);
@@ -539,7 +481,7 @@ const fetchRecordItems = async (page = 1, kw = "", inventoryIdParam) => {
     }
   };
 
-  // ====== 刪除此盤點單（僅未結算可刪） ======
+  // ====== 刪除此盤點單 ======
   const handleDeleteRecord = async () => {
     if (!record || record.status >= 2) return;
     const res = await Swal.fire({
@@ -558,26 +500,24 @@ const fetchRecordItems = async (page = 1, kw = "", inventoryIdParam) => {
       await api.delete(`${API_BASE}/t_InventoryRecord/${record.id}`);
       Swal.fire("已刪除", "盤點單已刪除。", "success");
       resetToNewLocal();
-    } catch (e) {
-      console.error(e);
+    } catch {
       Swal.fire("刪除失敗", "請稍後再試。", "error");
     } finally {
       setDeleting(false);
     }
   };
 
-  // ====== 新增盤點單（回到未建單初始狀態） ======
+  // ====== 新增盤點單（回到未建單）======
   const resetToNewLocal = async () => {
     setRecord(null);
     setEdited({});
     setRemark("");
     setKeyword("");
-    setClientFilterMode(false);
     setCurrentPage(1);
     await fetchProductPage(1);
   };
 
-  // ====== 盤點紀錄（Modal） ======
+  // ====== 盤點紀錄（Modal）======
   const fetchRecordList = async (page = recPage) => {
     try {
       const offset = (page - 1) * REC_LIMIT;
@@ -591,8 +531,7 @@ const fetchRecordItems = async (page = 1, kw = "", inventoryIdParam) => {
       const { data } = await api.get(`${API_BASE}/t_InventoryRecord`, { params });
       setRecords(data?.items || []);
       setRecTotal(data?.total ?? 0);
-    } catch (e) {
-      console.error(e);
+    } catch {
       setRecords([]);
       setRecTotal(0);
       Swal.fire("讀取失敗", "無法載入盤點紀錄。", "error");
@@ -600,19 +539,18 @@ const fetchRecordItems = async (page = 1, kw = "", inventoryIdParam) => {
   };
 
   const openRecordFromModal = async (r) => {
-  try {
-    const { data } = await api.get(`${API_BASE}/t_InventoryRecord/${r.id}`);
-    setRecord(data);
-    setRemark(data?.remark ?? "");
-    setEdited({});
-    setCurrentPage(1);
-    await fetchRecordItems(1, "", r.id); // ★ 用 r.id，避免依賴尚未更新的 record
-    setShowRecordModal(false);
-  } catch (e) {
-    console.error(e);
-    Swal.fire("開啟失敗", "請稍後再試。", "error");
-  }
-};
+    try {
+      const { data } = await api.get(`${API_BASE}/t_InventoryRecord/${r.id}`);
+      setRecord(data);
+      setRemark(data?.remark ?? "");
+      setEdited({});
+      setCurrentPage(1);
+      await fetchRecordItems(1, "", r.id);
+      setShowRecordModal(false);
+    } catch {
+      Swal.fire("開啟失敗", "請稍後再試。", "error");
+    }
+  };
 
   useEffect(() => {
     if (showRecordModal) fetchRecordList(1);
@@ -651,36 +589,51 @@ const fetchRecordItems = async (page = 1, kw = "", inventoryIdParam) => {
       </tr>
     );
 
-  // 切左右／整頁
-  const leftData = isLastPage ? [] : pagedItems.slice(0, 12);
-  const rightData = isLastPage ? [] : pagedItems.slice(12, 24);
-  const fullData = isLastPage ? pagedItems : [];
+  // 永遠雙欄：每頁 24 筆，左 12 / 右 12；即使最後一頁或不足，也保持兩個半版表格
+  const leftData = pagedItems.slice(0, 12);
+  const rightData = pagedItems.slice(12, 24);
 
   if (hydrating || !storeId || !userId) {
     return <div className="p-4">載入中…</div>;
-  }
+    }
 
   return (
     <>
-      {/* 工具列（搜尋 / 備註 / 新增盤點單 / 盤點紀錄） */}
+      {/* 工具列（備註靠左 + 分類 + 即時關鍵字） */}
       <div className="search-container d-flex gap-3 px-5 py-3 align-items-center flex-wrap">
-        {/* 搜尋 */}
+         {/* 即時關鍵字（無搜尋按鈕） */}
         <div className="d-flex align-items-center" style={{ minWidth: 280 }}>
           <FaSearch className="me-2" />
           <input
             className="form-control"
             value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
+            onChange={(e) => {
+              setKeyword(e.target.value);
+              setCurrentPage(1);
+            }}
             placeholder="搜尋商品編號/名稱"
-            onKeyDown={(e) => e.key === "Enter" && onSearch()}
           />
         </div>
-        <button className="btn btn-primary" onClick={onSearch}>
-          搜尋
-        </button>
 
-        {/* 備註 */}
-        <div className="d-flex align-items-center" style={{ minWidth: 320 }}>
+        {/* 分類 */}
+        <select
+          className="form-select"
+          style={{ maxWidth: 220 }}
+          value={categoryId}
+          onChange={(e) => {
+            setCategoryId(e.target.value);
+            setCurrentPage(1);
+          }}
+          disabled={categoryLoading || !!record}
+          title={record ? "已建單時不套用分類" : ""}
+        >
+          {categoryOptions.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>    
+
+         {/* 備註（靠左） */}
+        <div className="d-flex align-items-center" style={{ minWidth: 360 }}>
           <span className="me-2" style={{ whiteSpace: "nowrap" }}>備註：</span>
           <input
             className="form-control"
@@ -711,8 +664,7 @@ const fetchRecordItems = async (page = 1, kw = "", inventoryIdParam) => {
         {record ? (
           <>
             目前盤點單：<strong>{record.inventoryNumber || record.id}</strong>
-            （狀態：{STATUS[record.status]?.text}，已盤 {record.countedItemCount ?? 0}/
-            {record.totalItemCount ?? 0}）
+            （狀態：{STATUS[record.status]?.text}，已盤 {record.countedItemCount ?? 0}/{record.totalItemCount ?? 0}）
             {record.remark ? <span className="ms-2">｜備註：{record.remark}</span> : null}
           </>
         ) : (
@@ -723,76 +675,43 @@ const fetchRecordItems = async (page = 1, kw = "", inventoryIdParam) => {
         )}
       </div>
 
-      {/* 表格區域 */}
+      {/* 表格區域：永遠雙欄半版 */}
       <div className="d-flex px-4">
-        {!isLastPage && (
-          <>
-            <div style={{ flex: 1, height: "66vh", overflow: "hidden" }}>
-              <table
-                className="table text-center"
-                style={{ fontSize: "1.05rem", border: "1px solid #D7D7D7" }}
-              >
-                <thead className="table-info">
-                  <tr>
-                    <th style={{ width: 120 }}>商品編號</th>
-                    <th>商品名稱</th>
-                    <th style={{ width: 80 }}>單位</th>
-                    <th style={{ width: 120 }}>庫存數量</th>
-                    <th style={{ width: 140 }}>盤點數量</th>
-                    <th style={{ width: 120 }}>差異</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loadingItems ? <tr><td colSpan={6}>載入中…</td></tr> : renderRows(leftData)}
-                </tbody>
-              </table>
-            </div>
+        <div style={{ flex: 1, height: "66vh", overflow: "hidden" }}>
+          <table className="table text-center" style={{ fontSize: "1.05rem", border: "1px solid #D7D7D7" }}>
+            <thead className="table-info">
+              <tr>
+                <th style={{ width: 120 }}>商品編號</th>
+                <th>商品名稱</th>
+                <th style={{ width: 80 }}>單位</th>
+                <th style={{ width: 120 }}>庫存數量</th>
+                <th style={{ width: 140 }}>盤點數量</th>
+                <th style={{ width: 120 }}>差異</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loadingItems ? <tr><td colSpan={6}>載入中…</td></tr> : renderRows(leftData)}
+            </tbody>
+          </table>
+        </div>
 
-            <div style={{ flex: 1, height: "66vh", overflow: "hidden" }}>
-              <table
-                className="table text-center"
-                style={{ fontSize: "1.05rem", border: "1px solid #D7D7D7" }}
-              >
-                <thead className="table-info">
-                  <tr>
-                    <th style={{ width: 120 }}>商品編號</th>
-                    <th>商品名稱</th>
-                    <th style={{ width: 80 }}>單位</th>
-                    <th style={{ width: 120 }}>庫存數量</th>
-                    <th style={{ width: 140 }}>盤點數量</th>
-                    <th style={{ width: 120 }}>差異</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loadingItems ? <tr><td colSpan={6}>載入中…</td></tr> : renderRows(rightData)}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
-
-        {isLastPage && (
-          <div style={{ flex: 1, height: "66vh", overflow: "hidden" }}>
-            <table
-              className="table text-center"
-              style={{ fontSize: "1.05rem", border: "1px solid #D7D7D7" }}
-            >
-              <thead className="table-info">
-                <tr>
-                  <th style={{ width: 120 }}>商品編號</th>
-                  <th>商品名稱</th>
-                  <th style={{ width: 80 }}>單位</th>
-                  <th style={{ width: 120 }}>庫存數量</th>
-                  <th style={{ width: 140 }}>盤點數量</th>
-                  <th style={{ width: 120 }}>差異</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loadingItems ? <tr><td colSpan={6}>載入中…</td></tr> : renderRows(fullData)}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <div style={{ flex: 1, height: "66vh", overflow: "hidden" }}>
+          <table className="table text-center" style={{ fontSize: "1.05rem", border: "1px solid #D7D7D7" }}>
+            <thead className="table-info">
+              <tr>
+                <th style={{ width: 120 }}>商品編號</th>
+                <th>商品名稱</th>
+                <th style={{ width: 80 }}>單位</th>
+                <th style={{ width: 120 }}>庫存數量</th>
+                <th style={{ width: 140 }}>盤點數量</th>
+                <th style={{ width: 120 }}>差異</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loadingItems ? <tr><td colSpan={6}>載入中…</td></tr> : renderRows(rightData)}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* 換頁 */}
@@ -801,7 +720,7 @@ const fetchRecordItems = async (page = 1, kw = "", inventoryIdParam) => {
           onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
           disabled={currentPage === 1}
           className="btn btn-secondary mx-2 mb-2"
-          style={{ fontSize: "1.2rem" }}
+          style={{ fontSize: "1.1rem" }}
         >
           上一頁
         </button>
@@ -812,7 +731,7 @@ const fetchRecordItems = async (page = 1, kw = "", inventoryIdParam) => {
           onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
           disabled={currentPage === totalPages}
           className="btn btn-secondary mx-2 mb-2"
-          style={{ fontSize: "1.2rem" }}
+          style={{ fontSize: "1.1rem" }}
         >
           下一頁
         </button>
@@ -820,7 +739,6 @@ const fetchRecordItems = async (page = 1, kw = "", inventoryIdParam) => {
 
       {/* 底部操作鈕 */}
       <div className="d-flex gap-2 me-5" style={{ position: "absolute", bottom: 35, right: 0 }}>
-        {/* 刪除：僅未結算可刪 */}
         <button
           className="btn"
           style={{ background: "#9A3B3B", color: "white" }}
@@ -831,33 +749,18 @@ const fetchRecordItems = async (page = 1, kw = "", inventoryIdParam) => {
           <FaTrash className="me-2" /> {deleting ? "刪除中…" : "刪除"}
         </button>
 
-        <button
-          className="btn"
-          style={{ background: "#ED7171", color: "white" }}
-          disabled={isLocked || clearing}
-          onClick={handleClear}
-        >
+        <button className="btn" style={{ background: "#ED7171", color: "white" }} disabled={isLocked || clearing} onClick={handleClear}>
           <FaBroom className="me-2" /> {clearing ? "清空中…" : "一鍵清空"}
         </button>
-        <button
-          className="btn"
-          style={{ background: "#445A61", color: "white" }}
-          disabled={isLocked || saving}
-          onClick={handleSave}
-        >
+        <button className="btn" style={{ background: "#445A61", color: "white" }} disabled={isLocked || saving} onClick={handleSave}>
           <FaSave className="me-2" /> {saving ? "儲存中…" : "暫存"}
         </button>
-        <button
-          className="btn"
-          style={{ background: "#337DD1", color: "white" }}
-          disabled={isLocked || finalizing}
-          onClick={handleFinalize}
-        >
+        <button className="btn" style={{ background: "#337DD1", color: "white" }} disabled={isLocked || finalizing} onClick={handleFinalize}>
           <FaPaperPlane className="me-2" /> {finalizing ? "送出中…" : "送出"}
         </button>
       </div>
 
-      {/* 盤點紀錄 Modal */}
+      {/* 盤點紀錄 Modal（維持原本功能） */}
       {showRecordModal && (
         <div className="modal d-block" tabIndex="-1" onClick={() => setShowRecordModal(false)}>
           <div className="modal-dialog modal-xl" onClick={(e) => e.stopPropagation()}>
@@ -911,34 +814,18 @@ const fetchRecordItems = async (page = 1, kw = "", inventoryIdParam) => {
                   <tbody>
                     {records.length ? (
                       records.map((r) => {
-                        // 若為當前主畫面的那張單，優先用主畫面 record 的統計數值顯示
-                        const counted =
-                          record && r.id === record.id
-                            ? (record.countedItemCount ?? 0)
-                            : (r.countedItemCount ?? 0);
-                        const total =
-                          record && r.id === record.id
-                            ? (record.totalItemCount ?? 0)
-                            : (r.totalItemCount ?? 0);
+                        const counted = record && r.id === record.id ? (record.countedItemCount ?? 0) : (r.countedItemCount ?? 0);
+                        const total = record && r.id === record.id ? (record.totalItemCount ?? 0) : (r.totalItemCount ?? 0);
                         return (
                           <tr key={r.id}>
                             <td>{r.inventoryNumber || r.id}</td>
                             <td>{(r.inventoryDate || "").slice(0, 10)}</td>
                             <td>{r.inventoryBy || ""}</td>
-                            <td className="text-truncate" style={{ maxWidth: 280 }}>
-                              {r.remark || ""}
-                            </td>
-                            <td style={{ color: STATUS[r.status]?.color }}>
-                              {STATUS[r.status]?.text}
-                            </td>
+                            <td className="text-truncate" style={{ maxWidth: 280 }}>{r.remark || ""}</td>
+                            <td style={{ color: STATUS[r.status]?.color }}>{STATUS[r.status]?.text}</td>
+                            <td>{counted}/{total}</td>
                             <td>
-                              {counted}/{total}
-                            </td>
-                            <td>
-                              <button
-                                className="btn btn-sm btn-primary"
-                                onClick={() => openRecordFromModal(r)}
-                              >
+                              <button className="btn btn-sm btn-primary" onClick={() => openRecordFromModal(r)}>
                                 開啟
                               </button>
                             </td>
@@ -953,7 +840,6 @@ const fetchRecordItems = async (page = 1, kw = "", inventoryIdParam) => {
                   </tbody>
                 </table>
 
-                {/* 簡易換頁 */}
                 <div className="text-center">
                   <button
                     className="btn btn-outline-secondary mx-2"
@@ -982,10 +868,7 @@ const fetchRecordItems = async (page = 1, kw = "", inventoryIdParam) => {
                 </div>
               </div>
               <div className="modal-footer">
-                <button
-                  className="btn btn-outline-secondary"
-                  onClick={() => setShowRecordModal(false)}
-                >
+                <button className="btn btn-outline-secondary" onClick={() => setShowRecordModal(false)}>
                   關閉
                 </button>
               </div>

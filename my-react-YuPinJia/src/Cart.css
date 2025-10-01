@@ -1,104 +1,244 @@
-.cart{
-    color: #000;
-    display: flex;
-    flex-direction: column;
-    align-items: center; /* 垂直置中 */
-    padding: 5px; /* 增加內邊距 */
-    height: 100vh;
-    background: #fff;
-      width: 100%;
+/* ========= 共用主題變數 ========= */
+:root{
+  --card-bg: #ffffff;
+  --soft-border: #e9ecef;
+  --muted: #6c757d;
+  --text: #2b2f33;
+  --accent: #357ABD;
+  --accent-2: #E67327;
+  --accent-3: #81C939;
+  --danger: #dc3545;
+  --shadow: 0 8px 24px rgba(0,0,0,.08);
+  --shadow-sm: 0 2px 8px rgba(0,0,0,.06);
+  --radius: 12px;
 }
 
+/* ========= 外層容器 ========= */
+.cart{
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100vh;
+  width: 100%;
+  background: linear-gradient(180deg, #f8fafc 0%, #ffffff 40%);
+}
 
-/* 首頁購物車表頭 */
+/* 主區塊卡片感 */
+.cart .w-100{
+  width: 100%;
+  max-width: 720px;                 /* 讓卡片視覺集中、舒服 */
+  background: var(--card-bg);
+  border: 1px solid var(--soft-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 14px 14px 8px 14px;
+}
+
+/* 內部區段與分隔 */
+.cart .w-100 > .d-flex.align-items-center{
+  background: #fff;
+  border: 1px solid var(--soft-border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  box-shadow: var(--shadow-sm);
+}
+
+/* ========= 表格 ========= */
+.cart table{
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: #fff;
+  border: 1px solid var(--soft-border);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+
 .cart table th{
   text-align: center;
+  background: #f6f8fb;
+  color: #46505a;
+  font-weight: 700;
+  border-bottom: 1px solid var(--soft-border);
+  padding: 12px 8px;
+  white-space: nowrap;
 }
-/* 首頁購物車表格內容 */
-.cart table td {
+
+.cart table td{
   text-align: center;
-  padding-block: 15px;
-  line-height: 35px;
-  /* font-weight: bold; */
-  /* font-size: 1.5rem; */
+  padding: 14px 8px;
+  line-height: 1.6;
+  color: #39414a;
+  border-bottom: 1px solid var(--soft-border);
 }
 
+/* 斑馬條紋 + 滑過 */
+.cart table tbody tr:nth-child(odd){ background: #fafbfc; }
+.cart table tbody tr:hover{ background: #f2f6fb; }
 
-.quantity-control {
-  display: flex;
+/* ========= 數量控制 ========= */
+.quantity-control{
+  display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 0;
 }
-.quantity-btn {
+
+.quantity-btn{
   background-color: #fff;
-  border: 1px solid #ccc;
+  border: 1px solid var(--soft-border);
   padding: 6px 12px;
   cursor: pointer;
-  font-size: 0.9rem;
-  display: flex;
+  font-size: 0.95rem;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   height: 40px;
   min-width: 40px;
-  transition: background-color 0.2s;
+  transition: transform .08s ease, background-color .2s, box-shadow .2s;
+  box-shadow: var(--shadow-sm);
 }
-.quantity-btn.add{
-    border-radius: 0 5px 5px 0;
-}
+.quantity-btn:hover{ background:#f8fafc; transform: translateY(-1px); }
+.quantity-btn:active{ transform: translateY(0); }
+.quantity-btn:focus-visible{ outline: 3px solid rgba(53,122,189,.25); }
 
-.quantity-btn.reduce{
-    border-radius: 5px 0 0 5px;
-}
+.quantity-btn.reduce{ border-radius: 8px 0 0 8px; }
+.quantity-btn.add{ border-radius: 0 8px 8px 0; }
 
-.quantity-btn:hover {
-  background-color: #f8f9fa;
-}
-
-.quantity-control input {
+.quantity-control input{
   text-align: center;
-  border: 1px solid #ccc;
-  height: 35px;
+  border: 1px solid var(--soft-border);
+  height: 40px;
+  width: 64px;
+  margin: 0 -1px;                   /* 與左右按鈕貼齊 */
+  border-left: 0; border-right: 0;
+  transition: box-shadow .2s;
+}
+.quantity-control input:focus{
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(53,122,189,.18);
 }
 
-/* 切換會員按鈕 */
-.change-button {
-    background: #81C939;
-    border-radius: 5px;
-    color: white;
-    font-weight: bold;
-    padding: 5px 10px;
-    font-size: 1.2rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+/* ========= 頂部資訊列（會員/點數等） ========= */
+.cart .text-muted.small{
+  color: var(--muted) !important;
 }
-/* 開錢櫃按鈕（固定寬度） */
-.open-button {
-  width: 150px; /* ✅ 固定寬度 */
+
+/* 等級 / 點數數值 */
+.text-value{
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .3px;
+}
+
+/* ========= 功能按鈕 ========= */
+.change-button{
+  background: var(--accent-3);
+  border-radius: 8px;
+  color: #fff;
+  font-weight: 700;
+  padding: 8px 14px;
+  font-size: 1.05rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  box-shadow: var(--shadow-sm);
+  transition: transform .08s ease, box-shadow .2s, filter .2s;
+}
+.change-button:hover{ filter: brightness(1.04); transform: translateY(-1px); }
+.change-button:active{ transform: translateY(0); }
+.change-button:focus-visible{ outline: 3px solid rgba(129,201,57,.25); }
+
+/* 你現有的兩顆功能鈕（暫存/已保留）可沿用這兩個 class */
+.grayButton{
+  background: #f1f3f5;
+  color: #1f2937;
+  border: 1px solid var(--soft-border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-weight: 700;
+  box-shadow: var(--shadow-sm);
+  transition: transform .08s ease, background .2s;
+}
+.grayButton:hover{ background:#e9ecef; transform: translateY(-1px); }
+
+.pinkButton{
+  background: #ffd7e0;
+  color: #a1003a;
+  border: 1px solid #ffc2cf;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-weight: 700;
+  box-shadow: var(--shadow-sm);
+  transition: transform .08s ease, filter .2s;
+}
+.pinkButton:hover{ filter: brightness(1.03); transform: translateY(-1px); }
+
+/* ========= 底部兩顆大按鈕 ========= */
+.open-button{
+  width: 150px;
   height: 70px;
   background: #737272;
-  border-radius: 10px;
-  color: white;
-  font-weight: bold;
-  font-size: 1.4rem;
-  flex-shrink: 0; /* 防止被擠壓 */
+  border-radius: 12px;
+  color: #fff;
+  font-weight: 800;
+  font-size: 1.2rem;
+  border: 0;
+  box-shadow: var(--shadow);
+  transition: transform .08s ease, filter .2s;
+  flex-shrink: 0;
+}
+.open-button:hover{ filter: brightness(1.03); transform: translateY(-1px); }
+.open-button:active{ transform: translateY(0); }
+
+.checkout-button{
+  flex: 1;
+  height: 70px;
+  background: var(--accent-2);
+  border-radius: 12px;
+  color: #fff;
+  font-weight: 800;
+  font-size: 1.25rem;
+  border: 0;
+  box-shadow: var(--shadow);
+  transition: transform .08s ease, filter .2s;
+  min-width: 0;
+}
+.checkout-button:hover{ filter: brightness(1.05); transform: translateY(-1px); }
+.checkout-button:active{ transform: translateY(0); }
+.checkout-button:disabled{ opacity:.6; cursor:not-allowed; }
+
+/* ========= 滾動區域（購物車清單） ========= */
+.no-scrollbar{
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #cfd6de transparent;
+}
+.no-scrollbar::-webkit-scrollbar{ height: 8px; width: 8px; }
+.no-scrollbar::-webkit-scrollbar-thumb{
+  background: #cfd6de; border-radius: 8px;
+}
+.no-scrollbar::-webkit-scrollbar-track{ background: transparent; }
+
+/* ========= 主內容容器（右側商品區共用） ========= */
+.content-container{
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: transparent;
 }
 
-/* 結帳按鈕（填滿剩下空間） */
-.checkout-button {
-  flex: 1; /* ✅ 填滿剩餘空間 */
-  height: 70px;
-  background: #E67327;
-  border-radius: 10px;
-  color: white;
-  font-weight: bold;
-  font-size: 1.4rem;
-  min-width: 0; /* 防止 overflow */
+/* ========= 響應式微調 ========= */
+@media (max-width: 991px){
+  .cart .w-100{ max-width: 100%; }
+  .open-button{ height: 64px; }
+  .checkout-button{ height: 64px; font-size: 1.1rem; }
 }
-/* 主卡片內容容器 */
-.content-container {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    height: 100vh; /* 設定整個視窗高度 */
-  }
+
+@media (max-width: 480px){
+  .quantity-control input{ width: 56px; }
+  .cart table th, .cart table td{ padding: 10px 6px; }
+}

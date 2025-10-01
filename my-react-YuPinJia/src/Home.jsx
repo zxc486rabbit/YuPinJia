@@ -16,13 +16,11 @@ import CategoryProductTable from "./components/CategoryProductTable";
    價格規則與 URL 工具
 ========================= */
 
-// 通用數字安全轉換
 const num = (v) => {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 };
 
-// 經銷 > 等級 > 門市 > 原價
 const pickPriceGeneral = (p) => {
   const candidates = [
     { key: "distributor", value: num(p.distributorPrice) },
@@ -35,7 +33,6 @@ const pickPriceGeneral = (p) => {
   return { price: first.value, source: first.key };
 };
 
-// 門市 > 原價（導遊帳號之客人結帳時用）
 const pickPriceStoreOnly = (p) => {
   const candidates = [
     { key: "store", value: num(p.storePrice) },
@@ -46,27 +43,22 @@ const pickPriceStoreOnly = (p) => {
   return { price: first.value, source: first.key };
 };
 
-// 依身份決定實際用價
 const pickPriceForPayer = (p, currentMember, isGuideSelf) => {
   const isGuideAccount =
     currentMember?.subType === "導遊" || currentMember?.buyerType === 1;
   if (isGuideAccount && !isGuideSelf) {
-    // 導遊帳號 → 客人結帳 → 門市/原價
     return pickPriceStoreOnly(p);
   }
-  // 其餘 → 經銷 > 等級 > 門市 > 原價
   return pickPriceGeneral(p);
 };
 
-// 組產品查詢 URL（支援 searchType / categoryId / memberId）
+// 只在 searchType===3(產品分類) 時帶 categoryId，其餘照常；searchType 固定帶入
 const buildProductUrl = (searchType, categoryId, memberId) => {
   const base = "https://yupinjia.hyjr.com.tw/api/api/t_Product";
   const params = new URLSearchParams();
-  if (searchType === 5) {
-    if (categoryId == null) return null;
+  if (searchType != null) params.set("searchType", String(searchType));
+  if (searchType === 3 && categoryId != null) {
     params.set("categoryId", String(categoryId));
-  } else {
-    params.set("searchType", String(searchType));
   }
   if (memberId != null) params.set("memberId", String(memberId));
   return `${base}?${params.toString()}`;
@@ -78,7 +70,6 @@ const buildProductUrl = (searchType, categoryId, memberId) => {
 
 const fetchProductsBySearchType = async (searchType, categoryId, memberId) => {
   const url = buildProductUrl(searchType, categoryId, memberId);
-  if (!url) return [];
   const res = await axios.get(url);
   return res.data || [];
 };
@@ -87,6 +78,33 @@ const fetchCategories = async () => {
   const res = await axios.get("https://yupinjia.hyjr.com.tw/api/api/t_Category");
   return res.data || [];
 };
+
+/* =========================
+   會員摘要（結帳後刷新）
+========================= */
+const API_BASE = "https://yupinjia.hyjr.com.tw/api/api";
+
+async function fetchMemberSummaryById(id) {
+  if (!id) return null;
+  const res = await axios.get(`${API_BASE}/t_Member/MemberSummary/${id}`);
+  return res.data || null;
+}
+
+function mergeMemberSummary(prev, summary) {
+  if (!summary) return prev || null;
+  const point = Number(summary.Point ?? prev?.cashbackPoint ?? 0);
+  return {
+    ...(prev || {}),
+    id: summary.Id ?? prev?.id,
+    memberId: summary.Id ?? prev?.memberId,
+    fullName: summary.FullName ?? prev?.fullName,
+    memberType: summary.MemberType ?? prev?.memberType, // 中文
+    levelName: summary.LevelName ?? prev?.levelName,
+    levelCode: summary.LevelName ?? prev?.levelCode,
+    cashbackPoint: point,
+    rewardPoints: point,
+  };
+}
 
 export default function Home() {
   const { currentUser } = useEmployee() || {};
@@ -98,7 +116,7 @@ export default function Home() {
   const [currentMember, setCurrentMember] = useState(null);
   const [searchType, setSearchType] = useState(1);
   const [selectedCategoryId, setSelectedCategoryId] = useState(null);
-  const [isGuideSelf, setIsGuideSelf] = useState(false); // true=導遊本人；false=客人
+  const [isGuideSelf, setIsGuideSelf] = useState(false);
   const [searchKeyword, setSearchKeyword] = useState("");
   const [cartSummary, setCartSummary] = useState({
     subtotal: 0,
@@ -117,7 +135,6 @@ export default function Home() {
         return sum + price * qty;
       }, 0);
 
-  /* ========== 會員載入與同步 ========== */
   const handleMemberUpdate = (member) => {
     setCurrentMember(member);
     localStorage.setItem("currentMember", JSON.stringify(member));
@@ -135,7 +152,6 @@ export default function Home() {
     memberInitRef.current = true;
   }, []);
 
-  // 讀取上次身份（導遊本人/客人）
   useEffect(() => {
     const saved = localStorage.getItem("checkout_payer");
     if (saved === "guide") setIsGuideSelf(true);
@@ -155,10 +171,10 @@ export default function Home() {
         setSearchType(2);
         break;
       case "贈送":
-        setSearchType(3);
+        setSearchType(4); // 保留你的設定
         break;
       case "產品分類":
-        setSearchType(5);
+        setSearchType(3);
         break;
       default:
         setSearchType(1);
@@ -172,21 +188,36 @@ export default function Home() {
   });
 
   /* ========== 贈送額度（員工） ========== */
-  const staffId = employeeUser?.id ?? employeeUser?.staffId ?? null;
+  // 修正 staffId 來源：staffId > employeeId > id
+  const rawStaffId =
+    employeeUser?.staffId ?? employeeUser?.employeeId ?? employeeUser?.id ?? null;
+  const staffId =
+    rawStaffId != null && Number.isFinite(Number(rawStaffId))
+      ? Number(rawStaffId)
+      : null;
+
   const {
     data: giftAmountData,
     refetch: refetchGiftAmount,
     isFetching: isFetchingGift,
   } = useQuery({
     queryKey: ["staffGiftAmount", staffId],
-    enabled: activeTab === "贈送" && !!staffId,
+    enabled: activeTab === "贈送" && staffId != null,
     queryFn: async () => {
-      const res = await axios.get(
-        `https://yupinjia.hyjr.com.tw/api/api/t_Staff/GetGiftAmount/${staffId}`,
-        { headers: { "Cache-Control": "no-cache", Pragma: "no-cache" }, params: { ts: Date.now() } }
-      );
-      const val = Number(res.data?.monthRemainGift);
-      return Number.isFinite(val) ? val : 0;
+      try {
+        const res = await axios.get(
+          `https://yupinjia.hyjr.com.tw/api/api/t_Staff/GetGiftAmount/${staffId}`,
+          {
+            headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
+            params: { ts: Date.now() },
+          }
+        );
+        const val = Number(res.data?.monthRemainGift);
+        return Number.isFinite(val) ? val : 0;
+      } catch (err) {
+        console.warn("[GetGiftAmount] error:", err?.response?.status, err?.message);
+        return 0;
+      }
     },
     staleTime: 0,
     cacheTime: 0,
@@ -208,12 +239,12 @@ export default function Home() {
   } = useQuery({
     queryKey: ["products", searchType, selectedCategoryId, memberId],
     queryFn: () => fetchProductsBySearchType(searchType, selectedCategoryId, memberId),
-    enabled: searchType !== null && (searchType !== 5 || selectedCategoryId !== null),
+    enabled: searchType !== null && (searchType !== 3 || selectedCategoryId !== null),
     keepPreviousData: true,
     staleTime: 1000 * 60 * 5,
   });
 
-  // ✅ 注入實際用價（依身份決定來源），以及基準價（回扣計算會用）
+  // 注入實際用價
   const allProducts = useMemo(() => {
     return (rawProducts || []).map((p) => {
       const dealerPick = pickPriceGeneral(p);
@@ -224,13 +255,13 @@ export default function Home() {
         productId: p.productId ?? p.id,
         calculatedPrice,
         _priceSource: source, // distributor | level | store | product
-        __dealerPrice: num(dealerPick.price),  // 經銷鏈的最終用價
-        __storePrice: num(storePick.price),    // 門市鏈的最終用價
+        __dealerPrice: num(dealerPick.price),
+        __storePrice: num(storePick.price),
       };
     });
   }, [rawProducts, currentMember, isGuideSelf]);
 
-  /* ========== 切換導遊本人/客人 → 重估購物車內單價（非贈品） ========== */
+  /* ========== 切換導遊本人/客人 → 重估購物車內非贈品單價 ========== */
   useEffect(() => {
     if (!allProducts?.length) return;
     setCartItems((prev) =>
@@ -403,10 +434,60 @@ export default function Home() {
     });
   };
 
-  // 結帳後重抓贈送額度
+  /* ========== 結帳後：會員點數/等級自動刷新（重點） ========== */
+  useEffect(() => {
+    let channel;
+    const maybeRefreshMemberPoints = async () => {
+      try {
+        const midFromFlag = Number(localStorage.getItem("member_points_refresh_id") || 0);
+        const cid = Number(currentMember?.id ?? currentMember?.memberId ?? 0);
+        const id = midFromFlag || cid;
+        if (!id) return;
+
+        const summary = await fetchMemberSummaryById(id);
+        if (summary) {
+          setCurrentMember((prev) => {
+            const merged = mergeMemberSummary(prev, summary);
+            localStorage.setItem("currentMember", JSON.stringify(merged));
+            return merged;
+          });
+        }
+        localStorage.removeItem("member_points_refresh_id");
+      } catch (e) {
+        console.warn("refresh MemberSummary 失敗", e);
+      }
+    };
+
+    if (localStorage.getItem("checkout_done")) {
+      maybeRefreshMemberPoints();
+    }
+
+    if ("BroadcastChannel" in window) {
+      channel = new BroadcastChannel("pos-events");
+      channel.onmessage = (ev) => {
+        if (ev?.data?.type === "checkout_done") {
+          maybeRefreshMemberPoints();
+        }
+      };
+    }
+
+    const onStorage = (e) => {
+      if (e.key === "checkout_done" || e.key === "member_points_refresh_id") {
+        maybeRefreshMemberPoints();
+      }
+    };
+    window.addEventListener("storage", onStorage);
+
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      if (channel) channel.close();
+    };
+  }, [currentMember?.id, currentMember?.memberId]);
+
+  /* ========== 結帳後：贈送額度重抓（沿用你的行為） ========== */
   useEffect(() => {
     if (activeTab === "贈送" && localStorage.getItem("checkout_done")) {
-      refetchGiftAmount();
+      refetchGiftAmount?.();
       localStorage.removeItem("checkout_done");
     }
   }, [activeTab, refetchGiftAmount]);
@@ -444,7 +525,6 @@ export default function Home() {
       distributorId: currentMember?.distributorId ?? null,
     };
 
-    // 把必要欄位塞入 checkoutData（包含每品基準價，供回扣計算）
     const items = cartItems.map((i) => ({
       id: i.id ?? i.productId,
       productId: i.productId ?? i.id,

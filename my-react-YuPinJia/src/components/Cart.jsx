@@ -21,7 +21,7 @@ export default function Cart({
   items,
   updateQuantity,
   currentMember,
-  setCurrentMember, // 父層包裝過的方法
+  setCurrentMember,
   onCartSummaryChange,
   stockMap = {},
   isGuideSelf,
@@ -34,30 +34,24 @@ export default function Cart({
 
   const discountPerPoint = 1;
 
-  // 小計/總價一律以 Home 寫入的 unitPrice（贈品=0）
   const totalQuantity = items.reduce(
     (sum, item) => sum + Number(item.quantity ?? 0),
     0
   );
   const subtotal = items.reduce((sum, item) => {
-    const unit = Number(
-      item.unitPrice ?? item.calculatedPrice ?? item.price ?? 0
-    );
+    const unit = Number(item.unitPrice ?? item.calculatedPrice ?? item.price ?? 0);
     const qty = Number(item.quantity ?? 0);
     return sum + unit * qty;
   }, 0);
   const pointDiscount = usedPoints * discountPerPoint;
   const finalTotal = Math.max(subtotal - pointDiscount, 0);
 
-  // ─────────────────────────────────────────────
-  // 會員/經銷商查詢與標準化（含賒帳權限）
+  // ────────────────── 會員/經銷商查詢與標準化 ──────────────────
   const API_BASE = "https://yupinjia.hyjr.com.tw/api/api";
 
   async function fetchMemberById(memberId) {
     try {
-      const try1 = await axios
-        .get(`${API_BASE}/t_Member/${memberId}`)
-        .catch(() => null);
+      const try1 = await axios.get(`${API_BASE}/t_Member/${memberId}`).catch(() => null);
       if (try1?.data?.id) return try1.data;
 
       const try2 = await axios
@@ -92,9 +86,7 @@ export default function Cart({
         return tryQuery.data;
       }
 
-      const tryPath = await axios
-        .get(`${API_BASE}/t_Distributor/${memberId}`)
-        .catch(() => null);
+      const tryPath = await axios.get(`${API_BASE}/t_Distributor/${memberId}`).catch(() => null);
       if (tryPath?.data) return tryPath.data;
       return null;
     } catch {
@@ -115,6 +107,7 @@ export default function Cart({
         : base?.memberType === "經銷商"
         ? "廠商"
         : "";
+
     const discountRate = isDistributor
       ? Number(dist?.discountRate ?? 1)
       : base?.discountRate ?? 1;
@@ -145,7 +138,7 @@ export default function Cart({
       contactPhone: base?.contactPhone ?? base?.phone ?? base?.mobile ?? "",
       memberLevel: base?.memberLevel ?? 0,
       cashbackPoint: point,
-      rewardPoints: point, // 舊名相容
+      rewardPoints: point,
       isDistributor,
       buyerType,
       subType,
@@ -157,7 +150,7 @@ export default function Cart({
       distributorId: dist?.id ?? null,
     };
   }
-  // ─────────────────────────────────────────────
+  // ──────────────────────────────────────────────────────────────
 
   useEffect(() => {
     onCartSummaryChange?.({ subtotal, usedPoints, finalTotal });
@@ -173,7 +166,6 @@ export default function Cart({
     updateQuantity(productId, 0);
   };
 
-  // 暫存訂單
   const handleTempSave = () => {
     if (!currentMember) {
       Swal.fire("請先登入會員再暫存訂單", "", "warning");
@@ -211,12 +203,8 @@ export default function Cart({
 
         const target = await fetchMemberById(order.memberId);
         if (!target)
-          return Swal.fire({
-            title: "錯誤",
-            text: "找不到該會員",
-            icon: "error",
-          });
-        handleSwitchByInput(target, () => actuallyRestore(order)); // 切換成功後才恢復
+          return Swal.fire({ title: "錯誤", text: "找不到該會員", icon: "error" });
+        handleSwitchByInput(target, () => actuallyRestore(order));
       });
     } else {
       handleSwitchByInput(currentMember, () => actuallyRestore(order));
@@ -224,7 +212,6 @@ export default function Cart({
   };
 
   const actuallyRestore = async (order) => {
-    // 點數安全檢查（通常 usedPoints 於切換後已為 0，保留容錯）
     if ((currentMember?.cashbackPoint || 0) < usedPoints) {
       await Swal.fire({
         title: "點數不足",
@@ -234,7 +221,6 @@ export default function Cart({
       return;
     }
 
-    // 檢查庫存，但不阻擋；只做提醒並可強制取回
     const insuff = [];
     order.items.forEach((it) => {
       const key = it.productId ?? it.id;
@@ -271,7 +257,6 @@ export default function Cart({
       if (!isConfirmed) return;
     }
 
-    // 強制取回；不足的品項加上 oversell 標記與備註，方便前端顯示
     order.items.forEach((it) => {
       const key = it.productId ?? it.id;
       const stockLeft =
@@ -281,14 +266,13 @@ export default function Cart({
 
       const payload = {
         ...it,
-        // 讓下游（CartTable/結帳）可讀到提示，不影響計算
         oversell: isOversell || it.oversell === true,
         inventoryNote: isOversell
           ? `庫存不足（剩餘 ${isFinite(stockLeft) ? stockLeft : "未知"}）`
           : it.inventoryNote,
       };
 
-      updateQuantity(key, qty, true, payload); // replace=true，帶入 payload
+      updateQuantity(key, qty, true, payload);
     });
 
     const remain = savedOrders.filter((o) => o.key !== order.key);
@@ -308,9 +292,7 @@ export default function Cart({
       member?.isDistributor == null;
 
     if (needEnrich) {
-      const dist = await fetchDistributorByMemberId(
-        member?.id ?? member?.memberId
-      );
+      const dist = await fetchDistributorByMemberId(member?.id ?? member?.memberId);
       normalized = normalizeMember(member, dist);
     } else {
       normalized = normalizeMember(
@@ -329,7 +311,7 @@ export default function Cart({
     }
 
     setCurrentMember(normalized);
-    setUsedPoints(0); // 切換會員重置折抵
+    setUsedPoints(0);
 
     if (normalized.subType === "導遊") {
       Swal.fire({
@@ -348,7 +330,6 @@ export default function Cart({
         showConfirmButton: false,
         didOpen: () => {
           const popup = Swal.getPopup();
-
           popup?.querySelector("#guideSelf")?.addEventListener("click", () => {
             Swal.close();
             setIsGuideSelf(true);
@@ -374,16 +355,23 @@ export default function Cart({
     }
   };
 
-  // 畫面上的賒帳狀態提示（目前僅供顯示，未顯示在 UI）
   const creditAllowed = currentMember?.isDistributor
     ? isGuideSelf
       ? !!currentMember?.isSelfCredit
       : !!currentMember?.isGuestCredit
     : false;
 
+  // ─────────────── 美化：頂部會員資訊卡 ───────────────
+  const memberName = currentMember?.fullName || "尚未登入會員";
+  const memberType = currentMember?.memberType ?? currentMember?.type ?? "";
+  const memberLevel = currentMember?.levelName ?? currentMember?.levelCode ?? currentMember?.level ?? "";
+  const points = Number(currentMember?.cashbackPoint ?? 0);
+
   return (
-    <div className="cart py-3">
+    <div className="cart">
       <div className="w-100">
+
+        {/* 操作按鈕列 */}
         <div className="d-flex justify-content-center mb-3 mt-2">
           <button className="grayButton me-4" onClick={handleTempSave}>
             <FaRegEdit className="me-1" /> 暫存訂單
@@ -393,45 +381,120 @@ export default function Cart({
           </button>
         </div>
 
-        <div className="d-flex align-items-center px-3">
-          <div style={{ flex: 1 }}>
-            <div className="d-flex align-items-center mb-1">
-              <FaUser className="me-1" />
-              {currentMember
-                ? `會員：${currentMember.fullName}`
-                : "尚未登入會員"}
-            </div>
-            {currentMember && (
-              <div className="d-flex align-items-center text-muted small">
-                <FaGem className="me-1" />{" "}
-                {currentMember?.memberType ?? currentMember?.type}
-                <span className="mx-3">
-                  <FaMedal className="me-1" />{" "}
-                  {currentMember?.levelCode ?? currentMember?.level}
-                </span>
-                <FaTicketAlt className="me-1" /> 點數：
-                {currentMember?.cashbackPoint}
-              </div>
-            )}
-          </div>
-          <button
-            className="change-button ms-3"
-            onClick={() => setShowModal(true)}
-          >
-            <FaSyncAlt className="me-1" /> 切換會員
-          </button>
-
-          {currentMember?.subType === "導遊" && (
-            <button
-              className="btn btn-outline-secondary ms-2 "
-              onClick={() => handleSwitchByInput(currentMember)}
-              title="切換導遊本人/客人結帳"
+        {/* 會員資訊卡（美化） */}
+        <div
+          className="px-3 py-3"
+          style={{
+            borderRadius: 12,
+            background:
+              "linear-gradient(135deg, rgba(53,122,189,0.12), rgba(232,62,143,0.08))",
+            border: "1px solid rgba(0,0,0,0.06)",
+            boxShadow: "0 4px 14px rgba(0,0,0,0.06)",
+            margin: "0 8px",
+          }}
+        >
+          <div className="d-flex align-items-center">
+            {/* Avatar 圓形 */}
+            <div
+              style={{
+                width: 52,
+                height: 52,
+                borderRadius: "50%",
+                background:
+                  "linear-gradient(135deg, #357ABD 0%, #6f9ed1 100%)",
+                color: "#fff",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontWeight: 700,
+                fontSize: 18,
+                marginRight: 12,
+                boxShadow: "0 4px 10px rgba(53,122,189,0.25)",
+              }}
             >
-              <FaExchangeAlt className="me-1" />
-            </button>
-          )}
+              <FaUser />
+            </div>
+
+            {/* 姓名 + 標籤 */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div
+                className="text-truncate"
+                style={{ fontWeight: 800, fontSize: "1.15rem", color: "#2f3b4a" }}
+                title={memberName}
+              >
+                {memberName}
+              </div>
+
+              {currentMember ? (
+                <div className="d-flex align-items-center flex-wrap" style={{ gap: 8, marginTop: 4 }}>
+                  {memberType && (
+                    <span
+                      className="badge"
+                      style={{
+                        background: "#eef5ff",
+                        color: "#2a5fb9",
+                        border: "1px solid #d6e6ff",
+                        fontWeight: 700,
+                      }}
+                    >
+                      <FaGem className="me-1" /> {memberType}
+                    </span>
+                  )}
+                  {memberLevel && (
+                    <span
+                      className="badge"
+                      style={{
+                        background: "#fff3f8",
+                        color: "#d63384",
+                        border: "1px solid #ffd6e9",
+                        fontWeight: 700,
+                      }}
+                    >
+                      <FaMedal className="me-1" /> {memberLevel}
+                    </span>
+                  )}
+                  <span
+                    className="badge"
+                    style={{
+                      background: "#f8fff3",
+                      color: "#2b8a3e",
+                      border: "1px solid #d7f2dc",
+                      fontWeight: 700,
+                    }}
+                    title="可折抵點數"
+                  >
+                    <FaTicketAlt className="me-1" /> 點數 {points}
+                  </span>
+                </div>
+              ) : (
+                <div className="text-muted small">尚未登入會員</div>
+              )}
+            </div>
+
+            {/* 右側：切換/身份切換 */}
+            <div className="d-flex align-items-center">
+              <button
+                className="change-button ms-2"
+                onClick={() => setShowModal(true)}
+                title="切換會員"
+              >
+                <FaSyncAlt className="me-1" /> 切換會員
+              </button>
+
+              {currentMember?.subType === "導遊" && (
+                <button
+                  className="btn btn-outline-secondary ms-2"
+                  onClick={() => handleSwitchByInput(currentMember)}
+                  title="切換導遊本人/客人結帳"
+                >
+                  <FaExchangeAlt className="me-1" />
+                </button>
+              )}
+            </div>
+          </div>
         </div>
 
+        {/* 購物車明細 */}
         <div className="no-scrollbar mt-3" style={{ height: "56vh" }}>
           <CartTable
             items={items}
@@ -442,10 +505,8 @@ export default function Cart({
         </div>
       </div>
 
-      <div
-        className="w-100 mt-2 px-4"
-        style={{ fontSize: "1.2rem", fontWeight: "bold" }}
-      >
+      {/* 計價區 */}
+      <div className="w-100 mt-2 px-4" style={{ fontSize: "1.2rem", fontWeight: "bold" }}>
         <div className="d-flex justify-content-between mb-1">
           <span>商品總數</span>
           <span className="text-value">{totalQuantity}</span>
@@ -466,16 +527,12 @@ export default function Cart({
                 const val = parseInt(e.target.value, 10);
                 const maxByCashback = currentMember?.cashbackPoint || 0;
                 const maxBySubtotal = Math.floor(subtotal / discountPerPoint);
-                const safeVal = Math.min(
-                  Math.max(val || 0, 0),
-                  maxByCashback,
-                  maxBySubtotal
-                );
+                const safeVal = Math.min(Math.max(val || 0, 0), maxByCashback, maxBySubtotal);
                 setUsedPoints(safeVal);
               }}
               disabled={!currentMember}
               className="form-control text-end me-2"
-              style={{ width: "100px", color: "#C75D00" }}
+              style={{ width: "110px", color: "#C75D00", fontWeight: 700 }}
             />
             <button
               className="btn btn-sm btn-outline-secondary"
@@ -492,10 +549,7 @@ export default function Cart({
 
         <hr />
 
-        <div
-          className="d-flex justify-content-between"
-          style={{ color: "#A40000" }}
-        >
+        <div className="d-flex justify-content-between" style={{ color: "#A40000" }}>
           <span>總價</span>
           <span className="text-value">
             ${finalTotal.toLocaleString()}

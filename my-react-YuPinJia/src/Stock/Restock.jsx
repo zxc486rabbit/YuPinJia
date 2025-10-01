@@ -6,62 +6,86 @@ import RestockRecordModal from "./RestockRecordModal";
 import ImportPickOrderModal from "./ImportPickOrderModal";
 import Swal from "sweetalert2";
 import { useEmployee } from "../utils/EmployeeContext"; // ★ 取得目前門市
-
-// ✅ 改用共用 api（已含 Token / 600 / 401 自動處理）
-import api from "../utils/apiClient";
+import api from "../utils/apiClient"; // ★ 共用 api（已含 Token / 600 / 401 自動處理）
 
 const STATUS = { DRAFT: 0, POSTED: 1, VOID: 9 };
 const normalizeStatus = (s) => ([0, 1, 9].includes(Number(s)) ? Number(s) : 0);
 
 export default function Restock() {
-  const { user } = useEmployee(); // ★ user.storeId 即目前門市
+  const { user } = useEmployee();
   const currentStoreId =
     user?.storeId != null ? user.storeId : Number(localStorage.getItem("storeId")) || 0;
 
-  const [orderId, setOrderId] = useState("none");
-  const [keyword, setKeyword] = useState("");
+  // ── 查詢條件 ───────────────────────────────────────────
+  const [categoryId, setCategoryId] = useState("");    // ★ 用分類 API 的 value；空字串=全部
+  const [keyword, setKeyword] = useState("");          // 使用者輸入中的關鍵字
+  const [debouncedKeyword, setDebouncedKeyword] = useState(""); // 防抖後才查
+
+  // ── 商品清單（右表）─────────────────────────────────────
   const [tableData, setTableData] = useState([]);
   const [inputValues, setInputValues] = useState({}); // { [productName]: { qty } }
 
+  // ── 進貨明細（左表）────────────────────────────────────
   const [restockList, setRestockList] = useState([]);
+
+  // ── 供應商 ─────────────────────────────────────────────
   const [suppliers, setSuppliers] = useState([]);
   const [supplierId, setSupplierId] = useState("");
   const [supplierName, setSupplierName] = useState("");
-  const [supplierLocked, setSupplierLocked] = useState(false); // ★ 來源為調貨時鎖定
+  const [supplierLocked, setSupplierLocked] = useState(false); // 來源為調貨時鎖定
 
+  // ── 其他 ───────────────────────────────────────────────
   const [docDate] = useState(() => new Date().toISOString().slice(0, 10));
-
   const [showRecordModal, setShowRecordModal] = useState(false);
   const [restockRecords, setRestockRecords] = useState([]);
   const [showImportModal, setShowImportModal] = useState(false);
-
   const [submitting, setSubmitting] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
-
-  // ★ 記住這次導入的來源（若為調貨，進貨完成後要把調貨改成 2=完成）
   const [importedSource, setImportedSource] = useState(null); // { type: "transfer"|"purchase", id }
 
-  async function loadProducts() {
-    try {
-      const params = { offset: 0, limit: 50 };
-      if (keyword?.trim()) params.keyword = keyword.trim();
-      const categoryId = parseInt(orderId, 10);
-      if (!isNaN(categoryId)) params.categoryId = categoryId;
-      const { data } = await api.get("/t_Product/QueryProducts", { params });
-      const items = Array.isArray(data?.items) ? data.items : [];
-      setTableData(
-        items.map((x) => ({
-          id: x.id,
-          product: x.name,
-          unit: x.unit || "件",
-          price: Number(x.price) || 0,
-        }))
-      );
-    } catch {
-      setTableData([]);
-    }
-  }
+  // ── 分類（Dropdown/GetCategoryList）────────────────────
+  const [categoryOptions, setCategoryOptions] = useState([
+    { value: "", label: "全部商品種類" },
+  ]);
+  const [categoryLoading, setCategoryLoading] = useState(false);
 
+  // ========== 載入分類清單 ==========
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      setCategoryLoading(true);
+      try {
+        const { data } = await api.get("/Dropdown/GetCategoryList");
+        const arr = Array.isArray(data) ? data : [];
+        const opts = arr
+          .map((x) => ({
+            value: String(x.value ?? ""),
+            label: String(x.label ?? x.key ?? x.value ?? ""),
+          }))
+          .filter((o) => o.value !== "");
+        if (!alive) return;
+        setCategoryOptions([{ value: "", label: "全部商品種類" }, ...opts]);
+      } catch (e) {
+        // 失敗時維持只有「全部商品種類」
+        console.warn("載入分類清單失敗：", e);
+        if (!alive) return;
+        setCategoryOptions([{ value: "", label: "全部商品種類" }]);
+      } finally {
+        if (alive) setCategoryLoading(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // ========== 關鍵字防抖 ==========
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedKeyword(keyword.trim()), 300);
+    return () => clearTimeout(t);
+  }, [keyword]);
+
+  // ========== 供應商 ==========
   async function loadSuppliers() {
     try {
       const { data } = await api.get("/Dropdown/GetSupplier");
@@ -72,13 +96,46 @@ export default function Restock() {
     }
   }
 
+  // ========== 商品查詢（分類 + 模糊關鍵字）==========
+  async function loadProducts() {
+    try {
+      const params = { offset: 0, limit: 50 };
+      if (debouncedKeyword) params.keyword = debouncedKeyword;     // ★ 模糊關鍵字
+      if (categoryId) params.categoryId = Number(categoryId);      // ★ 分類（數字）
+      // 若日後需要門市條件，可加：params.storeId = currentStoreId;
+
+      const { data } = await api.get("/t_Product/QueryProducts", { params });
+      const items = Array.isArray(data?.items) ? data.items : [];
+      setTableData(
+        items.map((x) => ({
+          id: x.id,
+          product: x.name,
+          unit: x.unit || "件",
+          price: Number(x.price) || 0,
+        }))
+      );
+    } catch (e) {
+      console.warn("商品查詢失敗：", e);
+      setTableData([]);
+    }
+  }
+
+  // 初次載入：供應商 + 商品（全部）
   useEffect(() => {
-    loadProducts();
     loadSuppliers();
+    loadProducts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleSearch = () => loadProducts();
+  // 條件改變即查：分類 / 文字（防抖後）
+  useEffect(() => {
+    loadProducts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [categoryId, debouncedKeyword]);
 
+  const handleSearch = () => loadProducts(); // 保留按鈕手動查
+
+  // ========== 明細操作 ==========
   const handleAdd = (item) => {
     const row = inputValues[item.product] || {};
     const quantity = parseInt(row.qty, 10);
@@ -291,7 +348,7 @@ export default function Restock() {
   };
 
   const onSupplierChange = (e) => {
-    if (supplierLocked) return; // ★ 鎖定時不可改
+    if (supplierLocked) return; // 鎖定時不可改
     const id = e.target.value;
     setSupplierId(id);
     const pick = suppliers.find((s) => String(s.id) === String(id));
@@ -369,7 +426,7 @@ export default function Restock() {
               className="form-select"
               value={supplierId}
               onChange={onSupplierChange}
-              disabled={supplierLocked} // ★ 來源為調貨時鎖定
+              disabled={supplierLocked}
               title={supplierLocked ? "已由調貨目標門市鎖定" : ""}
             >
               {!supplierId && supplierLocked && supplierName && (
@@ -408,27 +465,27 @@ export default function Restock() {
         {/* 右側 商品列表 */}
         <div className="col-8">
           <div className="search-container d-flex gap-3 px-5 pt-4 pb-3">
+            {/* ★ 分類下拉：使用分類 API */}
             <SearchField
               type="select"
-              value={orderId}
-              onChange={(e) => setOrderId(e.target.value)}
-              options={[
-                { value: "none", label: "請選擇商品種類" },
-                { value: "1", label: "澎湖特色土產海產類" },
-                { value: "2", label: "自製糕餅類" },
-                { value: "3", label: "澎湖冷凍海鮮產品類" },
-                { value: "4", label: "澎湖海產(乾貨)類" },
-              ]}
+              value={categoryId}
+              onChange={(e) => setCategoryId(e.target.value)}
+              options={categoryOptions}
+              disabled={categoryLoading}
             />
+
+            {/* 關鍵字（防抖即時查） */}
             <div className="search-bar ms-auto">
               <FaSearch className="search-icon" />
               <input
                 type="text"
-                placeholder="搜尋..."
+                placeholder="搜尋商品名稱…"
                 value={keyword}
                 onChange={(e) => setKeyword(e.target.value)}
               />
             </div>
+
+            {/* 保留按鈕（可手動觸發） */}
             <button onClick={handleSearch} className="search-button">
               搜尋
             </button>

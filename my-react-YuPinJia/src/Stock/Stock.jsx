@@ -46,6 +46,10 @@ export default function Stock() {
   const [storeOptions, setStoreOptions] = useState([]);         // [{value,label}]
   const [storeLoading, setStoreLoading] = useState(false);
 
+  // 分類下拉（★ 新增）
+  const [categoryOptions, setCategoryOptions] = useState([{ value: "", label: "全部分類" }]);
+  const [categoryLoading, setCategoryLoading] = useState(false);
+
   // 右側：低庫存預警（GetWarningStock）
   const [warningData, setWarningData] = useState([]);
   const [warningLoading, setWarningLoading] = useState(false);
@@ -79,10 +83,12 @@ export default function Stock() {
           throw new Error(`HTTP ${res.status}`);
         }
         const raw = text ? JSON.parse(text) : [];
-        let opts = (Array.isArray(raw) ? raw : []).map((x) => ({
-          value: toStr(x.value),
-          label: toStr(x.label ?? x.key ?? x.value),
-        })).filter((o) => o.value);
+        let opts = (Array.isArray(raw) ? raw : [])
+          .map((x) => ({
+            value: toStr(x.value),
+            label: toStr(x.label ?? x.key ?? x.value),
+          }))
+          .filter((o) => o.value);
 
         // 若清單中沒有 userInfo 的門市，補上去（置頂）
         if (userStoreId && !opts.some((o) => o.value === userStoreId)) {
@@ -111,73 +117,104 @@ export default function Stock() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userStoreId, userStoreName]);
 
+  // ---------- 載入分類清單（★ 新增，[{label,value,key}]） ----------
+  useEffect(() => {
+    const ctrl = new AbortController();
+    (async () => {
+      setCategoryLoading(true);
+      try {
+        const res = await fetch(`${API_BASE}/Dropdown/GetCategoryList`, { signal: ctrl.signal });
+        const text = await res.text();
+        if (!res.ok) {
+          console.error("[GetCategoryList] HTTP", res.status, res.statusText, "Body:", text);
+          throw new Error(`HTTP ${res.status}`);
+        }
+        const raw = text ? JSON.parse(text) : [];
+        const opts = (Array.isArray(raw) ? raw : [])
+          .map((x) => ({
+            value: toStr(x.value),
+            label: toStr(x.label ?? x.key ?? x.value),
+          }))
+          .filter((o) => o.value);
+        setCategoryOptions([{ value: "", label: "全部分類" }, ...opts]);
+      } catch (e) {
+        if (e.name !== "AbortError") {
+          console.warn("分類清單載入失敗，使用預設『全部分類』：", e);
+          setCategoryOptions([{ value: "", label: "全部分類" }]);
+        }
+      } finally {
+        setCategoryLoading(false);
+      }
+    })();
+    return () => ctrl.abort();
+  }, []);
+
   // ---------- 依條件載入 t_Stock（分頁 + 相容純陣列） ----------
-useEffect(() => {
-  if (!storeId) return; // 沒選門市不打
-  const ctrl = new AbortController();
-  (async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const offset = page * limit;
-      const url = API_BASE + "/t_Stock" + buildQuery({
-        storeId,
-        categoryId: category || undefined,
-        productName: debouncedKeyword || undefined,
-        offset,
-        limit,
-      });
+  useEffect(() => {
+    if (!storeId) return; // 沒選門市不打
+    const ctrl = new AbortController();
+    (async () => {
+      setLoading(true);
+      setError("");
+      try {
+        const offset = page * limit;
+        const url = API_BASE + "/t_Stock" + buildQuery({
+          storeId,
+          categoryId: category || undefined,                // ★ 帶入分類
+          productName: debouncedKeyword || undefined,
+          offset,
+          limit,
+        });
 
-      const res = await fetch(url, { signal: ctrl.signal, headers: { Accept: "application/json" } });
-      const text = await res.text();
-      if (!res.ok) {
-        console.error("[t_Stock] HTTP", res.status, res.statusText, "Body:", text);
-        throw new Error(`HTTP ${res.status}`);
+        const res = await fetch(url, { signal: ctrl.signal, headers: { Accept: "application/json" } });
+        const text = await res.text();
+        if (!res.ok) {
+          console.error("[t_Stock] HTTP", res.status, res.statusText, "Body:", text);
+          throw new Error(`HTTP ${res.status}`);
+        }
+
+        const json = text ? JSON.parse(text) : null;
+
+        // 兩種格式皆可
+        let items = [];
+        let totalVal = 0;
+        let limitVal = limit;
+        let offsetVal = offset;
+
+        if (Array.isArray(json)) {
+          // 純陣列
+          items = json;
+          totalVal = Number(json.total ?? json.Total ?? json.length ?? 0);
+          limitVal = limit;
+          offsetVal = offset;
+        } else {
+          // 分頁殼：{ total, offset, limit, items }
+          items = Array.isArray(json?.items) ? json.items : [];
+          totalVal = Number(json?.total ?? 0);
+          limitVal = Number(json?.limit ?? limit);
+          offsetVal = Number(json?.offset ?? offset);
+        }
+
+        setTableData(items);
+        setTotal(Number.isFinite(totalVal) ? totalVal : (items?.length || 0));
+
+        // 後端可能調整 limit/offset，做一次對齊
+        if (Number.isFinite(limitVal) && limitVal > 0 && limitVal !== limit) setLimit(limitVal);
+        const correctedPage = Math.floor((Number.isFinite(offsetVal) ? offsetVal : 0) / (limitVal || 1));
+        if (correctedPage !== page) setPage(correctedPage);
+      } catch (e) {
+        if (e.name !== "AbortError") {
+          console.error("庫存載入失敗:", e);
+          setError("庫存載入失敗");
+          setTableData([]);
+          setTotal(0);
+        }
+      } finally {
+        setLoading(false);
       }
-
-      const json = text ? JSON.parse(text) : null;
-
-      // 兩種格式皆可
-      let items = [];
-      let totalVal = 0;
-      let limitVal = limit;
-      let offsetVal = offset;
-
-      if (Array.isArray(json)) {
-        // ★ 你的現況：純陣列
-        items = json;
-        // 若後端有帶 total/Total 在頂層也吃，否則用 items.length 當 fallback
-        totalVal = Number(json.total ?? json.Total ?? json.length ?? 0);
-        limitVal = limit;   // 後端若沒回 limit，就沿用前端設定
-        offsetVal = offset; // 同上
-      } else {
-        // 分頁殼：{ total, offset, limit, items }
-        items = Array.isArray(json?.items) ? json.items : [];
-        totalVal = Number(json?.total ?? 0);
-        limitVal = Number(json?.limit ?? limit);
-        offsetVal = Number(json?.offset ?? offset);
-      }
-
-      setTableData(items);
-      setTotal(Number.isFinite(totalVal) ? totalVal : (items?.length || 0));
-
-      // 後端可能調整 limit/offset，做一次對齊
-      if (Number.isFinite(limitVal) && limitVal > 0 && limitVal !== limit) setLimit(limitVal);
-      const correctedPage = Math.floor((Number.isFinite(offsetVal) ? offsetVal : 0) / (limitVal || 1));
-      if (correctedPage !== page) setPage(correctedPage);
-    } catch (e) {
-      if (e.name !== "AbortError") {
-        console.error("庫存載入失敗:", e);
-        setError("庫存載入失敗");
-        setTableData([]);
-        setTotal(0);
-      }
-    } finally {
-      setLoading(false);
-    }
-  })();
-  return () => ctrl.abort();
-}, [storeId, category, debouncedKeyword, page, limit]);
+    })();
+    return () => ctrl.abort();
+  }, [storeId, category, debouncedKeyword, page, limit]);
 
   // ---------- 依條件載入 Warning API（低庫存預警，不分頁） ----------
   useEffect(() => {
@@ -189,7 +226,7 @@ useEffect(() => {
       try {
         const url = API_BASE + "/t_Stock/GetWarningStock" + buildQuery({
           storeId,
-          categoryId: category || undefined,
+          categoryId: category || undefined,               // ★ 帶入分類
           productName: debouncedKeyword || undefined,
         });
 
@@ -279,18 +316,13 @@ useEffect(() => {
             disabled={storeLoading}
           />
 
-          {/* 分類 */}
+          {/* 分類（★ 改為用 API 清單） */}
           <SearchField
             type="select"
             value={category}
             onChange={(e) => setCategory(e.target.value)}
-            options={[
-              { value: "",  label: "全部分類" },
-              { value: "0", label: "澎湖特色土產海產類" },
-              { value: "1", label: "自製糕餅類" },
-              { value: "2", label: "澎湖冷凍海鮮產品類" },
-              { value: "3", label: "澎湖海產(乾貨)類" },
-            ]}
+            options={categoryOptions}
+            disabled={categoryLoading}
           />
 
           {/* 關鍵字（商品名稱） */}
