@@ -65,12 +65,13 @@ label, input, textarea, .form-select{ font-size:1.05rem !important; }
   border-bottom:1px solid var(--soft-border);
   padding:12px 10px;
 }
-.table tbody tr:nth-child(odd){ background:#fbfcfd; }
-.table tbody tr:hover{ background:#eef4fb; }
+/* .table tbody tr:nth-child(odd){ background:#fbfcfd; }
+.table tbody tr:hover{ background:#eef4fb; } */
 .table td{
   border-bottom:1px solid var(--soft-border)!important;
   padding-block:12px!important;
 }
+
 
 /* 你原本 bootstrap .table-info → 保持藍，但用品牌藍 */
 .table-info{

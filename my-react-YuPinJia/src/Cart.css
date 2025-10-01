@@ -75,8 +75,8 @@
 }
 
 /* 斑馬條紋 + 滑過 */
-.cart table tbody tr:nth-child(odd){ background: #fafbfc; }
-.cart table tbody tr:hover{ background: #f2f6fb; }
+/* .cart table tbody tr:nth-child(odd){ background: #fafbfc; }
+.cart table tbody tr:hover{ background: #f2f6fb; } */
 
 /* ========= 數量控制 ========= */
 .quantity-control{
@@ -244,6 +244,8 @@
 .top-actions .pinkButton{
   width: 100%;
 }
+
+
 
 /* 若小螢幕要改成上下堆疊（可選） */
 @media (max-width: 480px){
