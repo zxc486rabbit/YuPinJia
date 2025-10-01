@@ -279,7 +279,7 @@ export default function MemberModal({ show, onHide, onSelect }) {
           <Col>
             <Form.Control
               autoFocus
-              placeholder="輸入手機或會員編號（至少 2 個字）"
+              placeholder="輸入手機或會員姓名（至少 2 個字）"
               value={input}
               onChange={(e) => {
                 setSelected(null);

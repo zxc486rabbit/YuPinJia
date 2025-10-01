@@ -52,15 +52,27 @@ const pickPriceForPayer = (p, currentMember, isGuideSelf) => {
   return pickPriceGeneral(p);
 };
 
-// 只在 searchType===3(產品分類) 時帶 categoryId，其餘照常；searchType 固定帶入
+/* =========================
+   產品 URL：所有分頁都必須帶 memberId
+========================= */
 const buildProductUrl = (searchType, categoryId, memberId) => {
+  // ★ 必須有 memberId，沒有就不呼叫 API
+  if (memberId == null) return null;
+
   const base = "https://yupinjia.hyjr.com.tw/api/api/t_Product";
   const params = new URLSearchParams();
+
+  // 固定帶 searchType
   if (searchType != null) params.set("searchType", String(searchType));
+
+  // 只有「產品分類」(searchType===3) 需要帶 categoryId
   if (searchType === 3 && categoryId != null) {
     params.set("categoryId", String(categoryId));
   }
-  if (memberId != null) params.set("memberId", String(memberId));
+
+  // 一律帶 memberId
+  params.set("memberId", String(memberId));
+
   return `${base}?${params.toString()}`;
 };
 
@@ -70,6 +82,7 @@ const buildProductUrl = (searchType, categoryId, memberId) => {
 
 const fetchProductsBySearchType = async (searchType, categoryId, memberId) => {
   const url = buildProductUrl(searchType, categoryId, memberId);
+  if (!url) return []; // 沒 memberId 直接回空陣列
   const res = await axios.get(url);
   return res.data || [];
 };
@@ -239,7 +252,11 @@ export default function Home() {
   } = useQuery({
     queryKey: ["products", searchType, selectedCategoryId, memberId],
     queryFn: () => fetchProductsBySearchType(searchType, selectedCategoryId, memberId),
-    enabled: searchType !== null && (searchType !== 3 || selectedCategoryId !== null),
+    // ★ 必須有 memberId 才打 API；產品分類還需要選了 categoryId
+    enabled:
+      memberId != null &&
+      searchType !== null &&
+      (searchType !== 3 || selectedCategoryId !== null),
     keepPreviousData: true,
     staleTime: 1000 * 60 * 5,
   });

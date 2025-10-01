@@ -231,6 +231,27 @@
   background: transparent;
 }
 
+/* ====== 頂部兩顆按鈕區：各半、撐滿整行 ====== */
+.top-actions{
+  display: grid;
+  grid-template-columns: 1fr 1fr;  /* 各半 */
+  gap: 12px;                       /* 兩顆之間間距 */
+  width: 100%;
+}
+
+/* 讓按鈕本身填滿各自的格子 */
+.top-actions .grayButton,
+.top-actions .pinkButton{
+  width: 100%;
+}
+
+/* 若小螢幕要改成上下堆疊（可選） */
+@media (max-width: 480px){
+  .top-actions{
+    grid-template-columns: 1fr;    /* 改成單欄 */
+  }
+}
+
 /* ========= 響應式微調 ========= */
 @media (max-width: 991px){
   .cart .w-100{ max-width: 100%; }

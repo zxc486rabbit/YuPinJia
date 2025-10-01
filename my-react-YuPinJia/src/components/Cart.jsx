@@ -39,7 +39,9 @@ export default function Cart({
     0
   );
   const subtotal = items.reduce((sum, item) => {
-    const unit = Number(item.unitPrice ?? item.calculatedPrice ?? item.price ?? 0);
+    const unit = Number(
+      item.unitPrice ?? item.calculatedPrice ?? item.price ?? 0
+    );
     const qty = Number(item.quantity ?? 0);
     return sum + unit * qty;
   }, 0);
@@ -51,7 +53,9 @@ export default function Cart({
 
   async function fetchMemberById(memberId) {
     try {
-      const try1 = await axios.get(`${API_BASE}/t_Member/${memberId}`).catch(() => null);
+      const try1 = await axios
+        .get(`${API_BASE}/t_Member/${memberId}`)
+        .catch(() => null);
       if (try1?.data?.id) return try1.data;
 
       const try2 = await axios
@@ -86,7 +90,9 @@ export default function Cart({
         return tryQuery.data;
       }
 
-      const tryPath = await axios.get(`${API_BASE}/t_Distributor/${memberId}`).catch(() => null);
+      const tryPath = await axios
+        .get(`${API_BASE}/t_Distributor/${memberId}`)
+        .catch(() => null);
       if (tryPath?.data) return tryPath.data;
       return null;
     } catch {
@@ -203,7 +209,11 @@ export default function Cart({
 
         const target = await fetchMemberById(order.memberId);
         if (!target)
-          return Swal.fire({ title: "錯誤", text: "找不到該會員", icon: "error" });
+          return Swal.fire({
+            title: "錯誤",
+            text: "找不到該會員",
+            icon: "error",
+          });
         handleSwitchByInput(target, () => actuallyRestore(order));
       });
     } else {
@@ -280,7 +290,11 @@ export default function Cart({
     localStorage.setItem("savedOrders", JSON.stringify(remain));
     setShowReserved(false);
 
-    Swal.fire({ title: "已取回", text: "暫存訂單已加入購物車", icon: "success" });
+    Swal.fire({
+      title: "已取回",
+      text: "暫存訂單已加入購物車",
+      icon: "success",
+    });
   };
 
   const handleSwitchByInput = async (member, afterSelect) => {
@@ -292,7 +306,9 @@ export default function Cart({
       member?.isDistributor == null;
 
     if (needEnrich) {
-      const dist = await fetchDistributorByMemberId(member?.id ?? member?.memberId);
+      const dist = await fetchDistributorByMemberId(
+        member?.id ?? member?.memberId
+      );
       normalized = normalizeMember(member, dist);
     } else {
       normalized = normalizeMember(
@@ -364,15 +380,18 @@ export default function Cart({
   // ─────────────── 美化：頂部會員資訊卡 ───────────────
   const memberName = currentMember?.fullName || "尚未登入會員";
   const memberType = currentMember?.memberType ?? currentMember?.type ?? "";
-  const memberLevel = currentMember?.levelName ?? currentMember?.levelCode ?? currentMember?.level ?? "";
+  const memberLevel =
+    currentMember?.levelName ??
+    currentMember?.levelCode ??
+    currentMember?.level ??
+    "";
   const points = Number(currentMember?.cashbackPoint ?? 0);
 
   return (
     <div className="cart">
       <div className="w-100">
-
         {/* 操作按鈕列 */}
-        <div className="d-flex justify-content-center mb-3 mt-2">
+        <div className="top-actions mb-3 px-4">
           <button className="grayButton me-4" onClick={handleTempSave}>
             <FaRegEdit className="me-1" /> 暫存訂單
           </button>
@@ -400,8 +419,7 @@ export default function Cart({
                 width: 52,
                 height: 52,
                 borderRadius: "50%",
-                background:
-                  "linear-gradient(135deg, #357ABD 0%, #6f9ed1 100%)",
+                background: "linear-gradient(135deg, #357ABD 0%, #6f9ed1 100%)",
                 color: "#fff",
                 display: "flex",
                 alignItems: "center",
@@ -419,14 +437,21 @@ export default function Cart({
             <div style={{ flex: 1, minWidth: 0 }}>
               <div
                 className="text-truncate"
-                style={{ fontWeight: 800, fontSize: "1.15rem", color: "#2f3b4a" }}
+                style={{
+                  fontWeight: 800,
+                  fontSize: "1.15rem",
+                  color: "#2f3b4a",
+                }}
                 title={memberName}
               >
                 {memberName}
               </div>
 
               {currentMember ? (
-                <div className="d-flex align-items-center flex-wrap" style={{ gap: 8, marginTop: 4 }}>
+                <div
+                  className="d-flex align-items-center flex-wrap"
+                  style={{ gap: 8, marginTop: 4 }}
+                >
                   {memberType && (
                     <span
                       className="badge"
@@ -506,7 +531,10 @@ export default function Cart({
       </div>
 
       {/* 計價區 */}
-      <div className="w-100 mt-2 px-4" style={{ fontSize: "1.2rem", fontWeight: "bold" }}>
+      <div
+        className="w-100 mt-2 px-4"
+        style={{ fontSize: "1.2rem", fontWeight: "bold" }}
+      >
         <div className="d-flex justify-content-between mb-1">
           <span>商品總數</span>
           <span className="text-value">{totalQuantity}</span>
@@ -527,7 +555,11 @@ export default function Cart({
                 const val = parseInt(e.target.value, 10);
                 const maxByCashback = currentMember?.cashbackPoint || 0;
                 const maxBySubtotal = Math.floor(subtotal / discountPerPoint);
-                const safeVal = Math.min(Math.max(val || 0, 0), maxByCashback, maxBySubtotal);
+                const safeVal = Math.min(
+                  Math.max(val || 0, 0),
+                  maxByCashback,
+                  maxBySubtotal
+                );
                 setUsedPoints(safeVal);
               }}
               disabled={!currentMember}
@@ -549,7 +581,10 @@ export default function Cart({
 
         <hr />
 
-        <div className="d-flex justify-content-between" style={{ color: "#A40000" }}>
+        <div
+          className="d-flex justify-content-between"
+          style={{ color: "#A40000" }}
+        >
           <span>總價</span>
           <span className="text-value">
             ${finalTotal.toLocaleString()}
