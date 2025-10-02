@@ -427,12 +427,12 @@ export default function PickupOrders() {
           value={orderNumber}
           onChange={(e) => setOrderNumber(e.target.value)}
         />
-        <SearchField
+        {/* <SearchField
           label="會員姓名"
           type="text"
           value={memberName}
           onChange={(e) => setMemberName(e.target.value)}
-        />
+        /> */}
         <SearchField
           label="手機"
           type="text"
