@@ -285,7 +285,7 @@ export default function Stock() {
         <div className="col-7">
           <div
             style={{
-              height: "64vh",                 /* ★ 降低高度：原本 75vh -> 60vh */
+              height: "66vh",                 /* ★ 降低高度：原本 75vh -> 60vh */
               overflowY: "auto",
               width: "90%",
               margin: "0 auto",
