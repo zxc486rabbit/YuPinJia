@@ -678,7 +678,7 @@ export default function CheckoutFlow({
 
       {step === 3 && (
         <>
-          {!getCreditAllowed(currentMember, isGuideSelf) && (
+          {/* {!getCreditAllowed(currentMember, isGuideSelf) && (
             <div
               style={{
                 background: "#fff3cd",
@@ -692,7 +692,7 @@ export default function CheckoutFlow({
             >
               此身份 <b>不可賒帳</b>，請確認實收金額已全額付清。
             </div>
-          )}
+          )} */}
 
           <PaymentInvoice
             finalTotal={finalTotal}

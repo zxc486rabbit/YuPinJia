@@ -84,7 +84,6 @@ export default function PaymentInvoice({
       overflow: "hidden",
     },
 
-    /* 黑卡片：左側應收 + 右側(已收/差額) */
     totalRow: {
       display: "grid",
       gridTemplateColumns: "minmax(260px, 420px) 1fr",
@@ -115,7 +114,6 @@ export default function PaymentInvoice({
       gridTemplateColumns: "repeat(2, minmax(0,1fr))",
       gap: 8,
     },
-    /* 亮底統計卡（已收用） */
     miniStatLight: {
       background: "#FFFFFF",
       color: "#111827",
@@ -130,7 +128,6 @@ export default function PaymentInvoice({
       boxShadow: "0 1px 2px rgba(0,0,0,.02)",
       marginBottom: "12px",
     },
-    /* 差額卡的基礎樣式（底色/邊框顏色由程式動態帶） */
     miniStatDeltaBase: {
       borderRadius: 10,
       padding: "12px 12px",
@@ -227,7 +224,6 @@ export default function PaymentInvoice({
       gap: 12,
     },
 
-    /* 快捷金額：四等寬 */
     keypadChipsRow: {
       display: "grid",
       gridTemplateColumns: "repeat(4, 1fr)",
@@ -276,7 +272,6 @@ export default function PaymentInvoice({
       fontWeight: 600,
     },
 
-    /* 主按鈕：卡片內、固定更矮高度 */
     primaryBtn: {
       width: "100%",
       height: 34,
@@ -292,29 +287,27 @@ export default function PaymentInvoice({
       background: "#1677ff",
     },
 
-    /* 發票勾選：加大 & 強化可見性 */
     invoiceRow: {
       display: "flex",
       alignItems: "center",
       gap: 10,
       marginTop: 2,
       padding: "10px 12px",
-      background: "#F1F5F9",
+      background: "#F1F5S9".replace("S","9"), // 防手滑
       border: "1px solid #E5E7EB",
       borderRadius: 10,
     },
-    bigCheckbox: {
-      transform: "scale(1.25)",
-      transformOrigin: "left center",
-      cursor: "pointer",
-    },
-    bigCheckboxLabel: {
-      fontSize: 14.5,
-      fontWeight: 700,
-      marginBlock: "auto",
-      userSelect: "none",
-      color: "#0f172a",
-      cursor: "pointer",
+    bigCheckbox: { transform: "scale(1.25)", transformOrigin: "left center", cursor: "pointer" },
+    bigCheckboxLabel: { fontSize: 14.5, fontWeight: 700, marginBlock: "auto", userSelect: "none", color: "#0f172a", cursor: "pointer" },
+
+    /* ★ 結帳按鈕下方的小提示字 */
+    tinyNotice: {
+      marginTop: 6,
+      textAlign: "center",
+      fontSize: 11,
+      lineHeight: 1.2,
+      color: "#dc2626", // 紅色提醒
+      opacity: 0.9,
     },
   };
 
@@ -364,9 +357,7 @@ export default function PaymentInvoice({
     [activeField, paymentAmount, cashReceived]
   );
   const setCurrentValue = (next) =>
-    activeField === "paymentAmount"
-      ? setPaymentAmount(next)
-      : setCashReceived(next);
+    activeField === "paymentAmount" ? setPaymentAmount(next) : setCashReceived(next);
 
   const received =
     payment === "匯款" || payment === "支票"
@@ -377,30 +368,12 @@ export default function PaymentInvoice({
   const diffLabel = diff > 0 ? "找零" : diff < 0 ? "賒帳" : "差額";
   const abs = Math.abs(diff);
 
-  // 差額卡顏色主題
   const theme =
     diff > 0
-      ? { bg: "#F0FFF4", border: "#86efac", text: "#16a34a" } // 找零：綠
+      ? { bg: "#F0FFF4", border: "#86efac", text: "#16a34a" }
       : diff < 0
-      ? { bg: "#FEF2F2", border: "#fca5a5", text: "#dc2626" } // 賒帳：紅
-      : { bg: "#F9FAFB", border: "#E5E7EB", text: "#111827" }; // 相等：灰
-
-  /* ------------------------------- Handlers ------------------------------- */
-  const handleKeypadPress = (key) => {
-    let v = String(currentValue ?? "");
-    if (key === "CLR") return setCurrentValue("");
-    if (key === "DEL") return setCurrentValue(v.slice(0, -1));
-    if (key === "TOTAL") return setCurrentValue(String(finalTotal));
-    if (key === "." && v.includes(".")) return;
-    setCurrentValue((v + key).replace(/^0+(?=\d)/, "0"));
-  };
-  const onClickPayment = (opt) => {
-    setPayment(opt);
-    handlePaymentMethodChange?.(opt);
-    setActiveField(
-      opt === "匯款" || opt === "支票" ? "paymentAmount" : "cashReceived"
-    );
-  };
+      ? { bg: "#FEF2F2", border: "#fca5a5", text: "#dc2626" }
+      : { bg: "#F9FAFB", border: "#E5E7EB", text: "#111827" };
 
   /* --------------------------------- UI --------------------------------- */
   return (
@@ -422,21 +395,15 @@ export default function PaymentInvoice({
             <div style={S.totalCard}>
               <div>
                 <div style={S.totalTitle}>應收金額</div>
-                <div style={S.totalNumber}>
-                  NT$ {Number(finalTotal || 0).toLocaleString()}
-                </div>
-                <div style={{ fontSize: 11, opacity: 0.8, marginTop: 2 }}>
-                  安全交易
-                </div>
+                <div style={S.totalNumber}>NT$ {Number(finalTotal || 0).toLocaleString()}</div>
+                <div style={{ fontSize: 11, opacity: 0.8, marginTop: 2 }}>安全交易</div>
               </div>
             </div>
 
             <div style={S.totalRight}>
               <div style={S.miniStatLight}>
                 <div style={S.miniLabel}>已收</div>
-                <div style={S.miniValue}>
-                  NT$ {Number(received || 0).toLocaleString()}
-                </div>
+                <div style={S.miniValue}>NT$ {Number(received || 0).toLocaleString()}</div>
               </div>
               <div
                 style={{
@@ -446,12 +413,8 @@ export default function PaymentInvoice({
                   color: theme.text,
                 }}
               >
-                <div style={{ ...S.miniLabel, color: theme.text }}>
-                  {diffLabel}
-                </div>
-                <div style={{ ...S.miniValue, color: theme.text }}>
-                  NT$ {Number(abs || 0).toLocaleString()}
-                </div>
+                <div style={{ ...S.miniLabel, color: theme.text }}>{diffLabel}</div>
+                <div style={{ ...S.miniValue, color: theme.text }}>NT$ {Number(abs || 0).toLocaleString()}</div>
               </div>
             </div>
           </div>
@@ -463,11 +426,11 @@ export default function PaymentInvoice({
               {paymentOptions.map((opt) => (
                 <div
                   key={opt}
-                  style={{
-                    ...S.methodBtn,
-                    ...(payment === opt ? S.methodBtnActive : {}),
+                  style={{ ...S.methodBtn, ...(payment === opt ? S.methodBtnActive : {}) }}
+                  onClick={() => {
+                    setPayment(opt);
+                    handlePaymentMethodChange?.(opt);
                   }}
-                  onClick={() => onClickPayment(opt)}
                 >
                   {opt}
                 </div>
@@ -483,44 +446,19 @@ export default function PaymentInvoice({
               {/* 金額欄位 */}
               <div>
                 <div style={S.label}>
-                  {payment === "現金" || payment === "刷卡"
-                    ? "收現金額"
-                    : "付款金額"}
+                  {payment === "現金" || payment === "刷卡" ? "收現金額" : "付款金額"}
                 </div>
                 <input
                   style={{
                     ...S.input,
-                    ...(activeField ===
-                    (payment === "匯款" || payment === "支票"
-                      ? "paymentAmount"
-                      : "cashReceived")
-                      ? S.inputActive
-                      : {}),
+                    ...( (payment === "匯款" || payment === "支票") ? (activeField === "paymentAmount" ? S.inputActive : {}) : (activeField === "cashReceived" ? S.inputActive : {}) ),
                   }}
                   type="number"
                   min="0"
-                  placeholder={
-                    payment === "現金" || payment === "刷卡"
-                      ? "請輸入收現金額"
-                      : "請輸入付款金額"
-                  }
-                  value={
-                    payment === "匯款" || payment === "支票"
-                      ? paymentAmount
-                      : cashReceived
-                  }
-                  onFocus={() =>
-                    setActiveField(
-                      payment === "匯款" || payment === "支票"
-                        ? "paymentAmount"
-                        : "cashReceived"
-                    )
-                  }
-                  onChange={(e) =>
-                    payment === "匯款" || payment === "支票"
-                      ? setPaymentAmount(e.target.value)
-                      : setCashReceived(e.target.value)
-                  }
+                  placeholder={payment === "現金" || payment === "刷卡" ? "請輸入收現金額" : "請輸入付款金額"}
+                  value={(payment === "匯款" || payment === "支票") ? paymentAmount : cashReceived}
+                  onFocus={() => setActiveField((payment === "匯款" || payment === "支票") ? "paymentAmount" : "cashReceived")}
+                  onChange={(e) => (payment === "匯款" || payment === "支票") ? setPaymentAmount(e.target.value) : setCashReceived(e.target.value)}
                 />
               </div>
 
@@ -547,11 +485,7 @@ export default function PaymentInvoice({
                       inputMode="numeric"
                       placeholder="例如 004"
                       value={bankCode ?? ""}
-                      onChange={(e) =>
-                        setBankCode?.(
-                          e.target.value.replace(/[^0-9]/g, "").slice(0, 5)
-                        )
-                      }
+                      onChange={(e) => setBankCode?.(e.target.value.replace(/[^0-9]/g, "").slice(0, 5))}
                     />
                   </div>
                   <div>
@@ -630,15 +564,12 @@ export default function PaymentInvoice({
                   maxLength={8}
                   value={invoiceTaxId}
                   onChange={(e) => {
-                    const digits = e.target.value
-                      .replace(/[^0-9]/g, "")
-                      .slice(0, 8);
+                    const digits = e.target.value.replace(/[^0-9]/g, "").slice(0, 8);
                     setInvoiceTaxId(digits);
                   }}
                 />
               </div>
 
-              {/* 放大、明顯的勾選列 */}
               <label htmlFor="openInvoiceNow" style={S.invoiceRow}>
                 <input
                   id="openInvoiceNow"
@@ -662,9 +593,7 @@ export default function PaymentInvoice({
                 <button
                   key={n}
                   style={S.chip}
-                  onClick={() =>
-                    setCurrentValue(String(Number(currentValue || 0) + n))
-                  }
+                  onClick={() => setCurrentValue(String(Number(currentValue || 0) + n))}
                 >
                   +{n.toLocaleString()}
                 </button>
@@ -673,47 +602,15 @@ export default function PaymentInvoice({
 
             {/* 行為鍵 */}
             <div className="mt-5 mb-2" style={S.keypadTopRow}>
-              <button
-                style={S.actionBtn}
-                onClick={() => handleKeypadPress("CLR")}
-              >
-                清除
-              </button>
-              <button
-                style={S.actionBtn}
-                onClick={() => handleKeypadPress("DEL")}
-              >
-                退格
-              </button>
-              <button
-                style={S.actionBtn}
-                onClick={() => handleKeypadPress("TOTAL")}
-              >
-                總額
-              </button>
+              <button style={S.actionBtn} onClick={() => handleKeypadPress("CLR")}>清除</button>
+              <button style={S.actionBtn} onClick={() => handleKeypadPress("DEL")}>退格</button>
+              <button style={S.actionBtn} onClick={() => handleKeypadPress("TOTAL")}>總額</button>
             </div>
 
             {/* 九宮格 */}
             <div style={S.keypadGrid}>
-              {[
-                "7",
-                "8",
-                "9",
-                "4",
-                "5",
-                "6",
-                "1",
-                "2",
-                "3",
-                "00",
-                "0",
-                ".",
-              ].map((k) => (
-                <button
-                  key={k}
-                  style={S.keypadKey}
-                  onClick={() => handleKeypadPress(k)}
-                >
+              {["7","8","9","4","5","6","1","2","3","00","0","."].map((k) => (
+                <button key={k} style={S.keypadKey} onClick={() => handleKeypadPress(k)}>
                   {k}
                 </button>
               ))}
@@ -723,6 +620,11 @@ export default function PaymentInvoice({
             <button style={S.primaryBtn} onClick={onFinish}>
               確認結帳
             </button>
+
+            {/* ★ 小提示：顯示在結帳按鈕下方 */}
+            <div style={S.tinyNotice}>
+              此身份 不可賒帳，請確認實收金額已全額付清。
+            </div>
           </div>
         </div>
       </div>
