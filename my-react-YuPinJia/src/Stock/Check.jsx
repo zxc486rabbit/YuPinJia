@@ -703,7 +703,7 @@ export default function Check() {
       </div>
 
       {/* 換頁 */}
-      <div className="pagination-controls text-center">
+      <div className="pagination-controls text-center me-5">
         <button
           onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
           disabled={currentPage === 1}

@@ -47,74 +47,87 @@ export default function ReturnGoods() {
   const setLastQuery = (obj) => (lastQueryRef.current = obj);
   const getLastQuery = () => lastQueryRef.current || {};
 
-  // ===== 後端搜尋 =====
-  const fetchReturns = async (query, _page = 1, _limit = limit) => {
-    setLoading(true);
-    try {
-      const offset = (_page - 1) * _limit;
-      const raw = {
-        orderNumber: query.orderNumber || undefined,
-        invoiceNumber: query.invoiceNumber || undefined,
-        returnDate: query.returnDate || undefined,
-        returnMethod:
-          query.returnMethod && query.returnMethod !== "all"
-            ? query.returnMethod
-            : undefined,
-        offset,
-        limit: _limit,
-      };
-      const params = Object.fromEntries(
-        Object.entries(raw).filter(([, v]) => v !== undefined && v !== "")
-      );
+ // ===== 後端搜尋 =====
+const fetchReturns = async (query, _page = 1, _limit = limit) => {
+  setLoading(true);
+  try {
+    const offset = (_page - 1) * _limit;
+    const raw = {
+      orderNumber: query.orderNumber || undefined,
+      invoiceNumber: query.invoiceNumber || undefined,
+      returnDate: query.returnDate || undefined,
+      returnMethod:
+        query.returnMethod && query.returnMethod !== "all"
+          ? query.returnMethod
+          : undefined,
+      offset,
+      limit: _limit,
+    };
+    const params = Object.fromEntries(
+      Object.entries(raw).filter(([, v]) => v !== undefined && v !== "")
+    );
 
-      const res = await axios.get(`${API_BASE}/t_ReturnOrder`, { params });
+    const res = await axios.get(`${API_BASE}/t_ReturnOrder`, { params });
 
-      // 相容處理：可能是 array 或 { total, limit, items }
-      let list = [];
-      let newTotal = 0;
-      let newLimit = _limit;
+    // === 相容處理：array / { total, limit, items } / { total, returnOrders } / { data: {...} } ===
+    const data = res.data?.data ?? res.data ?? {};
+    let list = [];
+    let newTotal = 0;
+    let newLimit = _limit;
 
-      if (Array.isArray(res.data)) {
-        list = res.data;
-        // 舊格式沒有 total，只能用目前長度估
-        newTotal = list.length;
-      } else if (res.data && typeof res.data === "object") {
-        const { total: t, limit: l, items } = res.data;
-        newTotal = typeof t === "number" ? t : 0;
-        newLimit = typeof l === "number" && l > 0 ? l : _limit;
-
-        if (Array.isArray(items)) {
-          list = items;
-        } else if (Array.isArray(items?.[0])) {
-          list = items[0];
-        } else {
-          list = [];
-        }
+    if (Array.isArray(data)) {
+      // 純陣列
+      list = data;
+      newTotal = data.length; // 舊格式沒 total，只能估
+    } else if (data && typeof data === "object") {
+      // 常見殼：{ total, limit, items }
+      if (Array.isArray(data.items)) {
+        list = data.items;
+        newTotal = Number.isFinite(data.total) ? data.total : data.items.length;
+        if (Number.isFinite(data.limit) && data.limit > 0) newLimit = data.limit;
       }
-
-      // 映射到表格欄位
-      const mapped = list.map((order) => ({
-        id: order.id,
-        orderId: order.orderNumber,
-        store: order.storeName || order.store || "林園門市",
-        invoice: order.invoiceNumber || "無",
-        endDate: order.returnTime
-          ? String(order.returnTime).split("T")[0]
-          : order.returnDate || "無",
-        pay: order.returnMethod || "無",
-        reason: order.reason || "無",
-      }));
-
-      setTableData(mapped);
-      setTotal(newTotal);
-      setLimit(newLimit);
-    } catch (error) {
-      console.error("載入退貨清單失敗:", error);
-      Swal.fire("錯誤", "資料載入失敗，請稍後再試", "error");
-    } finally {
-      setLoading(false);
+      // 你的 API：{ total, returnOrders: [...] }
+      else if (Array.isArray(data.returnOrders)) {
+        list = data.returnOrders;
+        newTotal = Number.isFinite(data.total) ? data.total : data.returnOrders.length;
+        // 沒有 limit 就沿用前端 _limit
+      }
+      // 有些後端會是 { items: [ [ ... ] ] }
+      else if (Array.isArray(data.items?.[0])) {
+        list = data.items[0];
+        newTotal = Number.isFinite(data.total) ? data.total : list.length;
+      } else {
+        list = [];
+        newTotal = 0;
+      }
     }
-  };
+
+    // === 映射到表格欄位（容錯不同欄位命名） ===
+    const mapped = list.map((order) => ({
+      id: order.id,
+      orderId: order.orderNumber ?? order.soNumber ?? "-",
+      store: order.storeName ?? order.store ?? "-",
+      invoice: order.invoiceNumber ?? "—",
+      endDate: (() => {
+        const t = order.returnTime ?? order.returnDate;
+        if (!t) return "—";
+        const s = String(t);
+        return s.includes("T") ? s.split("T")[0] : s.slice(0, 10);
+      })(),
+      pay: order.returnMethod ?? "—",
+      reason: order.reason ?? "—",
+    }));
+
+    setTableData(mapped);
+    setTotal(newTotal);
+    setLimit(newLimit);
+  } catch (error) {
+    console.error("載入退貨清單失敗:", error);
+    Swal.fire("錯誤", "資料載入失敗，請稍後再試", "error");
+  } finally {
+    setLoading(false);
+  }
+};
 
   // ===== 初次載入：帶 URL 初值 =====
   useEffect(() => {
