@@ -1,6 +1,4 @@
 // Check.jsx — 前台盤點（未建單先列全商品；暫存/送出才建單；含備註/刪除/新增盤點單/紀錄）
-// API_BASE = https://yupinjia.hyjr.com.tw/api/api
-
 import React, { useEffect, useState, useMemo } from "react";
 import { FaSearch, FaHistory, FaSave, FaBroom, FaPaperPlane, FaTrash, FaPlus } from "react-icons/fa";
 import Swal from "sweetalert2";
@@ -88,7 +86,7 @@ export default function Check() {
     countedQuantity: null,
   });
 
-  // ====== 載入分類清單 ======
+  // ====== 載入分類清單（保留，但 UI 隱藏）======
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -119,13 +117,11 @@ export default function Check() {
         storeId,
         offset,
         limit: ITEMS_PER_PAGE,
-        // 伺服器若不支援可忽略，多數情況接受 keyword / productName 皆可
         keyword: debouncedKeyword || undefined,
         productName: debouncedKeyword || undefined,
         categoryId: categoryId || undefined,
       };
       const { data } = await api.get(`${API_BASE}/t_Product/StoreProducts`, { params });
-      // 相容 {items,total} 與 純陣列
       const items = (Array.isArray(data?.items) ? data.items : Array.isArray(data) ? data : []).map(
         mapProductToRow
       );
@@ -203,7 +199,6 @@ export default function Check() {
   useEffect(() => {
     if (hydrating) return;
     if (record?.id) {
-      // 已建單：只吃關鍵字，不吃分類
       fetchRecordItems(currentPage, debouncedKeyword);
     } else {
       fetchProductPage(currentPage);
@@ -249,7 +244,6 @@ export default function Check() {
 
   // ====== 首次建單：全量明細（以目前「有取回的商品集合」為基準批次 PUT）======
   const putAllItemsArray = async (inventoryId) => {
-    // 依目前條件把所有頁面拉一輪（伺服器分頁）
     const pageSize = 500;
     let offset = 0;
     let total = 0;
@@ -320,7 +314,6 @@ export default function Check() {
   // ====== 摘要（SweetAlert2）======
   const summarizeForConfirm = async () => {
     if (!record) {
-      // 未建單：抓目前條件的首頁總數即可給概況（不掃全部以節省時間）
       const { data } = await api.get(`${API_BASE}/t_Product/StoreProducts`, {
         params: {
           storeId,
@@ -384,7 +377,7 @@ export default function Check() {
     return res.isConfirmed;
   };
 
-  // ====== 暫存 ======
+  // ====== 暫存 / 送出 / 清空 / 刪除（略，維持原本） ======
   const handleSave = async () => {
     if (saving || !storeId || !userId) return;
     const ok = await confirmWithSummary("暫存");
@@ -415,7 +408,6 @@ export default function Check() {
     }
   };
 
-  // ====== 送出 ======
   const handleFinalize = async () => {
     if (finalizing) return;
     const ok = await confirmWithSummary("送出");
@@ -449,7 +441,6 @@ export default function Check() {
     }
   };
 
-  // ====== 一鍵清空 ======
   const handleClear = async () => {
     if (isLocked) return;
     const res = await Swal.fire({
@@ -481,7 +472,6 @@ export default function Check() {
     }
   };
 
-  // ====== 刪除此盤點單 ======
   const handleDeleteRecord = async () => {
     if (!record || record.status >= 2) return;
     const res = await Swal.fire({
@@ -507,7 +497,6 @@ export default function Check() {
     }
   };
 
-  // ====== 新增盤點單（回到未建單）======
   const resetToNewLocal = async () => {
     setRecord(null);
     setEdited({});
@@ -517,7 +506,6 @@ export default function Check() {
     await fetchProductPage(1);
   };
 
-  // ====== 盤點紀錄（Modal）======
   const fetchRecordList = async (page = recPage) => {
     try {
       const offset = (page - 1) * REC_LIMIT;
@@ -566,10 +554,10 @@ export default function Check() {
         const diff = v === "" || v == null ? 0 : Number(v) - baseQty;
         return (
           <tr key={`${row.id || row.productId}`}>
-            <td>{row.productNumber}</td>
+            {/* ★ 商品編號欄已移除 */}
             <td className="text-start">{row.productName}</td>
             <td style={{ width: 80 }}>{row.unit || ""}</td>
-            <td>{baseQty}</td>
+            <td>{baseQty}</td> {/* ★ 庫存數量 → 庫存 */}
             <td>
               <input
                 disabled={isLocked}
@@ -585,23 +573,23 @@ export default function Check() {
       })
     ) : (
       <tr>
-        <td colSpan={6}>無資料</td>
+        <td colSpan={5}>無資料</td> {/* ★ colSpan 由 6 → 5 */}
       </tr>
     );
 
-  // 永遠雙欄：每頁 24 筆，左 12 / 右 12；即使最後一頁或不足，也保持兩個半版表格
+  // 永遠雙欄：每頁 24 筆，左 12 / 右 12
   const leftData = pagedItems.slice(0, 12);
   const rightData = pagedItems.slice(12, 24);
 
   if (hydrating || !storeId || !userId) {
     return <div className="p-4">載入中…</div>;
-    }
+  }
 
   return (
     <>
-      {/* 工具列（備註靠左 + 分類 + 即時關鍵字） */}
+      {/* 工具列（備註靠左 + 關鍵字） */}
       <div className="search-container d-flex gap-3 px-5 py-3 align-items-center flex-wrap">
-         {/* 即時關鍵字（無搜尋按鈕） */}
+        {/* 即時關鍵字（無搜尋按鈕） */}
         <div className="d-flex align-items-center" style={{ minWidth: 280 }}>
           <FaSearch className="me-2" />
           <input
@@ -615,24 +603,26 @@ export default function Check() {
           />
         </div>
 
-        {/* 分類 */}
-        <select
-          className="form-select"
-          style={{ maxWidth: 220 }}
-          value={categoryId}
-          onChange={(e) => {
-            setCategoryId(e.target.value);
-            setCurrentPage(1);
-          }}
-          disabled={categoryLoading || !!record}
-          title={record ? "已建單時不套用分類" : ""}
-        >
-          {categoryOptions.map((o) => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
-        </select>    
+        {/* ★ 商品種類下拉選單：隱藏（若日後要顯示，將下方註解解除即可） */}
+        {false && (
+          <select
+            className="form-select"
+            style={{ maxWidth: 220 }}
+            value={categoryId}
+            onChange={(e) => {
+              setCategoryId(e.target.value);
+              setCurrentPage(1);
+            }}
+            disabled={categoryLoading || !!record}
+            title={record ? "已建單時不套用分類" : ""}
+          >
+            {categoryOptions.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        )}
 
-         {/* 備註（靠左） */}
+        {/* 備註（靠左） */}
         <div className="d-flex align-items-center" style={{ minWidth: 360 }}>
           <span className="me-2" style={{ whiteSpace: "nowrap" }}>備註：</span>
           <input
@@ -644,7 +634,6 @@ export default function Check() {
         </div>
 
         <div className="ms-auto d-flex gap-2">
-          {/* 新增盤點單：回到未建單初始狀態 */}
           <button className="btn btn-success" onClick={resetToNewLocal}>
             <FaPlus className="me-2" />
             新增盤點單（回到未建單）
@@ -677,20 +666,20 @@ export default function Check() {
 
       {/* 表格區域：永遠雙欄半版 */}
       <div className="d-flex px-4">
-        <div style={{ flex: 1, height: "66vh", overflow: "hidden" }}>
+        <div style={{ flex: 1, height: "60vh", overflow: "hidden" }}>
           <table className="table text-center" style={{ fontSize: "1.05rem", border: "1px solid #D7D7D7" }}>
             <thead className="table-info">
               <tr>
-                <th style={{ width: 120 }}>商品編號</th>
-                <th>商品名稱</th>
-                <th style={{ width: 80 }}>單位</th>
-                <th style={{ width: 120 }}>庫存數量</th>
-                <th style={{ width: 140 }}>盤點數量</th>
-                <th style={{ width: 120 }}>差異</th>
+                {/* ★ 商品編號欄移除，並設定表頭全部不換行 */}
+                <th style={{ whiteSpace: "nowrap" }}>商品名稱</th>
+                <th style={{ width: 80, whiteSpace: "nowrap" }}>單位</th>
+                <th style={{ width: 120, whiteSpace: "nowrap" }}>庫存</th> {/* ★ 改名 */}
+                <th style={{ width: 140, whiteSpace: "nowrap" }}>盤點數量</th>
+                <th style={{ width: 120, whiteSpace: "nowrap" }}>差異</th>
               </tr>
             </thead>
             <tbody>
-              {loadingItems ? <tr><td colSpan={6}>載入中…</td></tr> : renderRows(leftData)}
+              {loadingItems ? <tr><td colSpan={5}>載入中…</td></tr> : renderRows(leftData)}
             </tbody>
           </table>
         </div>
@@ -699,23 +688,22 @@ export default function Check() {
           <table className="table text-center" style={{ fontSize: "1.05rem", border: "1px solid #D7D7D7" }}>
             <thead className="table-info">
               <tr>
-                <th style={{ width: 120 }}>商品編號</th>
-                <th>商品名稱</th>
-                <th style={{ width: 80 }}>單位</th>
-                <th style={{ width: 120 }}>庫存數量</th>
-                <th style={{ width: 140 }}>盤點數量</th>
-                <th style={{ width: 120 }}>差異</th>
+                <th style={{ whiteSpace: "nowrap" }}>商品名稱</th>
+                <th style={{ width: 80, whiteSpace: "nowrap" }}>單位</th>
+                <th style={{ width: 120, whiteSpace: "nowrap" }}>庫存</th> {/* ★ 改名 */}
+                <th style={{ width: 140, whiteSpace: "nowrap" }}>盤點數量</th>
+                <th style={{ width: 120, whiteSpace: "nowrap" }}>差異</th>
               </tr>
             </thead>
             <tbody>
-              {loadingItems ? <tr><td colSpan={6}>載入中…</td></tr> : renderRows(rightData)}
+              {loadingItems ? <tr><td colSpan={5}>載入中…</td></tr> : renderRows(rightData)}
             </tbody>
           </table>
         </div>
       </div>
 
       {/* 換頁 */}
-      <div className="pagination-controls text-center mt-3">
+      <div className="pagination-controls text-center">
         <button
           onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
           disabled={currentPage === 1}
@@ -737,7 +725,7 @@ export default function Check() {
         </button>
       </div>
 
-      {/* 底部操作鈕 */}
+      {/* 底部操作鈕（維持） */}
       <div className="d-flex gap-2 me-5" style={{ position: "absolute", bottom: 35, right: 0 }}>
         <button
           className="btn"

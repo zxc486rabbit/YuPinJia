@@ -306,16 +306,16 @@ export default function Stock() {
                 style={{ position: "sticky", top: 0, background: "#d1ecf1", zIndex: 1 }}
               >
                 <tr>
-                  <th style={{ width: "320px", whiteSpace: "nowrap" }}>
+                  <th style={{ width: "40%", whiteSpace: "nowrap" }}>
                     商品名稱{/* ★ 縮小欄寬：420px -> 320px */}
                   </th>
-                  <th style={{ width: "120px", whiteSpace: "nowrap" }}>
+                  <th style={{ width: "16%", whiteSpace: "nowrap" }}>
                     總庫存{/* ★ 不換行 */}
                   </th>
-                  <th style={{ width: "120px", whiteSpace: "nowrap" }}>
+                  <th style={{ width: "16%", whiteSpace: "nowrap" }}>
                     門市庫存{/* ★ 不換行 */}
                   </th>
-                  <th style={{ width: "120px", whiteSpace: "nowrap" }}>
+                  <th style={{ width: "16%", whiteSpace: "nowrap" }}>
                     安全庫存{/* ★ 不換行 */}
                   </th>
                 </tr>

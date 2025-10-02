@@ -2,7 +2,7 @@ import React from "react";
 
 export default function ShiftChangeTable({ rightTable = [], loading, error, titleHint }) {
   return (
-    <div className="border rounded bg-white p-2" style={{ minHeight: 360 }}>
+    <div className=" rounded bg-white " style={{ minHeight: 360 }}>
       <div className="d-flex align-items-center justify-content-between mb-2">
         <div style={{ fontWeight: "bold" }}>
           {titleHint || "明細列表"}

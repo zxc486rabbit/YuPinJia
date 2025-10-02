@@ -40,7 +40,7 @@ label, input, textarea, .form-select{ font-size:1.05rem !important; }
 .content-container{
   background: transparent;
   height: 89vh;
-  padding: 8px;
+  /* padding: 8px; */
   display:flex; flex-direction:column;
   gap: 10px;
 }
