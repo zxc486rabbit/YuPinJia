@@ -204,21 +204,20 @@ export default function MemberModal({ show, onHide, onSelect }) {
 
   function normalizeMember(base, dist) {
     const id = base?.id ?? base?.memberId;
-    const buyerType = dist?.buyerType ?? null; // 1=導遊, 2=廠商
+    const buyerType = dist?.buyerType != null
+   ? Number(dist.buyerType)
+   : (base?.memberType === "導遊" ? 1
+     : base?.memberType === "經銷商" ? 2
+     : 0);
     const isDistributor = !!dist;
 
     const subType =
-      buyerType === 1
-        ? "導遊"
-        : buyerType === 2
-        ? "廠商"
-        : base?.memberType === 1
-        ? "導遊"
-        : base?.memberType === 2
-        ? "廠商"
-        : base?.memberType === 0
-        ? "一般"
-        : "";
+   buyerType === 1 ? "導遊"
+ : buyerType === 2 ? "廠商"
+ : base?.memberType === "導遊" ? "導遊"
+ : base?.memberType === "經銷商" ? "廠商"
+ : base?.memberType === "一般會員" ? "一般"
+ : "";
 
     const discountRate = isDistributor
       ? Number(dist?.discountRate ?? 1)

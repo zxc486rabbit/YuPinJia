@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import Swal from "sweetalert2";
 import { useEmployee } from "./EmployeeContext";
-import api, { setAuthHeader } from "./apiClient";
+import api, { setAuthHeader, tsToMs } from "./apiClient";
 import styles from "./LoginPage.module.css";
 
 const LOGIN_URL = "https://yupinjia.hyjr.com.tw/api/api/Account/login";
@@ -13,43 +13,24 @@ const STORE_LIST_URL = "https://yupinjia.hyjr.com.tw/api/api/Dropdown/GetStoreLi
 
 // SHA-256 (hex, lower-case)
 async function sha256Hex(text) {
-  const buf = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(text)
-  );
-  return [...new Uint8Array(buf)]
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 function extractErrorMessage(err) {
-  // 優先取後端回傳的 title/message/details
   const data = err?.response?.data;
   const status = err?.response?.status;
 
   const fromCommonFields =
-    data?.title ||
-    data?.message ||
-    data?.error ||
-    data?.detail ||
-    data?.details;
+    data?.title || data?.message || data?.error || data?.detail || data?.details;
 
-  // 模型驗證錯誤
-  const modelStateMsg = data?.errors
-    ? Object.values(data.errors).flat().join("；")
-    : null;
+  const modelStateMsg = data?.errors ? Object.values(data.errors).flat().join("；") : null;
 
-  // 常見 400 = 帳密錯誤 / 參數錯誤；401 = 未授權
   if (!fromCommonFields && (status === 400 || status === 401)) {
     return "帳號或密碼錯誤，請再試一次。";
   }
 
-  return (
-    modelStateMsg ||
-    fromCommonFields ||
-    err?.message ||
-    "登入失敗，請稍後再試。"
-  );
+  return modelStateMsg || fromCommonFields || err?.message || "登入失敗，請稍後再試。";
 }
 
 const LoginPage = () => {
@@ -61,9 +42,7 @@ const LoginPage = () => {
 
   // 門市下拉
   const [stores, setStores] = useState([]); // [{label,value,key}]
-  const [storeId, setStoreId] = useState(
-    () => Number(localStorage.getItem("storeId")) || 0
-  );
+  const [storeId, setStoreId] = useState(() => Number(localStorage.getItem("storeId")) || 0);
   const [storeLoading, setStoreLoading] = useState(false);
   const [storeError, setStoreError] = useState("");
 
@@ -88,7 +67,6 @@ const LoginPage = () => {
         if (!mounted) return;
         setStores(arr);
 
-        // 若本地沒有選擇，預設第一筆
         if (!storeId && arr.length > 0) {
           setStoreId(Number(arr[0].value) || 0);
         }
@@ -120,9 +98,7 @@ const LoginPage = () => {
 
     setLoading(true);
     try {
-      const pwdToSend = HASH_BEFORE_SEND
-        ? await sha256Hex(password)
-        : password;
+      const pwdToSend = HASH_BEFORE_SEND ? await sha256Hex(password) : password;
 
       // 送登入（包含 storeId）
       const res = await axios.post(
@@ -131,7 +107,6 @@ const LoginPage = () => {
           username: employeeId,
           password: pwdToSend,
           storeId: Number(storeId),
-          // logoutMessage: "", // 可選
         },
         {
           headers: {
@@ -152,13 +127,13 @@ const LoginPage = () => {
         throw new Error("登入回應缺少 accessToken");
       }
 
-      // 存 Token
+      // 存 Token — 一律轉毫秒字串（避免邊界誤判）
       localStorage.setItem("accessToken", accessToken);
       if (refreshToken) localStorage.setItem("refreshToken", refreshToken);
-      if (accessTokenExpiredAt)
-        localStorage.setItem("accessTokenExpiredAt", accessTokenExpiredAt);
-      if (refreshTokenExpiredAt)
-        localStorage.setItem("refreshTokenExpiredAt", refreshTokenExpiredAt);
+      const atMs = tsToMs(accessTokenExpiredAt);
+      const rtMs = tsToMs(refreshTokenExpiredAt);
+      if (atMs) localStorage.setItem("accessTokenExpiredAt", String(atMs));
+      if (rtMs) localStorage.setItem("refreshTokenExpiredAt", String(rtMs));
 
       // 存 storeId（全域使用）
       localStorage.setItem("storeId", String(storeId));
@@ -185,8 +160,8 @@ const LoginPage = () => {
         tokens: {
           accessToken,
           refreshToken,
-          accessTokenExpiredAt,
-          refreshTokenExpiredAt,
+          accessTokenExpiredAt: atMs,
+          refreshTokenExpiredAt: rtMs,
         },
       });
 
@@ -259,11 +234,7 @@ const LoginPage = () => {
         </div>
 
         {/* 登入按鈕 */}
-        <button
-          className={styles.loginBtn}
-          onClick={handleLogin}
-          disabled={!canSubmit}
-        >
+        <button className={styles.loginBtn} onClick={handleLogin} disabled={!canSubmit}>
           {loading ? "登入中..." : "登入"}
         </button>
       </div>

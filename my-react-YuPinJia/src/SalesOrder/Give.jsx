@@ -9,11 +9,10 @@ const API_BASE = "https://yupinjia.hyjr.com.tw/api/api";
 
 export default function Give() {
   // ===== 搜尋欄位（全部後端查詢）=====
-  const [product, setProduct] = useState("");          // productName
-  const [recipient, setRecipient] = useState("");      // fullName
-  const [operator, setOperator] = useState("");        // operatorName
-  const [startDate, setStartDate] = useState("");      // YYYY-MM-DD
-  const [endDate, setEndDate] = useState("");          // YYYY-MM-DD
+  const [product, setProduct] = useState("");     // productName
+  const [recipient, setRecipient] = useState(""); // fullName
+  const [operator, setOperator] = useState("");   // operatorName
+  const [startDate, setStartDate] = useState(""); // YYYY-MM-DD（唯一日期條件）
 
   // ===== 表格/載入 =====
   const [tableData, setTableData] = useState([]);
@@ -42,7 +41,6 @@ export default function Give() {
     if (!dateStr) return "";
     const d = new Date(dateStr);
     if (Number.isNaN(d.getTime())) return dateStr;
-    // 顯示日期（不含時間）
     return d.toLocaleDateString("zh-TW");
   };
   const formatMoney = (n) => Number(n || 0).toLocaleString("zh-TW");
@@ -56,8 +54,7 @@ export default function Give() {
         productName: query.productName || undefined,
         fullName: query.fullName || undefined,
         operatorName: query.operatorName || undefined,
-        startDate: query.startDate || undefined,
-        endDate: query.endDate || undefined,
+        startDate: query.startDate || undefined, // ✅ 只有 startDate
         offset,
         limit: _limit,
       };
@@ -86,20 +83,22 @@ export default function Give() {
         else list = [];
       }
 
-      // 映射表格欄位（沿用你原本命名）
       const mapped = list.map((item) => ({
         id: item.id,
-        salesOrderId: item.salesOrderId ?? item.orderNumber ?? "-", // 有些後端可能回 orderNumber
+        salesOrderId: item.salesOrderId ?? item.orderNumber ?? "-",
         createdAt: item.createdAt,
         productName: item.productName ?? "-",
         unitPrice: Number(item.unitPrice ?? 0),
         quantity: Number(item.quantity ?? 0),
-        subtotal: Number(item.subtotal ?? (Number(item.unitPrice ?? 0) * Number(item.quantity ?? 0))),
-        fullName: item.fullName ?? "-",            // 受贈人
-        operatorName: item.operatorName ?? "-",    // 操作人
+        subtotal: Number(
+          item.subtotal ??
+            Number(item.unitPrice ?? 0) * Number(item.quantity ?? 0)
+        ),
+        fullName: item.fullName ?? "-",
+        operatorName: item.operatorName ?? "-",
       }));
 
-      // 排序（新到舊）
+      // 新到舊
       mapped.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
       setTableData(mapped);
@@ -120,14 +119,12 @@ export default function Give() {
       productName: qs.get("productName") || "",
       fullName: qs.get("fullName") || "",
       operatorName: qs.get("operatorName") || "",
-      startDate: qs.get("startDate") || "",
-      endDate: qs.get("endDate") || "",
+      startDate: qs.get("startDate") || "", // ✅ 讀取 startDate
     };
     setProduct(init.productName);
     setRecipient(init.fullName);
     setOperator(init.operatorName);
     setStartDate(init.startDate);
-    setEndDate(init.endDate);
 
     setLastQuery(init);
     setPage(1);
@@ -141,17 +138,15 @@ export default function Give() {
       productName: product || "",
       fullName: recipient || "",
       operatorName: operator || "",
-      startDate: startDate || "",
-      endDate: endDate || "",
+      startDate: startDate || "", // ✅ 僅帶 startDate
     };
 
-    // 同步 URL
+    // 同步 URL（保留參數）
     const qs = new URLSearchParams({
       ...(query.productName ? { productName: query.productName } : {}),
       ...(query.fullName ? { fullName: query.fullName } : {}),
       ...(query.operatorName ? { operatorName: query.operatorName } : {}),
       ...(query.startDate ? { startDate: query.startDate } : {}),
-      ...(query.endDate ? { endDate: query.endDate } : {}),
     }).toString();
     window.history.pushState({}, "", `?${qs}`);
 
@@ -161,7 +156,7 @@ export default function Give() {
     const t = setTimeout(() => fetchGiftRecords(query, 1, limit), 350);
     return () => clearTimeout(t);
     // 不含 page/limit
-  }, [product, recipient, operator, startDate, endDate]); // eslint-disable-line
+  }, [product, recipient, operator, startDate]); // eslint-disable-line
 
   // ===== 分頁動作 =====
   const goPage = (p) => {
@@ -188,7 +183,7 @@ export default function Give() {
 
   return (
     <>
-      {/* 搜尋列（無「搜尋」按鈕，輸入即發送） */}
+      {/* 搜尋列（日期與其他欄位一起，同樣格式） */}
       <div className="search-container d-flex flex-wrap gap-3 px-4 py-3 rounded">
         <SearchField
           label="商品"
@@ -209,16 +204,10 @@ export default function Give() {
           onChange={(e) => setOperator(e.target.value)}
         />
         <SearchField
-          label="起"
+          label="日期"
           type="date"
           value={startDate}
           onChange={(e) => setStartDate(e.target.value)}
-        />
-        <SearchField
-          label="迄"
-          type="date"
-          value={endDate}
-          onChange={(e) => setEndDate(e.target.value)}
         />
 
         {/* 右側：清除搜尋 */}
@@ -230,7 +219,6 @@ export default function Give() {
               setRecipient("");
               setOperator("");
               setStartDate("");
-              setEndDate("");
               setPage(1);
               setTotal(0);
               window.history.pushState({}, "", window.location.pathname);
@@ -261,7 +249,7 @@ export default function Give() {
             style={{
               borderTop: "1px solid #c5c6c7",
               position: "sticky",
-              top: 0,
+              top: 0, // 沒有上方工具列，表頭固定在最上
               background: "#d1ecf1",
               zIndex: 1,
             }}
@@ -306,10 +294,9 @@ export default function Give() {
         </table>
       </div>
 
-      {/* 表格底部：每頁筆數 + 分頁器（下方頁籤） */}
+      {/* 表格底部：每頁筆數 + 分頁器 */}
       <div className="d-flex align-items-center justify-content-end mt-2 ps-3 pe-3 mb-3">
         <div className="d-flex align-items-center flex-wrap gap-2 justify-content-end">
-          {/* 每頁筆數 */}
           <div className="d-flex align-items-center">
             <span className="me-2">每頁</span>
             <select
@@ -325,7 +312,6 @@ export default function Give() {
             <span className="ms-2">筆</span>
           </div>
 
-          {/* 分頁器 */}
           <span className="ms-3 me-2">
             共 <strong>{total}</strong> 筆，第 <strong>{page}</strong> / {totalPages} 頁
           </span>
@@ -351,7 +337,7 @@ export default function Give() {
         </div>
       </div>
 
-      {/* 編輯彈出框（沿用你的外觀） */}
+      {/* 編輯彈出框 */}
       <Modal show={showModal} onHide={handleModalClose} centered>
         <Modal.Header
           closeButton
@@ -398,7 +384,6 @@ export default function Give() {
           <Button
             className="check-button"
             onClick={() => {
-              // 這裡可串編輯 API，如果後端有提供更新端點
               Swal.fire("提示", "此功能可再串接更新 API。", "info");
               handleModalClose();
             }}

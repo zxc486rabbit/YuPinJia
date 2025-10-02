@@ -10,7 +10,7 @@ const api = axios.create({
 });
 
 // ===== 工具：把 timestamp 轉成毫秒（支援秒/毫秒/ISO）=====
-function tsToMs(ts) {
+export function tsToMs(ts) {
   if (ts == null) return null;
   if (typeof ts === "number") {
     if (ts > 1e12) return ts;        // ms

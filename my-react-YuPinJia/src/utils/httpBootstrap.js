@@ -51,7 +51,6 @@ async function shouldRefreshByResponse(res) {
 
     // 嘗試解析 body 內容
     const cloned = res.clone?.() ?? res; // axios res 沒有 clone，但有 data
-    let text;
     if ("data" in cloned && cloned.data != null) {
       // axios
       const json = cloned.data;
@@ -68,7 +67,7 @@ async function shouldRefreshByResponse(res) {
       }
     } else if (cloned?.text) {
       // fetch
-      text = await cloned.text();
+      const text = await cloned.text();
       if (!text) return false;
       try {
         const json = JSON.parse(text);
@@ -84,7 +83,6 @@ async function shouldRefreshByResponse(res) {
           return true;
         }
       } catch {
-        // 純文字時，嘗試抓常見 pattern
         if (/\b(?:code|status)\s*[:=]\s*["']?600["']?/i.test(text)) return true;
       }
     }
@@ -110,7 +108,6 @@ axios.interceptors.request.use((config) => {
 
 axios.interceptors.response.use(
   async (res) => {
-    // ★ 跳過被標記 __skipAuthRefresh 的請求（例如 refresh API）
     if (res?.config?.__skipAuthRefresh) return res;
 
     if (await shouldRefreshByResponse(res)) {
@@ -188,7 +185,6 @@ api.interceptors.response.use(
 );
 
 // ======================= 3) 全域 fetch shim =======================
-// 讓任何 window.fetch(...) 自動：帶 Bearer、偵測 600/401 → refresh → 重送一次
 if (typeof window !== "undefined" && !window.__FETCH_AUTH_SHIM_INSTALLED__) {
   const _origFetch = window.fetch?.bind(window);
   if (_origFetch) {

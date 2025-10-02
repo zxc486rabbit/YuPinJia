@@ -44,12 +44,12 @@ label, input, textarea, .form-select{ font-size:1.05rem !important; }
   display:flex; flex-direction:column;
   gap: 10px;
 }
-.content-container > *{
+/* .content-container > *{
   background: var(--card-bg);
   border:1px solid var(--soft-border);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-}
+} */
 
 /* 表格（含 .table-info 標題列） */
 .table{

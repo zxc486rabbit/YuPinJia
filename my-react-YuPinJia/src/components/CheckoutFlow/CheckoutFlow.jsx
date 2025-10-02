@@ -22,7 +22,7 @@ const DELIVERY_CODE = {
   宅配到府: 3,
   店到店: 4,
   訂單自取: 5,
-  司機配送: 6, // 記得後端也要對應此代碼
+  司機配送: 6,
 };
 const toDeliveryCode = (label) => DELIVERY_CODE[label] ?? 0;
 
@@ -106,30 +106,25 @@ export default function CheckoutFlow({
   const [printing, setPrinting] = useState(false);
   const [invoiceTaxId, setInvoiceTaxId] = useState("");
 
-  // 聯絡人（宅配隱藏）
   const [customerName, setCustomerName] = useState(currentMember.name || "");
   const [customerPhone, setCustomerPhone] = useState(
     currentMember.contactPhone || ""
   );
 
-  // 取貨或物流資訊
   const [pickupLocation, setPickupLocation] = useState("");
   const [pickupTime, setPickupTime] = useState(
     new Date().toISOString().slice(0, 16)
   );
   const [note, setNote] = useState("");
 
-  // 金流
   const [cashReceived, setCashReceived] = useState("");
   const [paymentAmount, setPaymentAmount] = useState("");
   const [creditCardInfo, setCreditCardInfo] = useState("");
   const [openInvoiceNow, setOpenInvoiceNow] = useState(true);
   const [checkoutTime, setCheckoutTime] = useState(null);
 
-  // 導遊身份
   const [isGuideSelf, setIsGuideSelf] = useState(false);
 
-  // 匯款/支票
   const [bankCode, setBankCode] = useState("");
   const [paymentAccount, setPaymentAccount] = useState("");
   const [payerName, setPayerName] = useState(
@@ -137,7 +132,6 @@ export default function CheckoutFlow({
   );
   const [checkDate, setCheckDate] = useState(toDateOnly(new Date()));
 
-  // 宅配/司機：寄件與收件（司機這次只用到收件地址）
   const [senderName, setSenderName] = useState(storeNameFromUser);
   const [senderPhone, setSenderPhone] = useState("");
   const [senderAddress, setSenderAddress] = useState("");
@@ -263,7 +257,6 @@ export default function CheckoutFlow({
     return newOrderId;
   }
 
-  // 送主檔 + 明細
   const submitOrder = async (orderPayload, updatedCartItems) => {
     try {
       setSubmitting(true);
@@ -356,6 +349,10 @@ export default function CheckoutFlow({
             );
           }
           localStorage.setItem("checkout_done", String(Date.now()));
+          // ★ 結帳完成，清除購物車草稿旗標，避免回首頁時被誤還原
+          localStorage.removeItem("restoreCartFlag");
+          localStorage.removeItem("cartDraft");
+
           if ("BroadcastChannel" in window) {
             const ch = new BroadcastChannel("pos-events");
             ch.postMessage({
@@ -413,7 +410,6 @@ export default function CheckoutFlow({
       const productId =
         Number(item.productId ?? item.pid ?? item.product?.id ?? item.id) || 0;
       const name = item.productName ?? item.name ?? "";
-      // 1) 組 updatedCartItems
       const origUnit = Number(
         item.originalPrice ?? item.price ?? item.unitPrice ?? 0
       );
@@ -476,14 +472,13 @@ export default function CheckoutFlow({
       return;
     }
 
-    let orderStatus = creditAmountValue > 0 ? 1 : 2; // 1=賒帳, 2=已付款
+    let orderStatus = creditAmountValue > 0 ? 1 : 2;
     if (delivery === "現場帶走" && orderStatus === 2) orderStatus = 5;
 
     const deliveryCode = toDeliveryCode(delivery);
     const orderDate = toDateOnly(new Date());
     const paymentMethodCode = toPaymentCode(payment);
 
-    // 匯款/支票付款日期
     let paymentDateIso = undefined;
     if (payment === "匯款") {
       if (creditAmountValue === 0) paymentDateIso = toIsoLocal(new Date());
@@ -493,14 +488,11 @@ export default function CheckoutFlow({
 
     const cashbackTotal = calcCashbackTotal();
 
-    // shippingAddress：
-    // 宅配/司機 → 收件人地址（司機配送這次新增地址欄）
     const shippingAddressValue =
       delivery === "宅配到府" || delivery === "司機配送"
         ? receiverAddress || ""
         : "";
 
-    // pickupInfo：人性化摘要
     const pickupInfoParts = [];
     if (delivery === "訂單自取") {
       pickupInfoParts.push(
@@ -516,14 +508,12 @@ export default function CheckoutFlow({
     if (delivery === "司機配送") {
       if (pickupTime) pickupInfoParts.push(`時間:${pickupTime}`);
       if (pickupLocation) pickupInfoParts.push(`司機/物流:${pickupLocation}`);
-      // 使用聯絡人（第一行）＋ 收件地址
       pickupInfoParts.push(
         `聯絡人:${customerName || ""} ${customerPhone || ""}`.trim()
       );
       if (receiverAddress) pickupInfoParts.push(`地址:${receiverAddress}`);
     }
     if (delivery === "宅配到府") {
-      // 宅配仍保留寄件/收件摘要（不含日期/單號）
       pickupInfoParts.push(
         `寄件人:${senderName || "本店"} ${senderPhone || ""} ${
           senderAddress || ""
@@ -572,20 +562,15 @@ export default function CheckoutFlow({
       operatorName: operatorNameFromUser,
 
       pickupInfo: pickupInfoStr,
-
-      // ★ 手機（電話）：宅配用收件人電話；司機配送改用聯絡人電話
       mobile:
         delivery === "宅配到府" ? receiverPhone || "" : customerPhone || "",
-
-      // ★ 收件地址：宅配/司機 皆寫入
       shippingAddress: shippingAddressValue,
 
       signature: "",
       invoiceIssued: !!openInvoiceNow,
-      payerIdentity: isGuideSelf ? 0 : 1, // 0=導遊本人, 1=客人
+      payerIdentity: isGuideSelf ? 0 : 1,
     };
 
-    // 賒帳需簽名
     if (creditAmountValue > 0) {
       setPendingOrder(orderPayloadBase);
       setPendingItems(updatedCartItems);
@@ -596,7 +581,6 @@ export default function CheckoutFlow({
     await submitOrder(orderPayloadBase, updatedCartItems);
   };
 
-  // 預填聯絡窗口
   useEffect(() => {
     const name = currentMember.fullName || currentMember.name || "";
     setCustomerName(name);
@@ -609,12 +593,11 @@ export default function CheckoutFlow({
     if (!payerName) setPayerName(name || "");
   }, [currentMember]); // eslint-disable-line
 
-  // 載入導遊/客人身份
   useEffect(() => {
     try {
       const raw = localStorage.getItem("checkoutData");
       const payer = raw ? JSON.parse(raw)?.checkoutPayer : null;
-      const fallback = localStorage.getItem("checkout_payer"); // 'guide' | 'customer'
+      const fallback = localStorage.getItem("checkout_payer");
       const resolved =
         payer === "GUIDE_SELF"
           ? true
@@ -641,6 +624,7 @@ export default function CheckoutFlow({
           discountAmount={discountAmount}
           usedPoints={usedPoints}
           finalTotal={finalTotal}
+          onBackToCart={() => navigate("/")} // ★ 新增：返回首頁購物車
           onNext={() => {
             setDelivery((prev) =>
               lockDelivery ? "訂單自取" : prev || "現場帶走"
@@ -658,21 +642,17 @@ export default function CheckoutFlow({
           lockDelivery={lockDelivery}
           deliveryOptions={deliveryOptions}
           needExtraInfo={needExtraInfo}
-          // 聯絡窗口（宅配時自動隱藏於子元件）
           customerName={customerName}
           setCustomerName={setCustomerName}
           customerPhone={customerPhone}
           setCustomerPhone={setCustomerPhone}
-          // 門市/時間/備註
           pickupLocation={pickupLocation}
           setPickupLocation={setPickupLocation}
           pickupTime={pickupTime}
           setPickupTime={setPickupTime}
           note={note}
           setNote={setNote}
-          // 會員預設地址
           memberAddress={currentMember?.contactAddress || ""}
-          // 寄件/收件（宅配/司機）
           senderName={senderName}
           setSenderName={setSenderName}
           senderPhone={senderPhone}
@@ -698,7 +678,7 @@ export default function CheckoutFlow({
 
       {step === 3 && (
         <>
-          {!creditAllowed && (
+          {!getCreditAllowed(currentMember, isGuideSelf) && (
             <div
               style={{
                 background: "#fff3cd",
@@ -742,7 +722,7 @@ export default function CheckoutFlow({
             setPayerName={setPayerName}
             checkDate={checkDate}
             setCheckDate={setCheckDate}
-            creditAllowed={creditAllowed}
+            creditAllowed={getCreditAllowed(currentMember, isGuideSelf)}
             onBack={() => setStep(2)}
             onFinish={handleFinish}
             styles={styles}

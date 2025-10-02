@@ -51,29 +51,69 @@ export default function Cart({
   // ────────────────── 會員/經銷商查詢與標準化 ──────────────────
   const API_BASE = "https://yupinjia.hyjr.com.tw/api/api";
 
-  async function fetchMemberById(memberId) {
+  async function fetchMemberFlexible({ id, memberNo, fullName }) {
     try {
-      const try1 = await axios
-        .get(`${API_BASE}/t_Member/${memberId}`)
-        .catch(() => null);
-      if (try1?.data?.id) return try1.data;
-
-      const try2 = await axios
-        .get(`${API_BASE}/t_Member`, { params: { id: memberId } })
-        .catch(() => null);
-      if (Array.isArray(try2?.data)) {
-        const found = try2.data.find((m) => m.id === memberId);
-        if (found) return found;
-      } else if (try2?.data?.id === memberId) {
-        return try2.data;
+      const idNum = Number(id);
+      // 路徑查（最穩）
+      if (Number.isFinite(idNum) && idNum > 0) {
+        const r = await axios
+          .get(`${API_BASE}/t_Member/${idNum}`)
+          .catch(() => null);
+        if (r?.data?.id) return r.data;
       }
 
-      const try3 = await axios.get(`${API_BASE}/t_Member`).catch(() => null);
-      if (Array.isArray(try3?.data)) {
-        return try3.data.find((m) => m.id === memberId) || null;
+      // 以 id 當參數（若後端有支援）
+      if (Number.isFinite(idNum) && idNum > 0) {
+        const r = await axios
+          .get(`${API_BASE}/t_Member`, {
+            params: { id: idNum, offset: 0, limit: 10 },
+          })
+          .catch(() => null);
+        const rows = Array.isArray(r?.data?.items)
+          ? r.data.items
+          : Array.isArray(r?.data)
+          ? r.data
+          : [];
+        const found = rows.find((m) => Number(m?.id) === idNum);
+        if (found) return found;
+      }
+
+      // 以 memberNo 查（我們在暫存時開始保存）
+      if (memberNo) {
+        const r = await axios
+          .get(`${API_BASE}/t_Member`, {
+            params: { memberNo, offset: 0, limit: 10 },
+          })
+          .catch(() => null);
+        const rows = Array.isArray(r?.data?.items)
+          ? r.data.items
+          : Array.isArray(r?.data)
+          ? r.data
+          : [];
+        if (rows.length === 1) return rows[0];
+        const exact = rows.find((m) => (m.memberNo ?? m.MemberNo) === memberNo);
+        if (exact) return exact;
+      }
+
+      // 以 fullName 精準比對（最後的保險）
+      if (fullName) {
+        const r = await axios
+          .get(`${API_BASE}/t_Member`, {
+            params: { fullName, offset: 0, limit: 20 },
+          })
+          .catch(() => null);
+        const rows = Array.isArray(r?.data?.items)
+          ? r.data.items
+          : Array.isArray(r?.data)
+          ? r.data
+          : [];
+        const exact = rows.find((m) => (m.fullName ?? m.name) === fullName);
+        if (exact) return exact;
+        // 若有多筆同名，最後退一步回傳第一筆（也可改成請使用者「從多筆中選一個」）
+        if (rows.length > 0) return rows[0];
       }
     } catch (e) {
-      console.error("fetchMemberById 失敗", e);
+      console.error("fetchMemberFlexible 失敗", e);
     }
     return null;
   }
@@ -101,22 +141,39 @@ export default function Cart({
   }
 
   function normalizeMember(base, dist) {
-    const buyerType = dist?.buyerType ?? null; // 1=導遊, 2=廠商
-    const isDistributor = !!dist;
+    // 以 API 的 memberType 為主：導遊 / 經銷商 / 一般會員
+    const apiMemberType = base?.memberType || "";
+    // 盡量推成數字 buyerType：1=導遊，2=廠商，其它=0
+    const inferredBuyerType =
+      apiMemberType === "導遊" ? 1 : apiMemberType === "經銷商" ? 2 : 0;
+
+    const isDistributor = Boolean(base?.isDistributor || inferredBuyerType > 0);
+
+    const buyerType = isDistributor
+      ? dist?.buyerType != null
+        ? Number(dist.buyerType)
+        : inferredBuyerType
+      : 0;
+
+    // UI 用語彙：導遊/廠商（把「經銷商」轉成「廠商」顯示）
     const subType =
       buyerType === 1
         ? "導遊"
         : buyerType === 2
         ? "廠商"
-        : base?.memberType === "導遊"
+        : apiMemberType === "導遊"
         ? "導遊"
-        : base?.memberType === "經銷商"
+        : apiMemberType === "經銷商"
         ? "廠商"
         : "";
 
     const discountRate = isDistributor
-      ? Number(dist?.discountRate ?? 1)
-      : base?.discountRate ?? 1;
+      ? Number(
+          (dist && dist.discountRate != null
+            ? dist.discountRate
+            : base?.discountRate) ?? 1
+        )
+      : Number(base?.discountRate ?? 1);
 
     const point = Number(
       base?.cashbackPoint ?? base?.rewardPoints ?? base?.points ?? 0
@@ -146,8 +203,9 @@ export default function Cart({
       cashbackPoint: point,
       rewardPoints: point,
       isDistributor,
-      buyerType,
-      subType,
+      buyerType, // 1=導遊, 2=廠商, 0=一般
+      subType, // "導遊" / "廠商" / ""
+      memberType: apiMemberType, // 保留原字串，後續直接判斷
       discountRate: Number(discountRate || 1),
       type: isDistributor ? "VIP" : "一般",
       level: `LV${base?.memberLevel ?? 0}`,
@@ -181,7 +239,8 @@ export default function Cart({
 
     const newSave = {
       key: Date.now(),
-      memberId: currentMember?.id,
+      memberId: currentMember?.id ?? currentMember?.memberId,
+      memberNo: currentMember?.memberNo ?? currentMember?.MemberNo ?? null,
       memberName: currentMember?.fullName,
       items,
       savedAt: Date.now(),
@@ -207,7 +266,11 @@ export default function Cart({
       }).then(async (result) => {
         if (!result.isConfirmed) return;
 
-        const target = await fetchMemberById(order.memberId);
+        const target = await fetchMemberFlexible({
+          id: order.memberId,
+          memberNo: order.memberNo, // ← 新增：若新暫存有 memberNo，命中率更高
+          fullName: order.memberName, // ← 保險：同名時仍至少抓到一筆
+        });
         if (!target)
           return Swal.fire({
             title: "錯誤",
@@ -329,7 +392,19 @@ export default function Cart({
     setCurrentMember(normalized);
     setUsedPoints(0);
 
-    if (normalized.subType === "導遊") {
+    // ✅ 只有導遊才跳；廠商直接短路不跳
+    if (
+      Number(normalized.buyerType) === 2 ||
+      normalized.memberType === "經銷商"
+    ) {
+      setIsGuideSelf(false);
+      localStorage.removeItem("checkout_payer");
+      if (afterSelect) afterSelect();
+      return; // ←← 直接結束，不進 Swal
+    }
+    const isGuide = Number(normalized.buyerType) === 1;
+
+    if (isGuide) {
       Swal.fire({
         title: "<strong>請選擇結帳身份</strong>",
         html: `
@@ -350,8 +425,7 @@ export default function Cart({
             Swal.close();
             setIsGuideSelf(true);
             localStorage.setItem("checkout_payer", "guide");
-            const updatedMember = { ...normalized };
-            setCurrentMember(updatedMember);
+            setCurrentMember({ ...normalized });
             if (afterSelect) afterSelect();
           });
 
@@ -359,14 +433,15 @@ export default function Cart({
             Swal.close();
             setIsGuideSelf(false);
             localStorage.setItem("checkout_payer", "customer");
-            const updatedMember = { ...normalized };
-            setCurrentMember(updatedMember);
+            setCurrentMember({ ...normalized });
             if (afterSelect) afterSelect();
           });
         },
       });
     } else {
+      // ⬇️ 一般會員 / 經銷商：不跳視窗，確保導遊殘留清乾淨
       setIsGuideSelf(false);
+      localStorage.removeItem("checkout_payer");
       if (afterSelect) afterSelect();
     }
   };
@@ -488,7 +563,8 @@ export default function Cart({
                     }}
                     title="可折抵點數"
                   >
-                    <FaTicketAlt className="me-1" /> 點數 {points.toLocaleString()}
+                    <FaTicketAlt className="me-1" /> 點數{" "}
+                    {points.toLocaleString()}
                   </span>
                 </div>
               ) : (
@@ -507,15 +583,17 @@ export default function Cart({
                 切換會員
               </button>
 
-              {currentMember?.subType === "導遊" && (
-                <button
-                  className="btn btn-outline-secondary ms-2"
-                  onClick={() => handleSwitchByInput(currentMember)}
-                  title="切換導遊本人/客人結帳"
-                >
-                  <FaExchangeAlt className="me-1" />
-                </button>
-              )}
+              {currentMember?.isDistributor &&
+                Number(currentMember?.buyerType) === 1 &&
+                currentMember?.memberType === "導遊" && (
+                  <button
+                    className="btn btn-outline-secondary ms-2"
+                    onClick={() => handleSwitchByInput(currentMember)}
+                    title="切換導遊本人/客人結帳"
+                  >
+                    <FaExchangeAlt className="me-1" />
+                  </button>
+                )}
             </div>
           </div>
         </div>
@@ -589,11 +667,6 @@ export default function Cart({
           <span>總價</span>
           <span className="text-value">
             ${finalTotal.toLocaleString()}
-            {isDealer(currentMember) && (
-              <span className="text-success ms-2 small">
-                ({Math.round((currentMember?.discountRate ?? 1) * 10)}折)
-              </span>
-            )}
           </span>
         </div>
       </div>

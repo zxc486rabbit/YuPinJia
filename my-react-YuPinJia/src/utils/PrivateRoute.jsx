@@ -1,4 +1,4 @@
-// ./utils/PrivateRoute.jsx
+// src/utils/PrivateRoute.jsx
 import { Navigate, useLocation } from "react-router-dom";
 import { useEmployee } from "./EmployeeContext";
 

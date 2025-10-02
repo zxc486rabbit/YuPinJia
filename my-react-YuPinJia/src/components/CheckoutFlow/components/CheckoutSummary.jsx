@@ -11,6 +11,7 @@ export default function CheckoutSummary({
   usedPoints,
   finalTotal,
   onNext,
+  onBackToCart, // ★ 新增：返回首頁購物車
   styles,
 }) {
   // ── 判斷是否要顯示回扣（導遊帳號 + 客人結帳） ─────────────────────────
@@ -37,7 +38,6 @@ export default function CheckoutSummary({
     return Number.isFinite(n) ? n : 0;
   };
   const pickDealerPrice = (p) => {
-    // 經銷 > 等級 > 門市 > 原價
     const cands = [p.distributorPrice, p.levelPrice, p.storePrice, p.price];
     for (const c of cands) {
       const n = num(c);
@@ -46,7 +46,6 @@ export default function CheckoutSummary({
     return 0;
   };
   const pickStorePrice = (p) => {
-    // 門市 > 原價
     const cands = [p.storePrice, p.price];
     for (const c of cands) {
       const n = num(c);
@@ -57,7 +56,6 @@ export default function CheckoutSummary({
 
   const cashbackTotal = shouldShowCashback
     ? cartItems.reduce((sum, i) => {
-        // 判定是否為贈品（或單價為 0）
         const unit = Number(i.unitPrice) || 0;
         const discountedUnit =
           hasDiscount && typeof calcDiscountPrice === "function"
@@ -98,48 +96,41 @@ export default function CheckoutSummary({
   }).length;
 
   // 準備客顯快照
-const snapshot = useMemo(() => {
-  const toNum = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
-  const mapped = cartItems.map((i) => {
-    const unit = toNum(i.unitPrice);
-    const discountedUnit =
-      hasDiscount && typeof calcDiscountPrice === "function"
-        ? toNum(calcDiscountPrice(unit))
-        : unit;
-    const isGift = !!i.isGift || discountedUnit === 0 || unit === 0;
-    // 客顯端用的顯示單價（贈品顯示文字，不用價格）
-    const displayUnit = isGift ? 0 : discountedUnit;
+  const snapshot = useMemo(() => {
+    const toNum = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+    const mapped = cartItems.map((i) => {
+      const unit = toNum(i.unitPrice);
+      const discountedUnit =
+        hasDiscount && typeof calcDiscountPrice === "function"
+          ? toNum(calcDiscountPrice(unit))
+          : unit;
+      const isGift = !!i.isGift || discountedUnit === 0 || unit === 0;
+      const displayUnit = isGift ? 0 : discountedUnit;
+
+      return {
+        name: i.name,
+        quantity: toNum(i.quantity) || 0,
+        __displayUnit: displayUnit,
+        __isGift: isGift,
+      };
+    });
 
     return {
-      name: i.name,
-      quantity: toNum(i.quantity) || 0,
-      __displayUnit: displayUnit,
-      __isGift: isGift,
+      cartItems: mapped,
+      hasDiscount,
+      totalOriginal,
+      discountAmount,
+      usedPoints,
+      finalTotal,
+      giftCount,
+      shouldShowCashback,
+      cashbackTotal,
     };
-  });
+  }, [cartItems, hasDiscount, calcDiscountPrice, totalOriginal, discountAmount, usedPoints, finalTotal, giftCount, shouldShowCashback, cashbackTotal]);
 
-  return {
-    cartItems: mapped,
-    hasDiscount,
-    totalOriginal,
-    discountAmount,
-    usedPoints,
-    finalTotal,
-    giftCount,
-    // 回扣資訊（你的原始計算已存在）
-    shouldShowCashback,
-    cashbackTotal,
-  };
-}, [cartItems, hasDiscount, calcDiscountPrice, totalOriginal, discountAmount, usedPoints, finalTotal, giftCount, shouldShowCashback, cashbackTotal]);
-
-// 在 Step1 顯示/更新客顯內容
-useEffect(() => {
-  // 發佈顯示（或更新）
-  customerBus.publishSummary(snapshot);
-
-  // 卸載時不主動 hide，讓客顯持續顯示到結帳完成
-  // return () => customerBus.hideSummary();
-}, [snapshot]);
+  useEffect(() => {
+    customerBus.publishSummary(snapshot);
+  }, [snapshot]);
 
   return (
     <>
@@ -264,7 +255,6 @@ useEffect(() => {
           </p>
         )}
 
-        {/* ★ 新增：本次回扣金額（只在導遊帳號 + 客人結帳時顯示） */}
         {shouldShowCashback && (
           <p>
             本次回扣金額:{" "}
@@ -298,9 +288,26 @@ useEffect(() => {
         )}
       </div>
 
-      <button style={styles.primaryBtn} onClick={onNext} disabled={cartItems.length === 0}>
-        下一步
-      </button>
+      <div style={{ display: "flex", gap: 12 }}>
+        {/* ★ 新增：返回購物車修改 */}
+        <button
+          style={{
+            ...styles.primaryBtn,
+            background: "#6c757d",
+          }}
+          onClick={onBackToCart}
+        >
+          返回購物車修改
+        </button>
+
+        <button
+          style={styles.primaryBtn}
+          onClick={onNext}
+          disabled={cartItems.length === 0}
+        >
+          下一步
+        </button>
+      </div>
     </>
   );
 }

@@ -577,6 +577,31 @@ useEffect(() => {
     [cartItems]
   );
 
+  // ★ 新增：從結帳返回首頁時，自動還原購物車草稿
+useEffect(() => {
+  const flag = localStorage.getItem("restoreCartFlag");
+  if (flag === "1") {
+    try {
+      const raw = localStorage.getItem("cartDraft");
+      if (raw) {
+        const draft = JSON.parse(raw);
+        if (Array.isArray(draft.cartItems)) setCartItems(draft.cartItems);
+        if (draft.cartSummary) setCartSummary(draft.cartSummary);
+        if (typeof draft.activeTab === "string") setActiveTab(draft.activeTab);
+        if (typeof draft.isGuideSelf === "boolean") setIsGuideSelf(draft.isGuideSelf);
+        if (typeof draft.selectedCategoryId !== "undefined")
+          setSelectedCategoryId(draft.selectedCategoryId);
+        if (typeof draft.searchKeyword === "string")
+          setSearchKeyword(draft.searchKeyword);
+      }
+    } catch {}
+    // 只在「返回修改」時還原一次，避免每次打開首頁都套用舊草稿
+    localStorage.removeItem("restoreCartFlag");
+    // 若你希望回來就丟棄草稿，可一併移除：
+    // localStorage.removeItem("cartDraft");
+  }
+}, []);
+
   const handleCheckout = () => {
     if (!canCheckout) {
       Swal.fire({
@@ -636,6 +661,21 @@ useEffect(() => {
     };
 
     localStorage.setItem("checkoutData", JSON.stringify(payloadForCheckout));
+
+    // ★ 新增：存購物車草稿與還原旗標
+  localStorage.setItem(
+    "cartDraft",
+    JSON.stringify({
+      cartItems,                 // 原本購物車（含贈品與單價）
+      cartSummary,               // 小計/折抵/總計
+      activeTab,                 // 回來時維持分頁
+      isGuideSelf,               // 導遊身份
+      selectedCategoryId,        // 產品分類時的選取
+      searchKeyword,             // 目前搜尋字
+    })
+  );
+  localStorage.setItem("restoreCartFlag", "1");
+
     navigate("/checkout");
   };
 

@@ -311,6 +311,7 @@ export default function PaymentInvoice({
     bigCheckboxLabel: {
       fontSize: 14.5,
       fontWeight: 700,
+      marginBlock: "auto",
       userSelect: "none",
       color: "#0f172a",
       cursor: "pointer",
