@@ -51,7 +51,7 @@ export default function CreateMember() {
   };
 
   return (
-    <div className="container mt-1">
+    <div className="container">
       <div
         className="card shadow rounded-4 col-md-6 me-auto"
         style={{
@@ -62,7 +62,7 @@ export default function CreateMember() {
         }}
       >
         <div className="card-body">
-         <h2 className="mb-4 fw-bold">
+         <h2 className="mb-4 fw-bold fs-3">
             <FaUserPlus className="me-2" />
             新增會員
           </h2> 

@@ -423,7 +423,7 @@ export default function CustomerComplain() {
     : "";
 
   return (
-    <div className="container mt-5 ms-5">
+    <div className="container ms-5">
       <div className="card shadow" style={{ maxWidth: "60%" }}>
         <div className="card-body p-4">
           <h2 className="mb-4 fw-bold">客訴</h2>
