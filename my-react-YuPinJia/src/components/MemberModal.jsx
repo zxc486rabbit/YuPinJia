@@ -1,5 +1,5 @@
 // MemberModal.jsx
-import { useEffect, useRef, useState, useMemo } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import {
   Modal,
   Button,
@@ -12,180 +12,231 @@ import {
 import axios from "axios";
 
 const API_BASE = "https://yupinjia.hyjr.com.tw/api/api";
-const MAX_SUGGESTIONS = 10;
+const PAGE_SIZE = 20; // 無限卷軸每次抓取筆數
 
-const MEMBER_TYPES = [
-  { label: "全部", value: "" }, // 不帶參數
-  { label: "一般", value: 0 }, // 0=一般
-  { label: "導遊", value: 1 }, // 1=導遊
-  { label: "廠商", value: 2 }, // 2=廠商
-];
+// 兼容舊/新回傳格式：取 items 與 total/offset/limit（若沒有分頁欄位也能運作）
+function extractMembersAndPageMeta(data) {
+  if (!data) return { items: [], total: null, offset: 0, limit: 0 };
 
-// 兼容舊/新回傳格式，把任何型態統一轉為一維陣列
-function extractMembers(data) {
-  if (!data) return [];
+  if (Array.isArray(data)) {
+    const items = data.filter((x) => x && typeof x === "object");
+    // total=null 代表後端沒給，之後用「本次拿到的數量 < PAGE_SIZE」推斷 hasMore
+    return { items, total: null, offset: 0, limit: items.length };
+  }
 
-  // 舊版：直接回傳陣列
-  if (Array.isArray(data)) return data;
+  const rawItems = Array.isArray(data.items) ? data.items.flat(Infinity) : [];
+  const items = rawItems.filter((x) => x && typeof x === "object");
+  const total =
+    Number.isFinite(Number(data.total)) ? Number(data.total) : null;
+  const offset =
+    Number.isFinite(Number(data.offset)) ? Number(data.offset) : 0;
+  const limit =
+    Number.isFinite(Number(data.limit)) ? Number(data.limit) : items.length;
 
-  // 新版：{ total, offset, limit, items }
-  const items = data.items;
-  if (!items) return [];
+  return { items, total, offset, limit };
+}
 
-  // items 可能是：陣列（裡面是物件），或陣列包陣列（巢狀）
-  // 全部攤平到一維
-  const flat = Array.isArray(items) ? items.flat(Infinity) : [];
-  // 只保留物件（避免奇怪字串）
-  return flat.filter((x) => x && typeof x === "object");
+// 轉一維陣列去重（以 id 或 memberId）
+function dedupeById(arr) {
+  const map = new Map();
+  for (const m of arr) {
+    const k = m?.id ?? m?.memberId ?? JSON.stringify(m);
+    if (!map.has(k)) map.set(k, m);
+  }
+  return Array.from(map.values());
 }
 
 export default function MemberModal({ show, onHide, onSelect }) {
-  const [input, setInput] = useState("");
+  // 查詢條件
+  const [nameInput, setNameInput] = useState("");   // fullName
+  const [phoneInput, setPhoneInput] = useState(""); // contactPhone
   const [memberType, setMemberType] = useState(""); // "", 0, 1, 2
-  const [suggestions, setSuggestions] = useState([]);
-  const [selected, setSelected] = useState(null);
-  const [loading, setLoading] = useState(false);
 
-  const abortRef = useRef(null);
+  // 列表與載入狀態
+  const [items, setItems] = useState([]);     // 累積結果
+  const [selected, setSelected] = useState(null);
+
+  // 分批抓取控制
+  const [loading, setLoading] = useState(false);
+  const [hasMore, setHasMore] = useState(false); // 是否還有下一批
+  const [page, setPage] = useState(0);           // 0-based
+  const [total, setTotal] = useState(null);      // 若後端有 total 就顯示
+
+  // 觀測器與 debounce 控制
+  const observerRef = useRef(null);
+  const sentinelRef = useRef(null);
   const debounceRef = useRef(null);
+  const abortRef = useRef(null);
 
   // 關閉時重置
   useEffect(() => {
     if (!show) {
-      setInput("");
-      setSuggestions([]);
+      setNameInput("");
+      setPhoneInput("");
+      setMemberType("");
+      setItems([]);
       setSelected(null);
       setLoading(false);
-      setMemberType("");
+      setHasMore(false);
+      setTotal(null);
+      setPage(0);
     }
   }, [show]);
 
-  // 是否像電話（純數字且長度>=2）
-  const looksLikePhone = useMemo(() => /^\d{2,}$/.test(input.trim()), [input]);
-  // 是否含英文字母（視為可能是會員編號或名字）
-  const containsLetter = useMemo(() => /[A-Za-z]/.test(input.trim()), [input]);
-
-  // 後端查會員（支援 contactPhone / fullName / memberNo，各打一輪再合併）
-  async function searchMembersBackend(keyword, typeValue, signal) {
-    const paramsCommon = {
-      offset: 0,
-      limit: MAX_SUGGESTIONS,
-    };
-    if (typeValue !== "" && typeValue !== null && typeValue !== undefined) {
-      paramsCommon.memberType = typeValue; // 0/1/2
-    }
-
-    const kw = keyword.trim();
-    if (kw.length < 2) return [];
-
-    const tasks = [];
-
-    // 1) 像電話 -> 用 contactPhone
-    if (looksLikePhone) {
-      tasks.push(
-        axios.get(`${API_BASE}/t_Member`, {
-          params: { ...paramsCommon, contactPhone: kw },
-          signal,
-        })
-      );
-    }
-
-    // 2) 嘗試 memberNo（若後端不支援，會被忽略）
-    //    粗略：只要不是單純數字就試一下
-    if (!looksLikePhone || containsLetter) {
-      tasks.push(
-        axios.get(`${API_BASE}/t_Member`, {
-          params: { ...paramsCommon, memberNo: kw },
-          signal,
-        })
-      );
-    }
-
-    // 3) 一般名字/關鍵字 -> fullName
-    if (!looksLikePhone) {
-      tasks.push(
-        axios.get(`${API_BASE}/t_Member`, {
-          params: { ...paramsCommon, fullName: kw },
-          signal,
-        })
-      );
-    }
-
-    // 保險：如果啥都沒加到，就至少打一個 fullName
-    if (tasks.length === 0) {
-      tasks.push(
-        axios.get(`${API_BASE}/t_Member`, {
-          params: { ...paramsCommon, fullName: kw },
-          signal,
-        })
-      );
-    }
-
-    const settled = await Promise.allSettled(tasks);
-    const list = [];
-
-    for (const r of settled) {
-      if (r.status === "fulfilled") {
-        const d = r.value?.data;
-        const rows = extractMembers(d);
-        list.push(...rows);
-      }
-    }
-
-    // 去重（以 id 或 memberId 去重）
-    const map = new Map();
-    for (const m of list) {
-      const k = m?.id ?? m?.memberId ?? JSON.stringify(m);
-      if (!map.has(k)) map.set(k, m);
-    }
-    return Array.from(map.values());
-  }
-
-  // 依輸入字串做搜尋（debounce + 取消上一請求）
+  // 任一條件改變 → 重置並重新開啟第一次抓取（首批）
   useEffect(() => {
     if (!show) return;
 
-    const kw = input.trim();
-
-    if (kw.length < 2) {
-      setSuggestions([]);
-      return;
-    }
-
+    // debounce 條件輸入（姓名/電話）
     clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(async () => {
+    debounceRef.current = setTimeout(() => {
+      // 若完全無條件（姓名空、電話空、memberType 未選），清空並停止
+      const shouldQuery =
+        memberType !== "" ||
+        nameInput.trim().length > 0 ||
+        phoneInput.trim().length > 0;
+
+      if (!shouldQuery) {
+        // 清空
+        abortRef.current?.abort?.();
+        setItems([]);
+        setSelected(null);
+        setHasMore(false);
+        setTotal(null);
+        setPage(0);
+        return;
+      }
+
+      // 重新開始：清空、從 page 0 起抓
+      abortRef.current?.abort?.();
+      setItems([]);
+      setSelected(null);
+      setHasMore(true); // 先假設有下一頁，實際抓完再決定
+      setTotal(null);
+      setPage(0);
+      // 立刻拉首批
+      loadPage(0, true);
+    }, 250);
+
+    return () => clearTimeout(debounceRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [show, nameInput, phoneInput, memberType]);
+
+  // 實際打 API 抓某一頁（offset=page*PAGE_SIZE）
+  const loadPage = useCallback(
+    async (targetPage, isFirst = false) => {
+      if (loading) return;
+      // 如果不是第一次且已經判定沒有更多，就不再打
+      if (!isFirst && !hasMore) return;
+
+      const params = {
+        offset: Math.max(0, targetPage * PAGE_SIZE),
+        limit: PAGE_SIZE,
+      };
+
+      const nameKw = String(nameInput || "").trim();
+      const phoneKw = String(phoneInput || "").trim();
+
+      if (nameKw) params.fullName = nameKw;
+      if (phoneKw) params.contactPhone = phoneKw;
+
+      // 只選身份也要丟 API
+      if (memberType !== "" && memberType !== null && memberType !== undefined) {
+        params.memberType = memberType; // 0/1/2
+      }
+
+      // 完全無條件（理論上在上游已擋）
+      if (!params.fullName && !params.contactPhone && params.memberType === undefined) {
+        setHasMore(false);
+        return;
+      }
+
       abortRef.current?.abort?.();
       abortRef.current = new AbortController();
 
       try {
         setLoading(true);
-        const rows = await searchMembersBackend(
-          kw,
-          memberType,
-          abortRef.current.signal
-        );
-        setSuggestions(rows.slice(0, MAX_SUGGESTIONS));
+        const { data } = await axios.get(`${API_BASE}/t_Member`, {
+          params,
+          signal: abortRef.current.signal,
+        });
+
+        const { items: newItemsRaw, total: apiTotal } = extractMembersAndPageMeta(data);
+        const newItems = dedupeById(newItemsRaw);
+
+        // 累加內容並去重
+        setItems((prev) => dedupeById([...prev, ...newItems]));
+
+        // 決定 hasMore：
+        if (apiTotal !== null && Number.isFinite(apiTotal)) {
+          // 後端有 total：依 total 與目前累計數量推斷
+          const nextAccumulated = (prevCount => prevCount + newItems.length)(
+            items.length
+          );
+          setTotal(apiTotal);
+          setHasMore(nextAccumulated < apiTotal);
+        } else {
+          // 後端沒 total：用「本次拿到的數量 < PAGE_SIZE」推斷
+          setTotal(null);
+          setHasMore(newItems.length === PAGE_SIZE);
+        }
+
+        // 更新目前頁碼（只有當本次真的抓到資料才前進；若為首次載入也同理）
+        setPage(targetPage);
       } catch (err) {
         if (err.name !== "CanceledError" && err.name !== "AbortError") {
-          console.error("查詢會員失敗", err);
+          console.error("載入會員清單失敗", err);
         }
       } finally {
         setLoading(false);
       }
-    }, 300);
-
-    return () => clearTimeout(debounceRef.current);
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [show, input, memberType]);
+    [nameInput, phoneInput, memberType, hasMore, loading, items.length]
+  );
+
+  // IntersectionObserver：監看 sentinel 以自動載入下一批
+  useEffect(() => {
+    if (!show) return;
+
+    // 清掉舊觀測器
+    if (observerRef.current) {
+      observerRef.current.disconnect();
+      observerRef.current = null;
+    }
+
+    // 沒有 sentinel 或目前不該再載，就不設
+    if (!sentinelRef.current) return;
+
+    observerRef.current = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (!entry || !entry.isIntersecting) return;
+
+        // sentinel 出現於視窗中 → 嘗試載入下一頁
+        if (!loading && hasMore) {
+          // 下一頁索引
+          const nextPage = page + 1;
+          loadPage(nextPage);
+        }
+      },
+      {
+        root: null,
+        rootMargin: "120px", // 預抓：還沒到底就先請求
+        threshold: 0.01,
+      }
+    );
+
+    observerRef.current.observe(sentinelRef.current);
+
+    return () => {
+      observerRef.current?.disconnect();
+      observerRef.current = null;
+    };
+  }, [show, page, hasMore, loading, loadPage]);
 
   function handleSelectRow(m) {
     setSelected(m);
-    setInput(
-      `${m.fullName ?? m.name ?? ""} (${
-        m.contactPhone ?? m.phone ?? m.mobile ?? ""
-      })`
-    );
-    setSuggestions([]);
   }
 
   async function fetchDistributorByMemberId(memberId) {
@@ -193,40 +244,56 @@ export default function MemberModal({ show, onHide, onSelect }) {
       const { data } = await axios.get(`${API_BASE}/t_Distributor`, {
         params: { memberId },
       });
-      // 這邊後端仍是非分頁（若之後也改分頁，可以再用 extractMembers 包一下）
       if (Array.isArray(data))
         return data.find((d) => d.memberId === memberId) || null;
       return data?.memberId === memberId ? data : null;
-    } catch (e) {
+    } catch {
       return null;
     }
   }
 
   function normalizeMember(base, dist) {
     const id = base?.id ?? base?.memberId;
-    const buyerType = dist?.buyerType != null
-   ? Number(dist.buyerType)
-   : (base?.memberType === "導遊" ? 1
-     : base?.memberType === "經銷商" ? 2
-     : 0);
+
+    const buyerType =
+      dist?.buyerType != null
+        ? Number(dist.buyerType)
+        : base?.memberType === "導遊"
+        ? 1
+        : base?.memberType === "經銷商" || base?.memberType === "廠商"
+        ? 2
+        : 0;
+
     const isDistributor = !!dist;
 
     const subType =
-   buyerType === 1 ? "導遊"
- : buyerType === 2 ? "廠商"
- : base?.memberType === "導遊" ? "導遊"
- : base?.memberType === "經銷商" ? "廠商"
- : base?.memberType === "一般會員" ? "一般"
- : "";
+      buyerType === 1
+        ? "導遊"
+        : buyerType === 2
+        ? "廠商"
+        : base?.memberType === "導遊"
+        ? "導遊"
+        : base?.memberType === "經銷商" || base?.memberType === "廠商"
+        ? "廠商"
+        : base?.memberType === "一般會員"
+        ? "一般"
+        : "";
 
     const discountRate = isDistributor
       ? Number(dist?.discountRate ?? 1)
       : Number(base?.discountRate ?? 1);
 
-    // 點數欄位兼容
     const point = Number(
       base?.cashbackPoint ?? base?.rewardPoints ?? base?.points ?? 0
     );
+
+    const levelName = isDistributor
+      ? dist?.levelName ?? dist?.LevelName ?? base?.levelName ?? base?.LevelName ?? ""
+      : base?.levelName ?? base?.LevelName ?? base?.levelCode ?? base?.LevelCode ?? "";
+
+    const levelCode = isDistributor
+      ? dist?.levelCode ?? dist?.LevelCode ?? base?.levelCode ?? base?.LevelCode ?? ""
+      : base?.levelCode ?? base?.LevelCode ?? base?.levelName ?? base?.LevelName ?? "";
 
     return {
       ...base,
@@ -237,12 +304,15 @@ export default function MemberModal({ show, onHide, onSelect }) {
       memberLevel: base?.memberLevel ?? 0,
 
       cashbackPoint: point,
-      rewardPoints: point, // 相容舊程式
+      rewardPoints: point,
 
       isDistributor,
       buyerType,
       subType,
       discountRate: Number(discountRate || 1),
+
+      levelName,
+      levelCode,
 
       type: isDistributor ? "VIP" : subType || "一般",
       level: `LV${base?.memberLevel ?? 0}`,
@@ -258,14 +328,26 @@ export default function MemberModal({ show, onHide, onSelect }) {
     const dist = await fetchDistributorByMemberId(memberId);
     const normalized = normalizeMember(selected, dist);
 
-    onHide(); // 先關
+    onHide();
     setTimeout(() => {
-      // 等背板收掉再回傳
       onSelect(normalized);
       setSelected(null);
-      setInput("");
+      setNameInput("");
+      setPhoneInput("");
+      setMemberType("");
+      setItems([]);
+      setHasMore(false);
+      setTotal(null);
+      setPage(0);
     }, 150);
   }
+
+  const totalText =
+    total !== null
+      ? `共 ${total.toLocaleString()} 筆`
+      : items.length > 0
+      ? `已載入 ${items.length.toLocaleString()} 筆`
+      : "";
 
   return (
     <Modal show={show} onHide={onHide} centered>
@@ -274,67 +356,132 @@ export default function MemberModal({ show, onHide, onSelect }) {
       </Modal.Header>
 
       <Modal.Body>
-        <Row className="g-2 align-items-center">
-          <Col>
+        {/* 查詢條件列 */}
+        <Row className="g-2 align-items-end">
+          <Col md>
+            <Form.Label className="mb-1 small text-muted">會員姓名</Form.Label>
             <Form.Control
-              autoFocus
-              placeholder="輸入手機或會員姓名（至少 2 個字）"
-              value={input}
+              placeholder="輸入會員姓名"
+              value={nameInput}
               onChange={(e) => {
                 setSelected(null);
-                setInput(e.target.value);
+                setNameInput(e.target.value);
+              }}
+              disabled={loading}
+            />
+          </Col>
+          <Col md>
+            <Form.Label className="mb-1 small text-muted">電話</Form.Label>
+            <Form.Control
+              placeholder="輸入電話"
+              value={phoneInput}
+              onChange={(e) => {
+                setSelected(null);
+                setPhoneInput(e.target.value);
               }}
               disabled={loading}
             />
           </Col>
           <Col xs="auto">
+            <Form.Label className="mb-1 small text-muted">身份</Form.Label>
             <Form.Select
               value={memberType}
               onChange={(e) =>
-                setMemberType(
-                  e.target.value === "" ? "" : Number(e.target.value)
-                )
+                setMemberType(e.target.value === "" ? "" : Number(e.target.value))
               }
               disabled={loading}
+              style={{ minWidth: 108 }}
             >
-              {MEMBER_TYPES.map((t) => (
-                <option key={String(t.value)} value={t.value}>
-                  {t.label}
-                </option>
-              ))}
+              <option value="">全部</option>
+              <option value={0}>一般</option>
+              <option value={1}>導遊</option>
+              <option value={2}>廠商</option>
             </Form.Select>
           </Col>
         </Row>
+
+        {/* 顯示數量/狀態 */}
+        <div className="small text-muted mt-2">{totalText}</div>
+
+        {/* 清單 */}
+        {items.length > 0 && (
+          <ListGroup className="mt-2" style={{ maxHeight: 360, overflowY: "auto" }}>
+            {items.map((m) => {
+              const isActive =
+                (selected?.id ?? selected?.memberId) === (m.id ?? m.memberId);
+              const phone = m.contactPhone ?? m.phone ?? m.mobile ?? "無電話";
+              const name = m.fullName ?? m.name ?? "未命名";
+              const level =
+                m.levelName ?? m.LevelName ?? m.levelCode ?? m.LevelCode ?? "";
+              const points = Number(
+                m.cashbackPoint ?? m.rewardPoints ?? m.points ?? 0
+              );
+
+              return (
+                <ListGroup.Item
+                  key={m.id ?? m.memberId}
+                  action
+                  active={isActive}
+                  onClick={() => handleSelectRow(m)}
+                >
+                  <div className="d-flex align-items-start justify-content-between">
+                    <div className="me-2">
+                      <div className="fw-bold">
+                        {name}（{phone}）
+                      </div>
+                      <div className="text-muted small">
+                        會員編號：{m.memberNo ?? m.MemberNo ?? "—"}
+                      </div>
+                    </div>
+
+                    <div className="text-end" style={{ minWidth: 160 }}>
+                      <div className="mb-1">
+                        <span
+                          className="badge me-1"
+                          style={{
+                            background: "#eef5ff",
+                            color: "#2a5fb9",
+                            border: "1px solid #d6e6ff",
+                          }}
+                        >
+                          {m.memberType ?? "一般會員"}
+                        </span>
+                        {level && (
+                          <span
+                            className="badge"
+                            style={{
+                              background: "#fff3f8",
+                              color: "#d63384",
+                              border: "1px solid #ffd6e9",
+                            }}
+                          >
+                            {level}
+                          </span>
+                        )}
+                      </div>
+                      <div className="small">點數 {points.toLocaleString()}</div>
+                    </div>
+                  </div>
+                </ListGroup.Item>
+              );
+            })}
+          </ListGroup>
+        )}
+
+        {/* 空狀態 */}
+        {!loading &&
+          items.length === 0 &&
+          (memberType !== "" || nameInput.trim() || phoneInput.trim()) && (
+            <div className="text-muted mt-3">找不到符合的會員</div>
+          )}
+
+        {/* 無限卷軸：sentinel（放在列表底部，下方再加 loading 狀態） */}
+        <div ref={sentinelRef} />
 
         {loading && (
           <div className="text-center mt-2">
             <Spinner animation="border" size="sm" />
           </div>
-        )}
-
-        {suggestions.length > 0 && (
-          <ListGroup
-            className="mt-2"
-            style={{ maxHeight: 240, overflowY: "auto" }}
-          >
-            {suggestions.map((m) => (
-              <ListGroup.Item
-                key={m.id ?? m.memberId}
-                action
-                active={
-                  (selected?.id ?? selected?.memberId) === (m.id ?? m.memberId)
-                }
-                onClick={() => handleSelectRow(m)}
-              >
-                {(m.fullName ?? m.name) || "未命名"}（
-                {m.contactPhone ?? m.phone ?? m.mobile ?? "無電話"}）
-              </ListGroup.Item>
-            ))}
-          </ListGroup>
-        )}
-
-        {!loading && suggestions.length === 0 && input.trim().length >= 2 && (
-          <div className="text-muted mt-2">找不到符合的會員</div>
         )}
       </Modal.Body>
 

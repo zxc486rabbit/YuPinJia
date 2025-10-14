@@ -8,6 +8,21 @@ import ReturnOrderForm from "./ReturnOrderModal";
 
 const API_BASE = "https://yupinjia.hyjr.com.tw/api/api";
 
+// ★ PATCH: 配送方式映射
+const DELIVERY_LABEL = {
+  0: "現場帶走",
+  1: "機場提貨",
+  2: "碼頭提貨",
+  3: "宅配到府",
+  4: "店到店",
+  5: "訂單自取",
+  6: "司機配送",
+};
+const toDeliveryLabel = (v) => {
+  const n = typeof v === "number" ? v : /^\d+$/.test(String(v)) ? Number(v) : v;
+  return typeof n === "number" ? (DELIVERY_LABEL[n] ?? String(n)) : String(v ?? "—");
+};
+
 export default function Sales() {
   // ===== 查詢欄位 =====
   const [orderId, setOrderId] = useState("");
@@ -16,7 +31,6 @@ export default function Sales() {
   const [status, setStatus] = useState("all");
   const [month, setMonth] = useState("");
   const [memberName, setMemberName] = useState("");
-  // ✅ 進階條件開/關
   const [showMoreFilters, setShowMoreFilters] = useState(false);
 
   // ===== 清單資料 =====
@@ -33,10 +47,9 @@ export default function Sales() {
   // ===== 分頁狀態（新 API）=====
   const [total, setTotal] = useState(0);
   const [limit, setLimit] = useState(20);
-  const [page, setPage] = useState(1); // 1-based
+  const [page, setPage] = useState(1);
   const totalPages = Math.max(1, Math.ceil(total / Math.max(1, limit)));
 
-  // 最後一次查詢參數（搜尋/翻頁共用）
   const lastQueryRef = useMemo(() => ({ current: {} }), []);
   const setLastQuery = (obj) => (lastQueryRef.current = obj);
   const getLastQuery = () => lastQueryRef.current || {};
@@ -86,7 +99,7 @@ export default function Sales() {
     const s = toStatusCode(status);
     if (s === null) return "下一步";
     switch (s) {
-      case 1: // 賒帳
+      case 1:
       case 2: return "確認出貨";
       case 3: return "確認配送";
       case 4: return "完成訂單";
@@ -96,22 +109,16 @@ export default function Sales() {
     }
   };
 
+  // ★ PATCH: 改用訂單欄位直接計算（總計=totalAmount；找零=paymentAmount-totalAmount；欠款=總計-付款）
   const computeTotals = (o) => {
+    const total = Number(o?.totalAmount ?? 0);
     const paid = Number(o?.paymentAmount ?? 0);
-    const itemsTotal = o?.productDetails?.length
-      ? o.productDetails.reduce((sum, it) => {
-          const unit = Number(it.unitPrice) || 0;
-          const qty = Number(it.quantity) || 0;
-          const disc = Number(it.discountedAmount ?? 0) || 0;
-          return sum + (unit * qty - disc);
-        }, 0)
-      : null;
-    const totalN = Number(itemsTotal != null ? itemsTotal : (o?.totalAmount ?? 0));
-    const due = Math.max(0, totalN - paid);
-    const change = Math.max(0, paid - totalN);
-    return { total: totalN, paid, due, change };
+    const due = Math.max(0, total - paid);
+    const change = Math.max(0, paid - total);
+    return { total, paid, due, change };
   };
 
+  // ★ PATCH: 對照 API 欄位產出列表資料（包含配送方式中文與 offsetAmount）
   const mapApiOrder = (order) => ({
     id: order.id,
     orderId: order.orderNumber,
@@ -119,21 +126,22 @@ export default function Sales() {
     member: order.memberName ?? order.memberIdName ?? "未命名會員",
     phone: order.mobile ?? "",
     totalAmount: Number(order.totalAmount ?? 0),
+    paymentAmount: Number(order.paymentAmount ?? 0),
+    creditAmount: Number(order.creditAmount ?? 0),
+    offsetAmount: Number(order.offsetAmount ?? 0),
     paymentMethod: order.paymentMethod ?? "",
     carrierNumber: order.carrierNumber || "無",
     invoiceNumber: order.invoiceNumber || "",
     taxId: order.unifiedBusinessNumber || "無",
     pickupTime: order.pickupInfo?.match(/時間:(.*)/)?.[1] ?? "無",
-    deliveryMethod: order.deliveryMethod || "無",
+    deliveryMethod: toDeliveryLabel(order.deliveryMethod),
+    deliveryMethodRaw: order.deliveryMethod,
     operatorName: order.operatorName ?? "操作員A",
     createdAt: order.createdAt ?? "",
     status: toStatusCode(order.status),
-    // 可能用到的欄位先帶保險
     storeId: order.storeId,
     memberId: order.memberId,
     totalQuantity: order.totalQuantity,
-    paymentAmount: order.paymentAmount,
-    creditAmount: order.creditAmount,
     note: order.note,
     pickupInfo: order.pickupInfo,
     signature: order.signature,
@@ -142,49 +150,30 @@ export default function Sales() {
     shippingAddress: order.shippingAddress,
   });
 
-  // ===== 共用載入（相容舊/新格式）=====
+  // ===== 共用載入 =====
   const fetchOrders = async (query, _page = 1, _limit = limit) => {
     setLoading(true);
     try {
       const offset = (_page - 1) * _limit;
-
-      const params = {
-        ...query,
-        offset,
-        limit: _limit,
-      };
-
-      // 移除 undefined
+      const params = { ...query, offset, limit: _limit };
       Object.keys(params).forEach((k) => params[k] === undefined && delete params[k]);
 
       const res = await axios.get(`${API_BASE}/t_SalesOrder`, { params });
 
-      // --- 相容處理 ---
       let list = [];
       let newTotal = 0;
       let newLimit = _limit;
 
       if (Array.isArray(res.data)) {
         list = res.data;
-        newTotal = list.length; // 舊格式沒有 total，只能以目前陣列估算
+        newTotal = list.length;
       } else if (res.data && typeof res.data === "object") {
         const { total: t, limit: l, items } = res.data;
         newTotal = typeof t === "number" ? t : 0;
         newLimit = typeof l === "number" && l > 0 ? l : _limit;
-
-        if (Array.isArray(items)) {
-          // items 可能是「[ 原本資料陣列 ]」或「直接就是陣列」
-          if (items.length > 0 && Array.isArray(items[0])) {
-            list = items[0];
-          } else {
-            list = items;
-          }
-        } else {
-          list = [];
-        }
+        list = Array.isArray(items) ? (Array.isArray(items[0]) ? items[0] : items) : [];
       }
 
-      // 排序 + 映射
       list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
       const mapped = list.map(mapApiOrder);
 
@@ -200,7 +189,7 @@ export default function Sales() {
     }
   };
 
-  // ===== 初次載入（套用 URL 參數）=====
+  // ===== 初次載入 =====
   useEffect(() => {
     const qs = new URLSearchParams(window.location.search);
     const initParams = {
@@ -218,7 +207,6 @@ export default function Sales() {
       })(),
     };
 
-    // 同步到 UI
     setOrderId(initParams.orderNumber || "");
     setMonth(initParams.createdAt || "");
     setMemberName(initParams.memberName || "");
@@ -231,9 +219,8 @@ export default function Sales() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 🔎 條件變動即自動搜尋（含防抖 debounce）
+  // 🔎 條件變動即自動搜尋
   useEffect(() => {
-    // 組參數（同你原本的 handleSearch）
     const rawParams = {
       orderNumber: orderId || undefined,
       createdAt: month || undefined,
@@ -241,11 +228,8 @@ export default function Sales() {
       deliveryMethod: pickupMethod !== "all" ? pickupMethod : undefined,
       status: status !== "all" ? Number(status) : undefined,
     };
-    const params = Object.fromEntries(
-      Object.entries(rawParams).filter(([, v]) => v !== undefined)
-    );
+    const params = Object.fromEntries(Object.entries(rawParams).filter(([, v]) => v !== undefined));
 
-    // 同步 URL
     const queryString = new URLSearchParams({
       ...(params.orderNumber ? { orderNumber: params.orderNumber } : {}),
       ...(params.createdAt ? { createdAt: params.createdAt } : {}),
@@ -255,20 +239,16 @@ export default function Sales() {
     }).toString();
     window.history.pushState({}, "", `?${queryString}`);
 
-    // 記住條件、回到第 1 頁
     setLastQuery(params);
     setPage(1);
 
-    // debounce：350ms 後才打 API，避免每敲一字就請求
     const t = setTimeout(() => {
       fetchOrders(params, 1, limit);
     }, 350);
-
     return () => clearTimeout(t);
-    // ⚠️ 僅在條件改變時觸發，不含 limit/page（翻頁另有函式）
   }, [orderId, month, memberName, pickupMethod, status]);
 
-  // ===== 分頁動作 =====
+  // ===== 分頁 =====
   const goPage = (p) => {
     const safe = Math.min(Math.max(1, p), totalPages);
     setPage(safe);
@@ -288,19 +268,41 @@ export default function Sales() {
       setSelectedOrder({ ...order, productDetails: [] });
       setShowModal(true);
       const res = await axios.get(`${API_BASE}/t_SalesOrder/${order.id}`);
-      const productDetails = res.data.orderItems.map((item) => {
+      // ★ PATCH: 以 API 欄位建構：原價=unitPrice，單件新價=subtotal，行總=subtotal*quantity
+      const productDetails = (res.data.orderItems || []).map((item) => {
         const quantity = Number(item.quantity) || 0;
-        const unitPrice = Number(item.unitPrice) || 0;
+        const originalUnit = Number(item.unitPrice) || 0;     // 原價/每件
+        const chosenUnit = Number(item.subtotal ?? originalUnit); // 新價/每件（API 的 subtotal）
         return {
           productName: item.productName || "未命名商品",
           quantity,
-          unitPrice,
-          discountedAmount: Number(item.discountedAmount ?? 0) || 0,
-          subtotal: Number(item.subtotal ?? unitPrice * quantity),
+          unitPrice: originalUnit,
+          chosenUnit,
           isGift: !!item.isGift,
         };
       });
-      setSelectedOrder((prev) => ({ ...prev, productDetails }));
+
+      setSelectedOrder((prev) => ({
+        ...prev,
+        // 帶回明細與關鍵金額
+        productDetails,
+        totalAmount: Number(res.data.totalAmount ?? prev.totalAmount ?? 0),
+        paymentAmount: Number(res.data.paymentAmount ?? prev.paymentAmount ?? 0),
+        creditAmount: Number(res.data.creditAmount ?? prev.creditAmount ?? 0),
+        offsetAmount: Number(res.data.offsetAmount ?? 0),
+        deliveryMethod: toDeliveryLabel(res.data.deliveryMethod),
+        deliveryMethodRaw: res.data.deliveryMethod,
+        paymentMethod: res.data.paymentMethod ?? prev.paymentMethod,
+        invoiceNumber: res.data.invoiceNumber ?? prev.invoiceNumber,
+        carrierNumber: res.data.carrierNumber ?? prev.carrierNumber,
+        shippingAddress: res.data.shippingAddress ?? prev.shippingAddress,
+        operatorName: res.data.operatorName ?? prev.operatorName,
+        createdAt: res.data.createdAt ?? prev.createdAt,
+        member: res.data.memberName ?? prev.member,
+        phone: res.data.mobile ?? prev.phone,
+        store: res.data.storeName ?? prev.store,
+        status: toStatusCode(res.data.status),
+      }));
     } catch (error) {
       console.error("取得商品明細失敗", error);
       Swal.fire("錯誤", "載入商品明細失敗", "error");
@@ -315,6 +317,7 @@ export default function Sales() {
       totalAmount: order.totalAmount || 0,
       paymentAmount: order.paymentAmount || 0,
       creditAmount: order.creditAmount || 0,
+      offsetAmount: order.offsetAmount || 0,
     });
     setShowEditModal(true);
 
@@ -328,16 +331,18 @@ export default function Sales() {
         store: data.storeName || "林園門市",
         member: data.memberName || "未命名會員",
         phone: data.mobile || "",
-        totalAmount: data.totalAmount || 0,
-        paymentAmount: data.paymentAmount || 0,
-        creditAmount: data.creditAmount || 0,
+        totalAmount: Number(data.totalAmount || 0),
+        paymentAmount: Number(data.paymentAmount || 0),
+        creditAmount: Number(data.creditAmount || 0),
+        offsetAmount: Number(data.offsetAmount || 0),
         paymentMethod: data.paymentMethod || "現金",
         totalQuantity: data.totalQuantity || 0,
         status: toStatusCode(data.status),
         unifiedBusinessNumber: data.unifiedBusinessNumber || "",
         invoiceNumber: data.invoiceNumber || "",
         note: data.note || "",
-        deliveryMethod: data.deliveryMethod || "",
+        deliveryMethod: toDeliveryLabel(data.deliveryMethod),
+        deliveryMethodRaw: data.deliveryMethod,
         carrierNumber: data.carrierNumber || "",
         createdAt: data.createdAt || "",
         operatorName: data.operatorName || "",
@@ -346,15 +351,16 @@ export default function Sales() {
         signatureMime: data.signatureMime || "image/jpeg",
         mobile: data.mobile || "",
         shippingAddress: data.shippingAddress || "",
-        productDetails: data.orderItems.map((item) => {
+        // ★ PATCH: 單價顯示用（原價=unitPrice，新價=chosenUnit=API subtotal）
+        productDetails: (data.orderItems || []).map((item) => {
           const quantity = Number(item.quantity) || 0;
-          const unitPrice = Number(item.unitPrice) || 0;
+          const originalUnit = Number(item.unitPrice) || 0;
+          const chosenUnit = Number(item.subtotal ?? originalUnit);
           return {
             productName: item.productName || "未命名商品",
             quantity,
-            unitPrice,
-            discountedAmount: Number(item.discountedAmount ?? 0) || 0,
-            subtotal: Number(item.subtotal ?? unitPrice * quantity),
+            unitPrice: originalUnit,
+            chosenUnit,
             isGift: !!item.isGift,
           };
         }),
@@ -399,18 +405,11 @@ export default function Sales() {
     }
     let nextStatus = currentStatus;
     switch (currentStatus) {
-      case 1: // 賒帳 -> 已出貨
-      case 2: // 已付款 -> 已出貨
-        nextStatus = 3;
-        break;
-      case 3:
-        nextStatus = 4;
-        break;
-      case 4:
-        nextStatus = 5;
-        break;
-      default:
-        nextStatus = currentStatus;
+      case 1:
+      case 2: nextStatus = 3; break;
+      case 3: nextStatus = 4; break;
+      case 4: nextStatus = 5; break;
+      default: nextStatus = currentStatus;
     }
 
     const nextStepLabel = getNextStepLabel(currentStatus);
@@ -434,7 +433,7 @@ export default function Sales() {
       unifiedBusinessNumber: selectedOrder.unifiedBusinessNumber || "",
       invoiceNumber: selectedOrder.invoiceNumber || "",
       note: selectedOrder.note || "",
-      deliveryMethod: selectedOrder.deliveryMethod || "",
+      deliveryMethod: selectedOrder.deliveryMethodRaw ?? selectedOrder.deliveryMethod ?? "",
       dealerMemberId: selectedOrder.dealerMemberId || 0,
       paymentMethod: selectedOrder.paymentMethod || "現金",
       carrierNumber: selectedOrder.carrierNumber || "",
@@ -448,7 +447,6 @@ export default function Sales() {
     try {
       await axios.put(`${API_BASE}/t_SalesOrder/${selectedOrder.id}`, payload);
       Swal.fire("更新成功", `訂單狀態已變更為「${nextStepLabel}」`, "success");
-
       setTableData((prev) =>
         prev.map((item) => (item.id === selectedOrder.id ? { ...item, status: nextStatus } : item))
       );
@@ -504,44 +502,18 @@ export default function Sales() {
   // ====== UI ======
   return (
     <>
-      {/* 搜尋列（保留原樣 + 進階條件可收合；已移除"每頁筆數"） */}
+      {/* 搜尋列 */}
       <div className="search-container d-flex flex-wrap gap-3 px-4 py-3 rounded align-items-center">
-        {/* 訂單編號 */}
-        <SearchField
-          label="訂單編號"
-          type="text"
-          value={orderId}
-          onChange={(e) => setOrderId(e.target.value)}
-        />
+        <SearchField label="訂單編號" type="text" value={orderId} onChange={(e) => setOrderId(e.target.value)} />
+        <SearchField label="訂單成立月份" type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
+        <SearchField label="會員名稱" type="text" value={memberName} onChange={(e) => setMemberName(e.target.value)} />
 
-        {/* 訂單成立月份 */}
-        <SearchField
-          label="訂單成立月份"
-          type="month"
-          value={month}
-          onChange={(e) => setMonth(e.target.value)}
-        />
-
-        {/* 會員名稱 */}
-        <SearchField
-          label="會員名稱"
-          type="text"
-          value={memberName}
-          onChange={(e) => setMemberName(e.target.value)}
-        />
-
-        {/* 進階條件切換按鈕（外觀延續你的風格） */}
-        <button
-          className="btn btn-outline-secondary btn-sm"
-          onClick={() => setShowMoreFilters((v) => !v)}
-        >
+        <button className="btn btn-outline-secondary btn-sm" onClick={() => setShowMoreFilters((v) => !v)}>
           {showMoreFilters ? "收合進階" : "進階條件"}
         </button>
 
-        {/* 只有在展開時才顯示：取貨方式、狀態 */}
         {showMoreFilters && (
           <>
-            {/* 取貨方式 */}
             <SearchField
               label="取貨方式"
               type="select"
@@ -559,7 +531,6 @@ export default function Sales() {
               ]}
             />
 
-            {/* 狀態 */}
             <SearchField
               label="狀態"
               type="select"
@@ -578,7 +549,6 @@ export default function Sales() {
           </>
         )}
 
-        {/* 右側：只保留清除搜尋（每頁筆數已移到下方分頁列） */}
         <div className="d-flex align-items-center ms-auto gap-2">
           <button
             className="btn btn-outline-secondary"
@@ -590,9 +560,7 @@ export default function Sales() {
               setStatus("all");
               setPage(1);
               setTotal(0);
-              // 清掉 URL
               window.history.pushState({}, "", window.location.pathname);
-              // 以空參數重新抓第一頁
               const empty = {};
               setLastQuery(empty);
               fetchOrders(empty, 1, limit);
@@ -615,10 +583,7 @@ export default function Sales() {
         )}
 
         <table className="table text-center" style={{ fontSize: "1.2rem" }}>
-          <thead
-            className="table-light"
-            style={{ borderTop: "1px solid #c5c6c7", position: "sticky", top: 0, background: "#d1ecf1", zIndex: 1 }}
-          >
+          <thead className="table-light" style={{ borderTop: "1px solid #c5c6c7", position: "sticky", top: 0, background: "#d1ecf1", zIndex: 1 }}>
             <tr>
               <th scope="col"><input type="checkbox" className="w-5 h-5 text-gray-600" /></th>
               <th scope="col">訂單編號</th>
@@ -657,7 +622,7 @@ export default function Sales() {
         </table>
       </div>
 
-      {/* 表格底部：列印與分頁 + ✅ 每頁筆數放在這裡 */}
+      {/* 表格底部 */}
       <div className="d-flex align-items-center justify-content-between mt-2 ps-3 pe-3 mb-3" >
         <div>
           <button className="pink-button me-3" style={{ fontSize: "1.2rem" }}>列印清單</button>
@@ -665,30 +630,20 @@ export default function Sales() {
         </div>
 
         <div className="d-flex align-items-center flex-wrap gap-2 justify-content-end">
-          {/* 每頁筆數（下方） */}
           <div className="d-flex align-items-center">
             <span className="me-2">每頁</span>
-            <select
-              className="form-select form-select-sm"
-              style={{ width: 100 }}
-              value={limit}
-              onChange={handleChangePageSize}
-            >
-              {[10, 20, 30, 50, 100].map((n) => (
-                <option key={n} value={n}>{n}</option>
-              ))}
+            <select className="form-select form-select-sm" style={{ width: 100 }} value={limit} onChange={handleChangePageSize}>
+              {[10, 20, 30, 50, 100].map((n) => (<option key={n} value={n}>{n}</option>))}
             </select>
             <span className="ms-2">筆</span>
           </div>
 
-          {/* 分頁器 */}
           <span className="ms-3 me-2">
             共 <strong>{total}</strong> 筆，第 <strong>{page}</strong> / {totalPages} 頁
           </span>
           <Pagination className="mb-0">
             <Pagination.First disabled={page <= 1} onClick={() => goPage(1)} />
             <Pagination.Prev disabled={page <= 1} onClick={() => goPage(page - 1)} />
-            {/* 簡單頁碼（最多顯示 5）*/}
             {(() => {
               const pages = [];
               const start = Math.max(1, page - 2);
@@ -727,10 +682,9 @@ export default function Sales() {
                   selectedOrder.productDetails.map((item, i) => {
                     const isGift = !!item.isGift;
                     const quantity = Number(item.quantity) || 0;
-                    const unitPrice = Number(item.unitPrice) || 0;
-                    const subtotal = Number(item.subtotal ?? unitPrice * quantity);
-                    const discountedAmount = Number(item.discountedAmount) || 0;
-                    const discountedTotal = Math.max(0, subtotal - discountedAmount);
+                    const originalUnit = Number(item.unitPrice) || 0;      // 原價/每件
+                    const chosenUnit = isGift ? 0 : Number(item.chosenUnit ?? originalUnit); // 新價/每件
+                    const lineTotal = isGift ? 0 : Math.round(chosenUnit * quantity);
 
                     return (
                       <tr key={i} style={isGift ? { background: "#fff7e6" } : undefined}>
@@ -741,27 +695,29 @@ export default function Sales() {
                         <td>
                           {isGift ? (
                             <>
-                              <div style={{ textDecoration: "line-through", color: "#888" }}>
-                                ${unitPrice.toLocaleString()}
-                              </div>
+                              {originalUnit > 0 && (
+                                <div style={{ textDecoration: "line-through", color: "#888" }}>
+                                  ${originalUnit.toLocaleString()}
+                                </div>
+                              )}
                               <div style={{ color: "#17a2b8", fontWeight: "bold" }}>贈送</div>
                             </>
-                          ) : discountedAmount > 0 ? (
+                          ) : originalUnit !== chosenUnit ? (
                             <>
-                              <div style={{ textDecoration: "line-through", color: "#888" }}>
-                                ${unitPrice.toLocaleString()}
-                              </div>
-                              <div style={{ color: "#dc3545", fontWeight: "bold" }}>
-                                ${Math.round(discountedTotal / Math.max(1, quantity)).toLocaleString()}
-                              </div>
+                              <span style={{ textDecoration: "line-through", color: "#888", marginRight: 6 }}>
+                                ${originalUnit.toLocaleString()}
+                              </span>
+                              <span style={{ color: "#dc3545", fontWeight: "bold" }}>
+                                ${chosenUnit.toLocaleString()}
+                              </span>
                             </>
                           ) : (
-                            `$${unitPrice.toLocaleString()}`
+                            `$${originalUnit.toLocaleString()}`
                           )}
                         </td>
                         <td>{quantity}</td>
                         <td style={{ color: isGift ? "#17a2b8" : "#28a745", fontWeight: "bold" }}>
-                          ${discountedTotal.toLocaleString()}
+                          ${lineTotal.toLocaleString()}
                         </td>
                       </tr>
                     );
@@ -777,13 +733,13 @@ export default function Sales() {
                 let originalTotal = 0;
                 let discountedTotal = 0;
                 selectedOrder.productDetails.forEach((item) => {
-                  const unitPrice = Number(item.unitPrice) || 0;
-                  const quantity = Number(item.quantity) || 0;
-                  const discountedAmount = Number(item.discountedAmount) || 0;
-                  originalTotal += unitPrice * quantity;
-                  discountedTotal += unitPrice * quantity - discountedAmount;
+                  const q = Number(item.quantity) || 0;
+                  const orig = Number(item.unitPrice) || 0;
+                  const chosen = item.isGift ? 0 : Number(item.chosenUnit ?? orig);
+                  originalTotal += orig * q;               // 折扣前金額
+                  discountedTotal += Math.max(0, chosen) * q; // 折扣後金額 = subtotal(每件新價)*數量
                 });
-                const totalDiscount = originalTotal - discountedTotal;
+                const totalDiscount = Math.max(0, originalTotal - discountedTotal);
 
                 return (
                   <div className="mt-3 p-3 d-flex justify-content-start bg-light border rounded" style={{ fontSize: "1.1rem", gap: "2rem" }}>
@@ -817,10 +773,9 @@ export default function Sales() {
                   selectedOrder.productDetails.map((item, i) => {
                     const isGift = !!item.isGift;
                     const quantity = Number(item.quantity) || 0;
-                    const unitPrice = Number(item.unitPrice) || 0;
-                    const subtotal = Number(item.subtotal ?? unitPrice * quantity);
-                    const discountedAmount = Number(item.discountedAmount) || 0;
-                    const discountedTotal = Math.max(0, subtotal - discountedAmount);
+                    const originalUnit = Number(item.unitPrice) || 0;
+                    const chosenUnit = isGift ? 0 : Number(item.chosenUnit ?? originalUnit);
+                    const lineTotal = isGift ? 0 : Math.round(chosenUnit * quantity);
 
                     return (
                       <tr key={i} style={isGift ? { background: "#fff7e6" } : undefined}>
@@ -831,27 +786,29 @@ export default function Sales() {
                         <td>
                           {isGift ? (
                             <>
-                              <div style={{ textDecoration: "line-through", color: "#888" }}>
-                                ${unitPrice.toLocaleString()}
-                              </div>
+                              {originalUnit > 0 && (
+                                <div style={{ textDecoration: "line-through", color: "#888" }}>
+                                  ${originalUnit.toLocaleString()}
+                                </div>
+                              )}
                               <div style={{ color: "#17a2b8", fontWeight: "bold" }}>贈送</div>
                             </>
-                          ) : discountedAmount > 0 ? (
+                          ) : originalUnit !== chosenUnit ? (
                             <>
-                              <div style={{ textDecoration: "line-through", color: "#888" }}>
-                                ${unitPrice.toLocaleString()}
-                              </div>
-                              <div style={{ color: "#dc3545", fontWeight: "bold" }}>
-                                ${Math.round(discountedTotal / Math.max(1, quantity)).toLocaleString()}
-                              </div>
+                              <span style={{ textDecoration: "line-through", color: "#888", marginRight: 6 }}>
+                                ${originalUnit.toLocaleString()}
+                              </span>
+                              <span style={{ color: "#dc3545", fontWeight: "bold" }}>
+                                ${chosenUnit.toLocaleString()}
+                              </span>
                             </>
                           ) : (
-                            `$${unitPrice.toLocaleString()}`
+                            `$${originalUnit.toLocaleString()}`
                           )}
                         </td>
                         <td>{quantity}</td>
                         <td style={{ color: isGift ? "#17a2b8" : "#28a745", fontWeight: "bold" }}>
-                          ${discountedTotal.toLocaleString()}
+                          ${lineTotal.toLocaleString()}
                         </td>
                       </tr>
                     );
@@ -865,32 +822,39 @@ export default function Sales() {
 
           {selectedOrder && (() => {
             const { total, paid, due, change } = computeTotals(selectedOrder);
+            const credit = Number(selectedOrder?.creditAmount ?? 0);
+            const offset = Number(selectedOrder?.offsetAmount ?? 0);
             return (
               <div className="mt-3 p-3 d-flex justify-content-between bg-light border rounded" style={{ fontSize: "1rem", lineHeight: "1.7" }}>
                 <div>
                   <div className="d-flex">
                     <div>共計商品：<strong>{selectedOrder?.productDetails?.length ?? 0} 項</strong></div>
                     <div className="ms-5">總計：<strong>{formatCurrency(total)} 元</strong></div>
-                    <div className="ms-5">付款方式：<strong>{formatPaymentMethod(selectedOrder?.paymentMethod ?? selectedOrder?.pay)}{due > 0 ? "（賒帳）" : ""}</strong></div>
-                    {due > 0 && (
-                      <div className="ms-5">賒帳金額：<strong style={{ color: "#dc3545" }}>${formatCurrency(due)} 元</strong></div>
-                    )}
+                    <div className="ms-5">付款方式：<strong>{formatPaymentMethod(selectedOrder?.paymentMethod ?? selectedOrder?.pay)}</strong></div>
+                    {/* ★ PATCH: 顯示賒帳金額（creditAmount） */}
+                    <div className="ms-5">賒帳金額：<strong style={{ color: credit > 0 ? "#dc3545" : "#6c757d" }}>${formatCurrency(credit)} 元</strong></div>
                   </div>
                   <div className="d-flex mt-1">
                     <div>會員：<strong>{selectedOrder?.member || "未命名會員"}</strong></div>
                     <div className="ms-5">手機：<strong>{selectedOrder?.phone || "—"}</strong></div>
                     <div className="ms-5">配送方式：<strong>{selectedOrder?.deliveryMethod || "—"}</strong></div>
                   </div>
-                  {paid > 0 && toStatusCode(selectedOrder?.status) !== 1 && (
-                    <div className="d-flex mt-1">
-                      <div>付款金額：<strong style={{ color: "#28a745" }}>${formatCurrency(paid)} 元</strong></div>
-                      <div className="ms-5">
-                        {formatPaymentMethod(selectedOrder?.paymentMethod).includes("現金")
-                          ? `找零：$${formatCurrency(change)} 元`
-                          : `餘額：$${formatCurrency(due)} 元`}
-                      </div>
-                    </div>
-                  )}
+
+                  {/* ★ PATCH: 付款金額 / 找零 or 賒帳（由總計與付款直接比） */}
+                  <div className="d-flex mt-1">
+                    <div>付款金額：<strong style={{ color: "#28a745" }}>${formatCurrency(paid)} 元</strong></div>
+                    {paid >= total ? (
+                      <div className="ms-5">找零：<strong>${formatCurrency(change)} 元</strong></div>
+                    ) : (
+                      <div className="ms-5">賒帳：<strong style={{ color: "#dc3545" }}>${formatCurrency(total - paid)} 元</strong></div>
+                    )}
+                  </div>
+
+                  {/* ★ PATCH: 點數折抵 offsetAmount */}
+                  <div className="d-flex mt-1">
+                    <div>點數折抵：<strong style={{ color: "#0d6efd" }}>${formatCurrency(offset)} 元</strong></div>
+                  </div>
+
                   <div className="d-flex mt-1">
                     <div>發票號碼：<strong>{selectedOrder?.invoiceNumber || "無"}</strong></div>
                     <div className="ms-5">載具編號：<strong>{selectedOrder?.carrierNumber || "無"}</strong></div>

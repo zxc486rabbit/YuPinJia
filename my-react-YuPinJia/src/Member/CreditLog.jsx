@@ -382,7 +382,7 @@ export default function CreditLog() {
                 </th>
                 <th>會員編號</th>
                 <th>會員名稱</th>
-                <th>聯絡人</th>
+                {/* <th>聯絡人</th> */}
                 <th>帳單日期</th>
                 <th>賒帳金額</th>
                 <th>提醒次數</th>
@@ -403,7 +403,7 @@ export default function CreditLog() {
                     </td>
                     <td>{r.memberNo}</td>
                     <td>{r.fullName}</td>
-                    <td>{r.contact}</td>
+                    {/* <td>{r.contact}</td> */}
                     <td>{r.billingDate}</td>
                     <td>{money(r.creditAmount)}</td>
                     <td>{r.reminderCount}</td>
@@ -414,7 +414,7 @@ export default function CreditLog() {
                         <span className="badge bg-success">已還款</span>
                       )}
                     </td>
-                    <td>
+                    <td className="d-flex justify-content-center">
                       <button
                         className="edit-button me-2"
                         onClick={() => handleRemind(r)}

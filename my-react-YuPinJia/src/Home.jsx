@@ -329,6 +329,24 @@ export default function Home() {
     );
   }, [isGuideSelf, currentMember?.id, allProducts]);
 
+  useEffect(() => {
+  if (!allProducts?.length) return;
+  setCartItems((prev) =>
+    prev.map((it) => {
+      if (it.isGift) return it; // 贈品維持 0 元
+      const key = it.productId ?? it.id;
+      const matched = allProducts.find((p) => (p.productId ?? p.id) === key);
+      if (!matched) return it;
+      return {
+        ...it,
+        unitPrice: Number(matched.calculatedPrice ?? it.unitPrice ?? 0),
+        __dealerPrice: matched.__dealerPrice,
+        __storePrice: matched.__storePrice,
+      };
+    })
+  );
+}, [currentMember?.memberId, allProducts]);
+
   /* ========== 搜尋 / 顯示清單 ========== */
   const filteredSuggestions = useMemo(() => {
     if (!searchKeyword || !allProducts.length) return [];
@@ -612,25 +630,34 @@ useEffect(() => {
       });
       return;
     }
-    const normalizedMember = {
-      id: currentMember?.id ?? currentMember?.memberId ?? 0,
-      fullName: currentMember?.fullName ?? currentMember?.name ?? "",
-      contactPhone:
-        currentMember?.contactPhone ??
-        currentMember?.phone ??
-        currentMember?.mobile ??
-        "",
-      contactAddress:
-        currentMember?.contactAddress ?? currentMember?.address ?? "",
-      subType: currentMember?.subType ?? "",
-      discountRate: currentMember?.discountRate ?? 1,
-      creditEligible: currentMember?.isDistributor
-        ? isGuideSelf
-          ? !!currentMember?.isSelfCredit
-          : !!currentMember?.isGuestCredit
-        : false,
-      distributorId: currentMember?.distributorId ?? null,
-    };
+    const buyerType =
+  currentMember?.buyerType ??
+  (currentMember?.memberType === "導遊" ? 1 :
+   currentMember?.memberType === "經銷商" ? 2 : 0);
+
+const normalizedMember = {
+  id: currentMember?.id ?? currentMember?.memberId ?? 0,
+  fullName: currentMember?.fullName ?? currentMember?.name ?? "",
+  contactPhone: currentMember?.contactPhone ?? currentMember?.phone ?? currentMember?.mobile ?? "",
+  contactAddress: currentMember?.contactAddress ?? currentMember?.address ?? "",
+  memberType: currentMember?.memberType ?? "",
+
+  // ★ 關鍵：把這些都帶到 checkout
+  buyerType,
+  subType: currentMember?.subType ?? (buyerType === 1 ? "導遊" : buyerType === 2 ? "廠商" : ""),
+  isSelfCredit:  !!(currentMember?.isSelfCredit  ?? currentMember?.IsSelfCredit),
+  isGuestCredit: !!(currentMember?.isGuestCredit ?? currentMember?.IsGuestCredit),
+
+  discountRate: currentMember?.discountRate ?? 1,
+  isDistributor: !!currentMember?.isDistributor,
+
+  // 這個只是資訊用，不作為最終判斷依據
+  creditEligible: currentMember?.isDistributor
+    ? (isGuideSelf ? !!currentMember?.isSelfCredit : !!currentMember?.isGuestCredit)
+    : false,
+
+  distributorId: currentMember?.distributorId ?? null,
+};
 
     const items = cartItems.map((i) => ({
       id: i.id ?? i.productId,

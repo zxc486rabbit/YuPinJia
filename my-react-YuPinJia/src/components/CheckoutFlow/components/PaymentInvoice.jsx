@@ -300,13 +300,12 @@ export default function PaymentInvoice({
     bigCheckbox: { transform: "scale(1.25)", transformOrigin: "left center", cursor: "pointer" },
     bigCheckboxLabel: { fontSize: 14.5, fontWeight: 700, marginBlock: "auto", userSelect: "none", color: "#0f172a", cursor: "pointer" },
 
-    /* ★ 結帳按鈕下方的小提示字 */
     tinyNotice: {
       marginTop: 6,
       textAlign: "center",
       fontSize: 11,
       lineHeight: 1.2,
-      color: "#dc2626", // 紅色提醒
+      color: "#6b7280",
       opacity: 0.9,
     },
   };
@@ -320,6 +319,7 @@ export default function PaymentInvoice({
   const setDateValue = setPaymentDate ?? setCheckDate ?? (() => {});
 
   /* ------------------------------ Local state ------------------------------ */
+  // 哪個欄位吃九宮格：現金/刷卡→cashReceived；匯款/支票→paymentAmount
   const [activeField, setActiveField] = useState(
     payment === "匯款" || payment === "支票" ? "paymentAmount" : "cashReceived"
   );
@@ -356,6 +356,7 @@ export default function PaymentInvoice({
         : String(cashReceived ?? ""),
     [activeField, paymentAmount, cashReceived]
   );
+
   const setCurrentValue = (next) =>
     activeField === "paymentAmount" ? setPaymentAmount(next) : setCashReceived(next);
 
@@ -375,6 +376,53 @@ export default function PaymentInvoice({
       ? { bg: "#FEF2F2", border: "#fca5a5", text: "#dc2626" }
       : { bg: "#F9FAFB", border: "#E5E7EB", text: "#111827" };
 
+  /* ------------------------------ Keypad Logic ------------------------------ */
+  const sanitize = (s) => {
+    // 僅保留 0-9 和一個小數點；避免前導 0 造成混亂
+    s = String(s ?? "");
+    // 移除非數字與點
+    s = s.replace(/[^0-9.]/g, "");
+    // 只留第一個點
+    const firstDot = s.indexOf(".");
+    if (firstDot !== -1) {
+      s =
+        s.slice(0, firstDot + 1) + s.slice(firstDot + 1).replace(/\./g, "");
+    }
+    // 處理 00. 與 . 開頭
+    if (s.startsWith(".")) s = "0" + s;
+    // 去掉多餘前導零（但保留 "0" 或 "0.xxx"）
+    s = s.replace(/^0+(\d)/, "$1");
+    return s;
+  };
+
+  const handleKeypadPress = (key) => {
+    let val = String(currentValue || "");
+    switch (key) {
+      case "DEL":
+        val = val.slice(0, -1);
+        break;
+      case "CLR":
+        val = "";
+        break;
+      case "TOTAL":
+        val = String(Number(finalTotal || 0));
+        break;
+      case ".":
+        if (!val.includes(".")) val = (val || "0") + ".";
+        break;
+      case "00":
+        // 若目前為空，視為 0；否則補兩個 0
+        val = val ? val + "00" : "0";
+        break;
+      default:
+        // 0-9
+        val = val + String(key);
+        break;
+    }
+    val = sanitize(val);
+    setCurrentValue(val);
+  };
+
   /* --------------------------------- UI --------------------------------- */
   return (
     <div style={S.viewport}>
@@ -390,7 +438,7 @@ export default function PaymentInvoice({
       <div style={S.body}>
         {/* 左欄 */}
         <div style={S.leftCol}>
-          {/* 黑卡片＋右側亮底統計 */}
+          {/* 應收/已收/差額 */}
           <div style={S.totalRow}>
             <div style={S.totalCard}>
               <div>
@@ -443,7 +491,7 @@ export default function PaymentInvoice({
             <div style={S.subtitle}>金額與付款資訊</div>
 
             <div style={S.grid2}>
-              {/* 金額欄位 */}
+              {/* 金額欄位（九宮格目標） */}
               <div>
                 <div style={S.label}>
                   {payment === "現金" || payment === "刷卡" ? "收現金額" : "付款金額"}
@@ -451,14 +499,20 @@ export default function PaymentInvoice({
                 <input
                   style={{
                     ...S.input,
-                    ...( (payment === "匯款" || payment === "支票") ? (activeField === "paymentAmount" ? S.inputActive : {}) : (activeField === "cashReceived" ? S.inputActive : {}) ),
+                    ...( (payment === "匯款" || payment === "支票")
+                        ? (activeField === "paymentAmount" ? S.inputActive : {})
+                        : (activeField === "cashReceived" ? S.inputActive : {})
+                    ),
                   }}
-                  type="number"
-                  min="0"
+                  type="text"
+                  inputMode="decimal"
                   placeholder={payment === "現金" || payment === "刷卡" ? "請輸入收現金額" : "請輸入付款金額"}
-                  value={(payment === "匯款" || payment === "支票") ? paymentAmount : cashReceived}
+                  value={(payment === "匯款" || payment === "支票") ? (paymentAmount ?? "") : (cashReceived ?? "")}
                   onFocus={() => setActiveField((payment === "匯款" || payment === "支票") ? "paymentAmount" : "cashReceived")}
-                  onChange={(e) => (payment === "匯款" || payment === "支票") ? setPaymentAmount(e.target.value) : setCashReceived(e.target.value)}
+                  onChange={(e) => {
+                    const v = sanitize(e.target.value);
+                    (payment === "匯款" || payment === "支票") ? setPaymentAmount(v) : setCashReceived(v);
+                  }}
                 />
               </div>
 
@@ -587,7 +641,7 @@ export default function PaymentInvoice({
         {/* 右欄：九宮格卡片（含確認按鈕） */}
         <div style={S.rightCol}>
           <div style={S.keypadWrapper}>
-            {/* 等寬快捷金額 */}
+            {/* 快捷金額 */}
             <div style={S.keypadChipsRow}>
               {[100, 500, 1000, 2000].map((n) => (
                 <button
@@ -616,14 +670,13 @@ export default function PaymentInvoice({
               ))}
             </div>
 
-            {/* 確認按鈕（卡片內、固定矮高） */}
+            {/* 確認按鈕 */}
             <button style={S.primaryBtn} onClick={onFinish}>
               確認結帳
             </button>
 
-            {/* ★ 小提示：顯示在結帳按鈕下方 */}
             <div style={S.tinyNotice}>
-              此身份 不可賒帳，請確認實收金額已全額付清。
+              小提示：點選金額輸入框可切換九宮格輸入目標（現金/付款金額）。
             </div>
           </div>
         </div>

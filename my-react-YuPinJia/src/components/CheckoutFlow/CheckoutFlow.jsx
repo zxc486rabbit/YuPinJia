@@ -65,13 +65,20 @@ const pickPriceStoreOnly = (p) => {
 };
 
 const getCreditAllowed = (member, isGuideSelf) => {
-  const sub = member?.subType ?? "";
-  if (sub === "導遊") {
-    return isGuideSelf ? !!member?.isSelfCredit : !!member?.isGuestCredit;
-  }
-  if (sub === "廠商") {
-    return !!member?.isSelfCredit;
-  }
+  // 先讀布林旗標（兼容大小寫）
+  const selfCredit  = !!(member?.isSelfCredit  ?? member?.IsSelfCredit);
+  const guestCredit = !!(member?.isGuestCredit ?? member?.IsGuestCredit);
+
+  // 推導身份：優先 subType，其次 buyerType (1=導遊 2=廠商)，最後 memberType 字串
+  const bt  = Number(member?.buyerType);
+  const mt  = member?.memberType; // 可能是 "導遊" / "經銷商" / "一般會員"
+  const sub =
+    member?.subType
+    ?? (bt === 1 ? "導遊" : bt === 2 ? "廠商" : "")
+    ?? (mt === "導遊" ? "導遊" : mt === "經銷商" ? "廠商" : "");
+
+  if (sub === "導遊") return isGuideSelf ? selfCredit : guestCredit;
+  if (sub === "廠商") return selfCredit;
   return false;
 };
 
@@ -297,13 +304,16 @@ export default function CheckoutFlow({
 
       for (const item of updatedCartItems) {
         const isGiftLine = !!item.isGift;
-        const unitPriceForAPI = item.__orig;
+        // PATCH: 明細欄位對應
+        const unitPriceForAPI = Math.round(Number(item.__orig || 0)); // 商品原價（單價）
         const subtotalForAPI = Math.round(
-          unitPriceForAPI * Number(item.__qty || 0)
+          Number(item.__chosenUnit || 0) * Number(item.__qty || 0)        // 售價*數量
         );
-        const discountedForAPI = isGiftLine
-          ? subtotalForAPI
-          : Math.round(Number(item.__lineDiscount || 0));
+        const discountedForAPI = Math.round(
+          isGiftLine
+            ? Number(item.__orig || 0) * Number(item.__qty || 0)          // 贈送=原價*數量
+            : Number(item.__lineDiscount || 0)                             // 一般= (原-售)*數量
+        );
 
         const payload = {
           salesOrderId: newOrderId,
@@ -401,62 +411,50 @@ export default function CheckoutFlow({
       return;
     }
 
-    const _discountRate = Number(currentMember?.discountRate ?? 1);
-    const calcDiscountUnit = (p) =>
-      Math.round(Number(p) * (_discountRate || 1));
 
     const updatedCartItems = cartItems.map((item) => {
       const qty = Number(item.quantity ?? 1);
       const productId =
         Number(item.productId ?? item.pid ?? item.product?.id ?? item.id) || 0;
       const name = item.productName ?? item.name ?? "";
-      const origUnit = Number(
-        item.originalPrice ?? item.price ?? item.unitPrice ?? 0
-      );
+      // PATCH: 原價（unitPrice 欄位要存這個）
+      const origUnit = Number(item.originalPrice ?? item.price ?? item.msrp ?? 0);
       const isGift = !!item.isGift;
-      let discUnit = isGift ? 0 : calcDiscountUnit(origUnit);
-      if (
-        !isGift &&
-        (_discountRate || 1) === 1 &&
-        discUnit === 0 &&
-        origUnit > 0
-      ) {
-        discUnit = origUnit;
-      }
-      const perUnitDiscount = Math.max(0, origUnit - discUnit);
-      const lineDiscount = Math.round(perUnitDiscount * qty);
+      // PATCH: 售價（依層級決定；贈送=0），優先使用 item.unitPrice / calculatedPrice
+      const chosenUnit = isGift
+        ? 0
+        : Number(item.unitPrice ?? item.calculatedPrice ?? item.storePrice ?? item.price ?? 0);
+      // 該品項「本身折多少」 = (原價 - 售價) * 數量；贈送=原價*數量
+      const perUnitDiscount = Math.max(0, origUnit - chosenUnit);
+      const lineDiscount = Math.round((isGift ? origUnit : perUnitDiscount) * qty);
       return {
         ...item,
         __qty: qty,
         __productId: productId,
         __name: name,
         __orig: origUnit,
-        __discUnit: discUnit,
+        __chosenUnit: chosenUnit,
         __lineDiscount: lineDiscount,
         isGift,
       };
     });
 
+    // PATCH: originalAmount = 各明細 subtotal(= 售價*數量) 的總和
     const orderOriginalAmount = updatedCartItems.reduce(
-      (s, i) => s + i.__orig * i.__qty,
+      (s, i) => s + Math.round(Number(i.__chosenUnit || 0) * Number(i.__qty || 0)),
       0
     );
-    const orderDiscountAmount = updatedCartItems.reduce(
-      (s, i) => s + i.__lineDiscount,
-      0
-    );
+    // PATCH: 目前組合優惠未上線，主表 DiscountAmount 固定 0（單品折讓放到明細 discountedAmount）
+    const orderDiscountAmount = 0;
 
     const total = Number(finalTotal) || 0;
-    const received =
-      Number(
-        payment === "匯款" || payment === "支票"
-          ? paymentAmount
-          : payment === "刷卡"
-          ? total
-          : cashReceived
-      ) || 0;
+const received = Number(
+  payment === "匯款" || payment === "支票" ? paymentAmount :
+  payment === "刷卡" ? total :               // ← 選刷卡會把實收直接設成 total（= 全額）
+  cashReceived
+) || 0;
 
-    const creditAmountValue = Math.max(0, total - received);
+const creditAmountValue = Math.max(0, total - received);
     const paymentAmountValue = Math.min(received, total);
 
     if (
@@ -535,8 +533,8 @@ export default function CheckoutFlow({
       orderDate,
       originalAmount: Math.round(orderOriginalAmount),
       totalAmount: total,
-      discountAmount: Math.round(orderDiscountAmount),
-      offsetAmount: Math.max(0, Number(usedPoints) || 0),
+      discountAmount: Math.round(orderDiscountAmount), // 目前=0
+      offsetAmount: Math.max(0, Number(usedPoints) || 0), // 建議改成 safeUsedPoints（若你已套 clamp）
       paymentAmount: paymentAmountValue,
       creditAmount: creditAmountValue,
       cashbackPoint: cashbackTotal,
@@ -595,23 +593,25 @@ export default function CheckoutFlow({
 
   useEffect(() => {
     try {
-      const raw = localStorage.getItem("checkoutData");
-      const payer = raw ? JSON.parse(raw)?.checkoutPayer : null;
-      const fallback = localStorage.getItem("checkout_payer");
-      const resolved =
-        payer === "GUIDE_SELF"
-          ? true
-          : payer === "CUSTOMER"
-          ? false
-          : fallback === "guide"
-          ? true
-          : false;
-      setIsGuideSelf(resolved);
+     const raw = localStorage.getItem("checkoutData");
+const payer = raw ? JSON.parse(raw)?.checkoutPayer : null;
+const fallback = localStorage.getItem("checkout_payer");
+const resolved =
+  payer === "GUIDE_SELF" ? true :
+  payer === "CUSTOMER"   ? false :
+  fallback === "guide"   ? true : false;
+
+setIsGuideSelf(resolved);
     } catch {
       const fallback = localStorage.getItem("checkout_payer");
       setIsGuideSelf(fallback === "guide");
     }
   }, []);
+
+  // 🔎 Debug：觀察導遊本人/客人旗標 & 會員物件
+useEffect(() => {
+  console.log('isGuideSelf =', isGuideSelf, 'member =', currentMember);
+}, [isGuideSelf, currentMember]);
 
   return (
     <div style={styles.container}>

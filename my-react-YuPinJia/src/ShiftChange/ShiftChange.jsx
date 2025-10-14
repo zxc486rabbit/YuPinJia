@@ -20,6 +20,12 @@ function authJsonHeaders() {
 
 const fmt = (n) => Number(n || 0).toLocaleString();
 
+// 將金額轉為負數，但 0 不顯示負號
+const toNegative = (v) => {
+  const n = Number(v) || 0;
+  return n === 0 ? 0 : -Math.abs(n);
+};
+
 /* ========= Mapper ========= */
 function mapSalesDetail(items = []) {
   return items.map((it) => ({
@@ -30,18 +36,41 @@ function mapSalesDetail(items = []) {
     payMethod: it.paymentMethod || "-",
   }));
 }
+
+/**
+ * POS應有金額（右側表格明細）
+ * 你提供的 API：GET /t_ShiftHandoverRecord/GetStorePOSDetial
+ * 格式：
+ *   { orderNumber, createdAt, totalQuantity, totalAmount, paymentMethod }，其中 paymentMethod 可能是「銷售」或「退款」
+ * 規則：
+ *   - 遇到「退款/支出」→ 金額顯示負數，但 0 仍顯示 0
+ *   - 其餘（銷售等）保持正數
+ */
 function mapPosShouldHave(items = []) {
-  return items.map((it, idx) => ({
-    id: it.code || it.id || `POS-${idx + 1}`,
-    date:
-      (it.time || it.updatedAt || new Date().toISOString())
-        .toString()
-        .slice(11, 16) || "--:--",
-    total: "-",
-    totalMoney: Number(it.amount ?? 0).toLocaleString(),
-    payMethod: it.label || it.itemName || it.categoryName || "項目",
-  }));
+  return items
+    .map((it) => {
+      const label = it.paymentMethod || it.label || it.itemName || it.categoryName || "項目";
+      let amount = Number(it.totalAmount ?? it.amount ?? 0) || 0;
+
+      // 退款/支出 → 顯示負數（但 0 顯示 0）
+      if (/(退款|refund|支出|expense|outflow|現金支出)/i.test(label)) {
+        amount = amount === 0 ? 0 : -Math.abs(amount);
+      }
+
+      return {
+        id: it.orderNumber || it.id || "-",
+        date: (it.createdAt || it.time || it.updatedAt || "").toString().slice(11, 16) || "--:--",
+        total: it.totalQuantity ?? "-", // 沒有數量就顯示 "—"
+        totalMoney: amount.toLocaleString(),
+        payMethod: label,
+        _ts: new Date(it.createdAt || it.updatedAt || Date.now()).getTime() || 0, // 排序用
+      };
+    })
+    // 新到舊
+    .sort((a, b) => b._ts - a._ts)
+    .map(({ _ts, ...rest }) => rest);
 }
+
 function mapRebate(items = []) {
   return items.map((it) => ({
     id: it.orderNumber || it.id || "-",
@@ -51,6 +80,7 @@ function mapRebate(items = []) {
     payMethod: "回扣",
   }));
 }
+
 function mapRepayments(items = []) {
   return items.map((it) => ({
     id: it.repaymentNo || it.id || "-",
@@ -140,13 +170,16 @@ export default function ShiftChange() {
     ],
   }), [salesCash, salesOnDelivery, salesBankTransfer, salesCreditCard, salesCredit]);
 
-  const cardData_posShouldHave = useMemo(() => ({
-    methods: [
-      [{ label: "銷售訂單現金", amount: cashOrderPayment }, { label: "傭金提現", amount: cashRedeemWithdraw }],
-      [{ label: "賒帳結帳現金", amount: cashCreditSettlement }, { label: "現金支出", amount: cashOutflow }],
-      [{ label: "現金退款", amount: cashRefund }],
-    ],
-  }), [cashOrderPayment, cashRedeemWithdraw, cashCreditSettlement, cashOutflow, cashRefund]);
+  // POS 應有金額卡片：現金支出 & 現金退款 顯示負數，0 不負
+  const cardData_posShouldHave = useMemo(() => {
+    return {
+      methods: [
+        [{ label: "銷售訂單現金", amount: cashOrderPayment }, { label: "傭金提現", amount: cashRedeemWithdraw }],
+        [{ label: "賒帳結帳現金", amount: cashCreditSettlement }, { label: "現金支出", amount: toNegative(cashOutflow) }],
+        [{ label: "現金退款", amount: toNegative(cashRefund) }],
+      ],
+    };
+  }, [cashOrderPayment, cashRedeemWithdraw, cashCreditSettlement, cashOutflow, cashRefund]);
 
   const cardData_rebate = useMemo(() => ({
     methods: [
@@ -163,24 +196,19 @@ export default function ShiftChange() {
     ],
   }), [dealerRepaymentCash, dealerRepaymentTransfer, dealerRepaymentCard, dealerRepaymentOther]);
 
-  const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const inFlight = useRef(null);
 
+  // 明細查詢：四條 API、完全不帶查詢參數
   const fetchRightRows = useCallback(async (which) => {
-    if (!userInfo?.storeId) return;
     if (inFlight.current) inFlight.current.abort();
     const controller = new AbortController();
     inFlight.current = controller;
-
-    const storeId = userInfo.storeId;
-    const date = todayStr;
 
     setRightLoading(true);
     setRightError("");
     try {
       let url = "";
       let mapper = (x) => x;
-      let params = { storeId, date };
 
       switch (which) {
         case "門市銷售總金額":
@@ -188,13 +216,11 @@ export default function ShiftChange() {
           mapper = mapSalesDetail;
           break;
         case "POS應有金額":
-          url = `${API_BASE}/t_ShiftHandoverRecord/GetStoreSalesRebate`;
-          params = { ...params, type: "pos" };
-          mapper = mapPosShouldHave;
+          url = `${API_BASE}/t_ShiftHandoverRecord/GetStorePOSDetial`;
+          mapper = mapPosShouldHave; // ← 依照你提供的格式做 mapping
           break;
         case "回扣金額":
           url = `${API_BASE}/t_ShiftHandoverRecord/GetStoreSalesRebate`;
-          params = { ...params, type: "rebate" };
           mapper = mapRebate;
           break;
         case "經銷會員收款":
@@ -209,9 +235,9 @@ export default function ShiftChange() {
 
       const { data } = await axios.get(url, {
         headers: authJsonHeaders(),
-        params,
         signal: controller.signal,
       });
+
       const items = Array.isArray(data) ? data : data?.items || [];
       setRightRows(mapper(items));
     } catch (err) {
@@ -225,7 +251,7 @@ export default function ShiftChange() {
         inFlight.current = null;
       }
     }
-  }, [userInfo?.storeId, todayStr]);
+  }, []);
 
   useEffect(() => { fetchRightRows(detailButton); }, [detailButton, fetchRightRows]);
 
@@ -274,7 +300,7 @@ export default function ShiftChange() {
     <>
       <div className="mx-4">
         {/* 頂部資訊列 */}
-        <div className="top-meta-bar d-flex mt-3 mb-2 gap-3 flex-wrap">{/* ★ 新 class */}
+        <div className="top-meta-bar d-flex mt-3 mb-2 gap-3 flex-wrap">
           <span className="meta-item">機器：<strong>{machineCode}</strong></span>
           <span className="meta-item">工號：<strong>{userInfo?.staffId ?? "—"}</strong></span>
           <span className="meta-item">操作員：<strong>{userInfo?.chineseName ?? "—"}</strong></span>
@@ -303,7 +329,7 @@ export default function ShiftChange() {
 
             {/* 底部統計膠囊 */}
             <div className="stats-bar mt-2">
-              <div className="stat-pill stat-soft">POS作廢訂單數：{fmt(posCancelOrderCount || 0)}</div> {/* ★ 淡色 */}
+              <div className="stat-pill stat-soft">POS作廢訂單數：{fmt(posCancelOrderCount || 0)}</div>
               <div className="stat-pill stat-soft">客訴退款訂單數：{fmt(complaintReturnOrderCount || 0)}</div>
               <div className="stat-pill stat-soft">門市支出：{fmt(Number(cashOutflow || 0))} 元</div>
             </div>
@@ -312,7 +338,6 @@ export default function ShiftChange() {
           {/* 右 4 欄 */}
           <div className="col-4 table-panel">
             <div className="table-panel-inner surface-card">
-              {/* ★ 包一層，套統一表格風格 */}
               <div className="sc-table">
                 <ShiftChangeTable
                   rightTable={rightRows}
@@ -326,7 +351,7 @@ export default function ShiftChange() {
         </div>
 
         {/* 下方金額總計 */}
-        <div className="totals-row ms-1 mt-2">{/* ★ 新 class */}
+        <div className="totals-row ms-1 mt-2">
           {footerTotals.map(({ label, value }) => (
             <span key={label} className="total-chip">
               {label}：<strong>{fmt(value)} 元</strong>
@@ -336,7 +361,7 @@ export default function ShiftChange() {
         </div>
       </div>
 
-      {/* ★ 固定底欄（會避開 sidebar），加一個 spacer 防擋內容 */}
+      {/* 固定底欄 */}
       <div className="handover-footer handover-footer--with-sidebar">
         <div className="footer-left">{loading ? "彙總載入中…" : ""}</div>
         <div className="footer-center">
@@ -348,7 +373,6 @@ export default function ShiftChange() {
           POS收款總金額：<strong>{fmt(totalFooterSum)} 元</strong>
         </div>
       </div>
-      {/* ★ spacer：高度與底欄一致，避免畫面被遮住 */}
       <div className="handover-footer-spacer" />
     </>
   );

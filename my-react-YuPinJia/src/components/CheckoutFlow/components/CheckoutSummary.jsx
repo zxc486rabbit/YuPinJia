@@ -11,10 +11,48 @@ export default function CheckoutSummary({
   usedPoints,
   finalTotal,
   onNext,
-  onBackToCart, // ★ 新增：返回首頁購物車
+  onBackToCart, // ★ 返回首頁購物車
   styles,
 }) {
-  // ── 判斷是否要顯示回扣（導遊帳號 + 客人結帳） ─────────────────────────
+  /* ──────────────────────────────────────────────────────────────
+   * 計算工具：原價 / 售價 / 價源標籤 / 折抵
+   * ──────────────────────────────────────────────────────────── */
+  const toNum = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+
+  const getOriginalUnit = (i) =>
+    toNum(i.originalPrice ?? i.price ?? i.msrp ?? 0);
+
+  const getChosenUnit = (i) => {
+    // 非贈送：以 unitPrice（或 calculatedPrice / storePrice / price）作為「售價」
+    if (i.isGift) return 0;
+    return toNum(i.unitPrice ?? i.calculatedPrice ?? i.storePrice ?? i.price ?? 0);
+  };
+
+  const getPriceSource = (i, chosen) => {
+    // 依優先序比對所選售價來源，僅作為售價後的小標籤
+    const d = toNum(i.distributorPrice);
+    const l = toNum(i.levelPrice);
+    const s = toNum(i.storePrice);
+    const p = toNum(i.price);
+    if (chosen === d && d > 0) return "經銷價格";
+    if (chosen === l && l > 0) return "等級價格";
+    if (chosen === s && s > 0) return "門市售價";
+    if (chosen === p && p > 0) return "商品原價";
+    return i._priceSource
+      ? (
+          { distributor: "經銷價格", level: "等級價格", store: "門市售價", product: "商品原價" }[
+            i._priceSource
+          ] || "售價"
+        )
+      : "售價";
+  };
+
+  const getPerUnitDiscount = (orig, chosen, isGift) =>
+    isGift ? orig : Math.max(0, orig - chosen);
+
+  /* ──────────────────────────────────────────────────────────────
+   * 回扣（導遊帳號 + 客人結帳）顯示邏輯
+   * ──────────────────────────────────────────────────────────── */
   const safeParse = (s, fb = null) => {
     try {
       return JSON.parse(s);
@@ -24,15 +62,14 @@ export default function CheckoutSummary({
   };
   const currentMember = safeParse(localStorage.getItem("currentMember"), {});
   const payerFlag =
-    (safeParse(localStorage.getItem("checkoutData"), {})?.checkoutPayer ||
-      localStorage.getItem("checkout_payer")) || "";
+    safeParse(localStorage.getItem("checkoutData"), {})?.checkoutPayer ||
+    localStorage.getItem("checkout_payer") ||
+    "";
   const isGuideAccount =
     currentMember?.subType === "導遊" || currentMember?.buyerType === 1;
-  const isCustomerPay =
-    payerFlag === "CUSTOMER" || payerFlag === "customer"; // 非導遊本人
+  const isCustomerPay = payerFlag === "CUSTOMER" || payerFlag === "customer"; // 非導遊本人
   const shouldShowCashback = isGuideAccount && isCustomerPay;
 
-  // ── 計算回扣總額（只在 shouldShowCashback 時才算） ──────────────────
   const num = (v) => {
     const n = Number(v);
     return Number.isFinite(n) ? n : 0;
@@ -95,22 +132,26 @@ export default function CheckoutSummary({
     return i.isGift || discountedUnit === 0 || unit === 0;
   }).length;
 
-  // 準備客顯快照
+  /* ──────────────────────────────────────────────────────────────
+   * 客顯快照：包含每品小計/折抵等資料
+   * ──────────────────────────────────────────────────────────── */
   const snapshot = useMemo(() => {
-    const toNum = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
     const mapped = cartItems.map((i) => {
-      const unit = toNum(i.unitPrice);
-      const discountedUnit =
-        hasDiscount && typeof calcDiscountPrice === "function"
-          ? toNum(calcDiscountPrice(unit))
-          : unit;
-      const isGift = !!i.isGift || discountedUnit === 0 || unit === 0;
-      const displayUnit = isGift ? 0 : discountedUnit;
+      const orig = getOriginalUnit(i);
+      const chosen = getChosenUnit(i);
+      const isGift = !!i.isGift || chosen === 0;
+      const perDisc = getPerUnitDiscount(orig, chosen, isGift);
+      const qty = toNum(i.quantity) || 0;
 
       return {
         name: i.name,
-        quantity: toNum(i.quantity) || 0,
-        __displayUnit: displayUnit,
+        quantity: qty,
+        originalUnit: orig,
+        chosenUnit: chosen,
+        priceSource: getPriceSource(i, chosen),
+        perUnitDiscount: perDisc,
+        lineSubtotal: Math.round(chosen * qty),
+        lineDiscountedAmount: Math.round((isGift ? orig : perDisc) * qty),
         __isGift: isGift,
       };
     });
@@ -126,11 +167,42 @@ export default function CheckoutSummary({
       shouldShowCashback,
       cashbackTotal,
     };
-  }, [cartItems, hasDiscount, calcDiscountPrice, totalOriginal, discountAmount, usedPoints, finalTotal, giftCount, shouldShowCashback, cashbackTotal]);
+  }, [
+    cartItems,
+    hasDiscount,
+    calcDiscountPrice,
+    totalOriginal,
+    discountAmount,
+    usedPoints,
+    finalTotal,
+    giftCount,
+    shouldShowCashback,
+    cashbackTotal,
+  ]);
 
   useEffect(() => {
     customerBus.publishSummary(snapshot);
   }, [snapshot]);
+
+  /* ──────────────────────────────────────────────────────────────
+   * UI helpers（局部樣式）
+   * ──────────────────────────────────────────────────────────── */
+  const badge = {
+    base: {
+      display: "inline-block",
+      padding: "0.1rem 0.5rem",
+      fontSize: 12,
+      borderRadius: 999,
+      whiteSpace: "nowrap",
+      lineHeight: 1.2,
+      verticalAlign: "middle",
+    },
+    gray: { background: "#e9ecef", color: "#333" },
+    cyan: { background: "#17a2b8", color: "#fff" },
+    red: { background: "#fee2e2", color: "#b91c1c" },
+  };
+
+  const mono = { fontFeatureSettings: "'tnum' on, 'lnum' on", fontVariantNumeric: "tabular-nums" };
 
   return (
     <>
@@ -142,87 +214,110 @@ export default function CheckoutSummary({
             <tr>
               <th style={styles.th}>商品名稱</th>
               <th style={styles.th}>數量</th>
-              <th style={styles.th}>單價</th>
+              <th style={styles.th}>售價</th>
+              <th style={styles.th}>折抵</th>
             </tr>
           </thead>
           <tbody>
             {cartItems.length === 0 ? (
               <tr>
-                <td colSpan="3" style={{ textAlign: "center" }}>
+                <td colSpan="4" style={{ textAlign: "center" }}>
                   購物車沒有商品
                 </td>
               </tr>
             ) : (
               cartItems.map((item) => {
-                const unit = Number(item.unitPrice) || 0;
-                const discountedUnit =
-                  hasDiscount && typeof calcDiscountPrice === "function"
-                    ? Number(calcDiscountPrice(unit))
-                    : unit;
-
-                const isGift =
-                  !!item.isGift || discountedUnit === 0 || unit === 0;
+                const orig = getOriginalUnit(item);
+                const chosen = getChosenUnit(item);
+                const isGift = !!item.isGift || chosen === 0;
+                const src = getPriceSource(item, chosen);
+                const perDisc = getPerUnitDiscount(orig, chosen, isGift);
 
                 return (
                   <tr
                     key={item.id ?? item.productId ?? item.name}
                     style={isGift ? { background: "#fff7e6" } : undefined}
                   >
+                    {/* 商品名稱 */}
                     <td style={styles.td}>
                       {item.name}
                       {isGift && (
                         <span
-                          style={{
-                            display: "inline-block",
-                            marginLeft: 8,
-                            padding: "0.1rem 0.4rem",
-                            fontSize: 12,
-                            borderRadius: 6,
-                            background: "#17a2b8",
-                            color: "#fff",
-                            verticalAlign: "middle",
-                          }}
+                          style={{ ...badge.base, ...badge.cyan, marginLeft: 8 }}
                         >
                           贈品
                         </span>
                       )}
                     </td>
-                    <td style={styles.td}>{item.quantity}</td>
+
+                    {/* 數量 */}
+                    <td style={{ ...styles.td, ...mono }}>
+                      {Number(item.quantity) || 0}
+                    </td>
+
+                    {/* 售價（單行：原價可能劃掉 + 新價 + 價源小標籤） */}
                     <td style={styles.td}>
-                      {isGift ? (
-                        <>
-                          {unit > 0 && (
-                            <div
-                              style={{
-                                textDecoration: "line-through",
-                                color: "#999",
-                                fontSize: "0.9rem",
-                              }}
-                            >
-                              ${unit.toLocaleString()}
-                            </div>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                        {/* 左：價格區（單行） */}
+                        <span style={mono}>
+                          {isGift ? (
+                            <>
+                              {orig > 0 && (
+                                <span
+                                  style={{
+                                    textDecoration: "line-through",
+                                    color: "#999",
+                                    fontSize: 13,
+                                    marginRight: 6,
+                                  }}
+                                >
+                                  ${orig.toLocaleString()}
+                                </span>
+                              )}
+                              <span style={{ color: "#17a2b8", fontWeight: 700 }}>
+                                贈送
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              {/* 價格沒變就不劃掉；有變才顯示劃掉原價，與新價並排（單行） */}
+                              {orig > 0 && chosen > 0 && orig !== chosen && (
+                                <span
+                                  style={{
+                                    textDecoration: "line-through",
+                                    color: "#999",
+                                    fontSize: 13,
+                                    marginRight: 6,
+                                  }}
+                                >
+                                  ${orig.toLocaleString()}
+                                </span>
+                              )}
+                              <span style={{ color: "#dc3545", fontWeight: 700 }}>
+                                ${chosen.toLocaleString()}
+                              </span>
+                            </>
                           )}
-                          <div style={{ color: "#17a2b8", fontWeight: "bold" }}>
-                            贈送
-                          </div>
-                        </>
-                      ) : hasDiscount && discountedUnit !== unit ? (
-                        <div>
-                          <div
-                            style={{
-                              textDecoration: "line-through",
-                              color: "#999",
-                              fontSize: "0.9rem",
-                            }}
-                          >
-                            ${unit.toLocaleString()}
-                          </div>
-                          <div style={{ color: "#dc3545", fontWeight: "bold" }}>
-                            ${discountedUnit.toLocaleString()}
-                          </div>
-                        </div>
+                        </span>
+
+                        {/* 右：來源小標籤（非贈品才顯示） */}
+                        {!isGift && (
+                          <span style={{ ...badge.base, ...badge.gray }}>{src}</span>
+                        )}
+                      </span>
+                    </td>
+
+                    {/* 折抵（每件折多少 → 顯示為徽章；無折抵顯示「-」） */}
+                    <td style={styles.td}>
+                      {perDisc > 0 || isGift ? (
+                        <span style={{ ...badge.base, ...badge.red, ...mono }}>
+                          -$
+                          {isGift
+                            ? orig.toLocaleString()
+                            : perDisc.toLocaleString()}
+                        </span>
                       ) : (
-                        `$${unit.toLocaleString()}`
+                        <span style={{ color: "#999" }}>-</span>
                       )}
                     </td>
                   </tr>
@@ -233,13 +328,14 @@ export default function CheckoutSummary({
         </table>
       </div>
 
-      <div style={{ marginTop: "20px", textAlign: "right" }}>
+      <div style={{ marginTop: 16, textAlign: "right" }}>
         <p>
           原價總計:{" "}
           <span
             style={{
               textDecoration: hasDiscount ? "line-through" : "none",
               color: hasDiscount ? "#999" : "#000",
+              ...mono,
             }}
           >
             NT$ {totalOriginal.toLocaleString()}
@@ -249,7 +345,7 @@ export default function CheckoutSummary({
         {hasDiscount && (
           <p>
             折抵金額:{" "}
-            <span style={{ color: "#dc3545", fontWeight: "bold" }}>
+            <span style={{ color: "#dc3545", fontWeight: 700, ...mono }}>
               NT$ {discountAmount.toLocaleString()}
             </span>
           </p>
@@ -258,7 +354,7 @@ export default function CheckoutSummary({
         {shouldShowCashback && (
           <p>
             本次回扣金額:{" "}
-            <span style={{ color: "#0d6efd", fontWeight: "bold" }}>
+            <span style={{ color: "#0d6efd", fontWeight: 700, ...mono }}>
               NT$ {Number(cashbackTotal).toLocaleString()}
             </span>
           </p>
@@ -266,19 +362,13 @@ export default function CheckoutSummary({
 
         <p>
           會員點數折抵金額:{" "}
-          <span style={{ color: "#28a745", fontWeight: "bold" }}>
+          <span style={{ color: "#28a745", fontWeight: 700, ...mono }}>
             NT$ {Number(usedPoints ?? 0).toLocaleString()}
           </span>
         </p>
 
-        <p
-          style={{
-            marginTop: "10px",
-            fontWeight: "bold",
-            fontSize: "1.2rem",
-          }}
-        >
-          總計金額: NT$ {finalTotal.toLocaleString()}
+        <p style={{ marginTop: 10, fontWeight: 700, fontSize: "1.2rem" }}>
+          總計金額: <span style={mono}>NT$ {finalTotal.toLocaleString()}</span>
         </p>
 
         {giftCount > 0 && (
@@ -289,7 +379,7 @@ export default function CheckoutSummary({
       </div>
 
       <div style={{ display: "flex", gap: 12 }}>
-        {/* ★ 新增：返回購物車修改 */}
+        {/* 返回購物車修改 */}
         <button
           style={{
             ...styles.primaryBtn,

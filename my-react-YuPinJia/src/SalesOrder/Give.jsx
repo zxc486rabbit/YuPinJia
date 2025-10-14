@@ -36,6 +36,10 @@ export default function Give() {
   const [showModal, setShowModal] = useState(false);
   const [editItem, setEditItem] = useState(null);
 
+  // ★ 新增：彈窗內即時計算所需的本地狀態
+  const [modalQty, setModalQty] = useState(0);
+  const [modalPrice, setModalPrice] = useState(0);
+
   // 工具
   const formatDate = (dateStr) => {
     if (!dateStr) return "";
@@ -44,6 +48,10 @@ export default function Give() {
     return d.toLocaleDateString("zh-TW");
   };
   const formatMoney = (n) => Number(n || 0).toLocaleString("zh-TW");
+  const num = (v) => { // ★ 小工具：安全轉數字
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+  };
 
   // ===== 後端取資料（相容 array / { total, limit, items }）=====
   const fetchGiftRecords = async (query, _page = 1, _limit = limit) => {
@@ -90,6 +98,7 @@ export default function Give() {
         productName: item.productName ?? "-",
         unitPrice: Number(item.unitPrice ?? 0),
         quantity: Number(item.quantity ?? 0),
+        // ★ 不再信任後端 subtotal，保留但前端顯示用自算
         subtotal: Number(
           item.subtotal ??
             Number(item.unitPrice ?? 0) * Number(item.quantity ?? 0)
@@ -174,12 +183,21 @@ export default function Give() {
   // ===== 編輯 =====
   const handleEditClick = (item) => {
     setEditItem(item);
+    // ★ 帶入彈窗初始值
+    setModalQty(item?.quantity ?? 0);
+    setModalPrice(item?.unitPrice ?? 0);
     setShowModal(true);
   };
   const handleModalClose = () => {
     setShowModal(false);
     setEditItem(null);
   };
+
+  // ★ 即時計算彈窗合計
+  const modalSubtotal = useMemo(
+    () => num(modalQty) * num(modalPrice),
+    [modalQty, modalPrice]
+  );
 
   return (
     <>
@@ -249,7 +267,7 @@ export default function Give() {
             style={{
               borderTop: "1px solid #c5c6c7",
               position: "sticky",
-              top: 0, // 沒有上方工具列，表頭固定在最上
+              top: 0,
               background: "#d1ecf1",
               zIndex: 1,
             }}
@@ -268,23 +286,27 @@ export default function Give() {
           </thead>
           <tbody>
             {tableData.length > 0 ? (
-              tableData.map((item) => (
-                <tr key={item.id}>
-                  <td>{item.salesOrderId}</td>
-                  <td>{formatDate(item.createdAt)}</td>
-                  <td>{item.productName}</td>
-                  <td>{formatMoney(item.unitPrice)}</td>
-                  <td>{item.quantity}</td>
-                  <td>{formatMoney(item.subtotal)}</td>
-                  <td>{item.fullName}</td>
-                  <td>{item.operatorName}</td>
-                  <td>
-                    <button className="edit-button" onClick={() => handleEditClick(item)}>
-                      修改
-                    </button>
-                  </td>
-                </tr>
-              ))
+              tableData.map((item) => {
+                // ★ 合計一律用「單價 × 數量」計算
+                const rowSubtotal = num(item.unitPrice) * num(item.quantity);
+                return (
+                  <tr key={item.id}>
+                    <td>{item.salesOrderId}</td>
+                    <td>{formatDate(item.createdAt)}</td>
+                    <td>{item.productName}</td>
+                    <td>{formatMoney(item.unitPrice)}</td>
+                    <td>{item.quantity}</td>
+                    <td>{formatMoney(rowSubtotal)}</td> {/* ★ 這裡改了 */}
+                    <td>{item.fullName}</td>
+                    <td>{item.operatorName}</td>
+                    <td>
+                      <button className="edit-button" onClick={() => handleEditClick(item)}>
+                        修改
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })
             ) : (
               <tr>
                 <td colSpan="9">無資料</td>
@@ -360,21 +382,29 @@ export default function Give() {
               <div>日期：{formatDate(editItem.createdAt)}</div>
               <div>
                 數量：
+                {/* ★ 即時更新 modalQty */}
                 <Form.Control
                   type="number"
-                  defaultValue={editItem.quantity}
+                  value={modalQty}
+                  min="0"
+                  onChange={(e) => setModalQty(e.target.value)}
                   className="my-1"
                 />
               </div>
               <div>
                 銷售價格：
+                {/* ★ 即時更新 modalPrice */}
                 <Form.Control
                   type="number"
-                  defaultValue={editItem.unitPrice}
+                  value={modalPrice}
+                  min="0"
+                  step="0.01"
+                  onChange={(e) => setModalPrice(e.target.value)}
                   className="my-1"
                 />
               </div>
-              <div>合計：{formatMoney(editItem.subtotal)}</div>
+              {/* ★ 合計 = 單價 × 數量（即時計算） */}
+              <div>合計：{formatMoney(modalSubtotal)}</div>
               <div>受贈人：{editItem.fullName}</div>
               <div>操作人：{editItem.operatorName}</div>
             </div>
@@ -384,6 +414,7 @@ export default function Give() {
           <Button
             className="check-button"
             onClick={() => {
+              // 這裡未串更新 API，僅示意（保留你原本的提示）
               Swal.fire("提示", "此功能可再串接更新 API。", "info");
               handleModalClose();
             }}
