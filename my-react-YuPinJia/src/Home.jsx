@@ -83,7 +83,9 @@ const fetchProductsBySearchType = async (searchType, categoryId, memberId) => {
 };
 
 const fetchCategories = async () => {
-  const res = await axios.get("https://yupinjia.hyjr.com.tw/api/api/t_Category");
+  const res = await axios.get(
+    "https://yupinjia.hyjr.com.tw/api/api/t_Category"
+  );
   return res.data || [];
 };
 
@@ -112,7 +114,8 @@ function mergeMemberSummary(prev, summary) {
   // ② 其他欄位也做大小寫相容（避免之後 API 改動）
   const id = summary?.id ?? summary?.Id ?? prev?.id ?? prev?.memberId;
   const fullName = summary?.fullName ?? summary?.FullName ?? prev?.fullName;
-  const memberType = summary?.memberType ?? summary?.MemberType ?? prev?.memberType;
+  const memberType =
+    summary?.memberType ?? summary?.MemberType ?? prev?.memberType;
   const levelName = summary?.levelName ?? summary?.LevelName ?? prev?.levelName;
 
   return {
@@ -122,7 +125,7 @@ function mergeMemberSummary(prev, summary) {
     fullName,
     memberType,
     levelName,
-    levelCode: levelName,          // 舊畫面用到的別名
+    levelCode: levelName, // 舊畫面用到的別名
     // ③ 三個點數欄位都一起覆蓋，確保前台任何讀法都會拿到 98
     point,
     cashbackPoint: point,
@@ -140,7 +143,18 @@ export default function Home() {
   const [currentMember, setCurrentMember] = useState(null);
   const [searchType, setSearchType] = useState(1);
   const [selectedCategoryId, setSelectedCategoryId] = useState(null);
-  const [isGuideSelf, setIsGuideSelf] = useState(false);
+  const [isGuideSelf, setIsGuideSelf] = useState(() => {
+    try {
+      const saved = localStorage.getItem("checkout_payer");
+      if (saved === "guide") return true;
+      if (saved === "customer") return false;
+      const raw = localStorage.getItem("checkoutData");
+      const payer = raw ? JSON.parse(raw)?.checkoutPayer : null;
+      if (payer === "GUIDE_SELF") return true;
+      if (payer === "CUSTOMER") return false;
+    } catch {}
+    return false;
+  });
   const [searchKeyword, setSearchKeyword] = useState("");
   const [cartSummary, setCartSummary] = useState({
     subtotal: 0,
@@ -178,11 +192,20 @@ export default function Home() {
     memberInitRef.current = true;
   }, []);
 
-  // 還原結帳身份（導遊/客人）
+  // 還原結帳身份（導遊/客人），含 checkoutData 備援
   useEffect(() => {
-    const saved = localStorage.getItem("checkout_payer");
-    if (saved === "guide") setIsGuideSelf(true);
-    if (saved === "customer") setIsGuideSelf(false);
+    try {
+      const saved = localStorage.getItem("checkout_payer");
+      if (saved === "guide") return setIsGuideSelf(true);
+      if (saved === "customer") return setIsGuideSelf(false);
+      // 備援：從上一次的 checkoutData 讀（GUIDE_SELF / CUSTOMER）
+      const raw = localStorage.getItem("checkoutData");
+      if (raw) {
+        const payer = JSON.parse(raw)?.checkoutPayer;
+        if (payer === "GUIDE_SELF") return setIsGuideSelf(true);
+        if (payer === "CUSTOMER") return setIsGuideSelf(false);
+      }
+    } catch {}
   }, []);
   useEffect(() => {
     localStorage.setItem("checkout_payer", isGuideSelf ? "guide" : "customer");
@@ -217,7 +240,10 @@ export default function Home() {
   /* ========== 贈送額度（員工） ========== */
   // staffId 來源：staffId > employeeId > id
   const rawStaffId =
-    employeeUser?.staffId ?? employeeUser?.employeeId ?? employeeUser?.id ?? null;
+    employeeUser?.staffId ??
+    employeeUser?.employeeId ??
+    employeeUser?.id ??
+    null;
   const staffId =
     rawStaffId != null && Number.isFinite(Number(rawStaffId))
       ? Number(rawStaffId)
@@ -243,11 +269,19 @@ export default function Home() {
         const d = res.data ?? {};
         // ✅ 相容大小寫與其他命名
         const val = Number(
-          d.MonthRemainGift ?? d.monthRemainGift ?? d.GiftAmount ?? d.giftAmount ?? 0
+          d.MonthRemainGift ??
+            d.monthRemainGift ??
+            d.GiftAmount ??
+            d.giftAmount ??
+            0
         );
         return Number.isFinite(val) ? val : 0;
       } catch (err) {
-        console.warn("[GetGiftAmount] error:", err?.response?.status, err?.message);
+        console.warn(
+          "[GetGiftAmount] error:",
+          err?.response?.status,
+          err?.message
+        );
         return 0;
       }
     },
@@ -279,7 +313,8 @@ export default function Home() {
     error,
   } = useQuery({
     queryKey: ["products", searchType, selectedCategoryId, memberId],
-    queryFn: () => fetchProductsBySearchType(searchType, selectedCategoryId, memberId),
+    queryFn: () =>
+      fetchProductsBySearchType(searchType, selectedCategoryId, memberId),
     // 需要 memberId；產品分類還需要選 categoryId
     enabled:
       memberId != null &&
@@ -330,22 +365,22 @@ export default function Home() {
   }, [isGuideSelf, currentMember?.id, allProducts]);
 
   useEffect(() => {
-  if (!allProducts?.length) return;
-  setCartItems((prev) =>
-    prev.map((it) => {
-      if (it.isGift) return it; // 贈品維持 0 元
-      const key = it.productId ?? it.id;
-      const matched = allProducts.find((p) => (p.productId ?? p.id) === key);
-      if (!matched) return it;
-      return {
-        ...it,
-        unitPrice: Number(matched.calculatedPrice ?? it.unitPrice ?? 0),
-        __dealerPrice: matched.__dealerPrice,
-        __storePrice: matched.__storePrice,
-      };
-    })
-  );
-}, [currentMember?.memberId, allProducts]);
+    if (!allProducts?.length) return;
+    setCartItems((prev) =>
+      prev.map((it) => {
+        if (it.isGift) return it; // 贈品維持 0 元
+        const key = it.productId ?? it.id;
+        const matched = allProducts.find((p) => (p.productId ?? p.id) === key);
+        if (!matched) return it;
+        return {
+          ...it,
+          unitPrice: Number(matched.calculatedPrice ?? it.unitPrice ?? 0),
+          __dealerPrice: matched.__dealerPrice,
+          __storePrice: matched.__storePrice,
+        };
+      })
+    );
+  }, [currentMember?.memberId, allProducts]);
 
   /* ========== 搜尋 / 顯示清單 ========== */
   const filteredSuggestions = useMemo(() => {
@@ -423,8 +458,12 @@ export default function Home() {
           unitPrice: 0,
           originalPrice: Number(item.price ?? 0), // 額度用原價
           isGift: true,
-          __dealerPrice: num(item.__dealerPrice ?? pickPriceGeneral(item).price),
-          __storePrice: num(item.__storePrice ?? pickPriceStoreOnly(item).price),
+          __dealerPrice: num(
+            item.__dealerPrice ?? pickPriceGeneral(item).price
+          ),
+          __storePrice: num(
+            item.__storePrice ?? pickPriceStoreOnly(item).price
+          ),
         };
         setCartItems((prev) => [...prev, giftProduct]);
       }
@@ -448,8 +487,12 @@ export default function Home() {
           quantity: 1,
           unitPrice: finalUnitPrice,
           isGift: false,
-          __dealerPrice: num(item.__dealerPrice ?? pickPriceGeneral(item).price),
-          __storePrice: num(item.__storePrice ?? pickPriceStoreOnly(item).price),
+          __dealerPrice: num(
+            item.__dealerPrice ?? pickPriceGeneral(item).price
+          ),
+          __storePrice: num(
+            item.__storePrice ?? pickPriceStoreOnly(item).price
+          ),
         };
         setCartItems((prev) => [...prev, regularProduct]);
       }
@@ -512,74 +555,73 @@ export default function Home() {
   };
 
   // ========== 結帳後/回首頁：會員點數自動刷新 ==========
-useEffect(() => {
-  let channel;
+  useEffect(() => {
+    let channel;
 
-  const fetchMemberSummaryByIdNoCache = async (id) => {
-    if (!id) return null;
-    const res = await axios.get(
-      `${API_BASE}/t_Member/MemberSummary/${id}`,
-      {
+    const fetchMemberSummaryByIdNoCache = async (id) => {
+      if (!id) return null;
+      const res = await axios.get(`${API_BASE}/t_Member/MemberSummary/${id}`, {
         headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
         params: { ts: Date.now() }, // 破快取
-      }
-    );
-    return res.data || null;
-  };
+      });
+      return res.data || null;
+    };
 
-  const maybeRefreshMemberPoints = async () => {
-    try {
-      const midFromFlag = Number(localStorage.getItem("member_points_refresh_id") || 0);
-      const cid = Number(currentMember?.id ?? currentMember?.memberId ?? 0);
-      const id = midFromFlag || cid;
-      if (!id) return;
+    const maybeRefreshMemberPoints = async () => {
+      try {
+        const midFromFlag = Number(
+          localStorage.getItem("member_points_refresh_id") || 0
+        );
+        const cid = Number(currentMember?.id ?? currentMember?.memberId ?? 0);
+        const id = midFromFlag || cid;
+        if (!id) return;
 
-      const summary = await fetchMemberSummaryByIdNoCache(id);
-      if (summary) {
-        setCurrentMember((prev) => {
-          const merged = mergeMemberSummary(prev, summary);
-          localStorage.setItem("currentMember", JSON.stringify(merged));
-          return merged;
-        });
+        const summary = await fetchMemberSummaryByIdNoCache(id);
+        if (summary) {
+          setCurrentMember((prev) => {
+            const merged = mergeMemberSummary(prev, summary);
+            localStorage.setItem("currentMember", JSON.stringify(merged));
+            return merged;
+          });
+        }
+        localStorage.removeItem("member_points_refresh_id");
+      } catch (e) {
+        console.warn("refresh MemberSummary 失敗", e);
       }
-      localStorage.removeItem("member_points_refresh_id");
-    } catch (e) {
-      console.warn("refresh MemberSummary 失敗", e);
+    };
+
+    // A) 進到首頁就先刷新一次（若有 currentMember）
+    if (currentMember?.id || currentMember?.memberId) {
+      maybeRefreshMemberPoints();
     }
-  };
 
-  // A) 進到首頁就先刷新一次（若有 currentMember）
-  if (currentMember?.id || currentMember?.memberId) {
-    maybeRefreshMemberPoints();
-  }
+    // B) 視窗獲得焦點時也刷新（避免漏抓）
+    const onFocus = () => maybeRefreshMemberPoints();
+    window.addEventListener("focus", onFocus);
 
-  // B) 視窗獲得焦點時也刷新（避免漏抓）
-  const onFocus = () => maybeRefreshMemberPoints();
-  window.addEventListener("focus", onFocus);
+    // C) checkout 廣播 / localStorage 旗標 觸發刷新
+    if ("BroadcastChannel" in window) {
+      channel = new BroadcastChannel("pos-events");
+      channel.onmessage = (ev) => {
+        if (ev?.data?.type === "checkout_done") {
+          maybeRefreshMemberPoints();
+        }
+      };
+    }
 
-  // C) checkout 廣播 / localStorage 旗標 觸發刷新
-  if ("BroadcastChannel" in window) {
-    channel = new BroadcastChannel("pos-events");
-    channel.onmessage = (ev) => {
-      if (ev?.data?.type === "checkout_done") {
+    const onStorage = (e) => {
+      if (e.key === "checkout_done" || e.key === "member_points_refresh_id") {
         maybeRefreshMemberPoints();
       }
     };
-  }
+    window.addEventListener("storage", onStorage);
 
-  const onStorage = (e) => {
-    if (e.key === "checkout_done" || e.key === "member_points_refresh_id") {
-      maybeRefreshMemberPoints();
-    }
-  };
-  window.addEventListener("storage", onStorage);
-
-  return () => {
-    window.removeEventListener("focus", onFocus);
-    window.removeEventListener("storage", onStorage);
-    if (channel) channel.close();
-  };
-}, [currentMember?.id, currentMember?.memberId, setCurrentMember]);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("storage", onStorage);
+      if (channel) channel.close();
+    };
+  }, [currentMember?.id, currentMember?.memberId, setCurrentMember]);
 
   /* ========== 結帳後：贈送額度重抓 ========== */
   useEffect(() => {
@@ -591,34 +633,42 @@ useEffect(() => {
 
   /* ========== 結帳 ========== */
   const canCheckout = useMemo(
-    () => Array.isArray(cartItems) && cartItems.some((i) => Number(i?.quantity) > 0),
+    () =>
+      Array.isArray(cartItems) &&
+      cartItems.some((i) => Number(i?.quantity) > 0),
     [cartItems]
   );
 
   // ★ 新增：從結帳返回首頁時，自動還原購物車草稿
-useEffect(() => {
-  const flag = localStorage.getItem("restoreCartFlag");
-  if (flag === "1") {
-    try {
-      const raw = localStorage.getItem("cartDraft");
-      if (raw) {
-        const draft = JSON.parse(raw);
-        if (Array.isArray(draft.cartItems)) setCartItems(draft.cartItems);
-        if (draft.cartSummary) setCartSummary(draft.cartSummary);
-        if (typeof draft.activeTab === "string") setActiveTab(draft.activeTab);
-        if (typeof draft.isGuideSelf === "boolean") setIsGuideSelf(draft.isGuideSelf);
-        if (typeof draft.selectedCategoryId !== "undefined")
-          setSelectedCategoryId(draft.selectedCategoryId);
-        if (typeof draft.searchKeyword === "string")
-          setSearchKeyword(draft.searchKeyword);
-      }
-    } catch {}
-    // 只在「返回修改」時還原一次，避免每次打開首頁都套用舊草稿
-    localStorage.removeItem("restoreCartFlag");
-    // 若你希望回來就丟棄草稿，可一併移除：
-    // localStorage.removeItem("cartDraft");
-  }
-}, []);
+  useEffect(() => {
+    const flag = localStorage.getItem("restoreCartFlag");
+    if (flag === "1") {
+      try {
+        const raw = localStorage.getItem("cartDraft");
+        if (raw) {
+          const draft = JSON.parse(raw);
+          if (Array.isArray(draft.cartItems)) setCartItems(draft.cartItems);
+          if (draft.cartSummary) setCartSummary(draft.cartSummary);
+          if (typeof draft.activeTab === "string")
+            setActiveTab(draft.activeTab);
+          // ⚠️ 不覆蓋 isGuideSelf，避免把正確選擇沖掉
+          // 只在完全沒有任何記錄時才作為最後備援（通常不會發生）
+          const saved = localStorage.getItem("checkout_payer");
+          if (!saved && typeof draft.isGuideSelf === "boolean") {
+            setIsGuideSelf(draft.isGuideSelf);
+          }
+          if (typeof draft.selectedCategoryId !== "undefined")
+            setSelectedCategoryId(draft.selectedCategoryId);
+          if (typeof draft.searchKeyword === "string")
+            setSearchKeyword(draft.searchKeyword);
+        }
+      } catch {}
+      // 只在「返回修改」時還原一次，避免每次打開首頁都套用舊草稿
+      localStorage.removeItem("restoreCartFlag");
+      // 若你希望回來就丟棄草稿，可一併移除：
+      // localStorage.removeItem("cartDraft");
+    }
+  }, []);
 
   const handleCheckout = () => {
     if (!canCheckout) {
@@ -631,33 +681,49 @@ useEffect(() => {
       return;
     }
     const buyerType =
-  currentMember?.buyerType ??
-  (currentMember?.memberType === "導遊" ? 1 :
-   currentMember?.memberType === "經銷商" ? 2 : 0);
+      currentMember?.buyerType ??
+      (currentMember?.memberType === "導遊"
+        ? 1
+        : currentMember?.memberType === "經銷商"
+        ? 2
+        : 0);
 
-const normalizedMember = {
-  id: currentMember?.id ?? currentMember?.memberId ?? 0,
-  fullName: currentMember?.fullName ?? currentMember?.name ?? "",
-  contactPhone: currentMember?.contactPhone ?? currentMember?.phone ?? currentMember?.mobile ?? "",
-  contactAddress: currentMember?.contactAddress ?? currentMember?.address ?? "",
-  memberType: currentMember?.memberType ?? "",
+    const normalizedMember = {
+      id: currentMember?.id ?? currentMember?.memberId ?? 0,
+      fullName: currentMember?.fullName ?? currentMember?.name ?? "",
+      contactPhone:
+        currentMember?.contactPhone ??
+        currentMember?.phone ??
+        currentMember?.mobile ??
+        "",
+      contactAddress:
+        currentMember?.contactAddress ?? currentMember?.address ?? "",
+      memberType: currentMember?.memberType ?? "",
 
-  // ★ 關鍵：把這些都帶到 checkout
-  buyerType,
-  subType: currentMember?.subType ?? (buyerType === 1 ? "導遊" : buyerType === 2 ? "廠商" : ""),
-  isSelfCredit:  !!(currentMember?.isSelfCredit  ?? currentMember?.IsSelfCredit),
-  isGuestCredit: !!(currentMember?.isGuestCredit ?? currentMember?.IsGuestCredit),
+      // ★ 關鍵：把這些都帶到 checkout
+      buyerType,
+      subType:
+        currentMember?.subType ??
+        (buyerType === 1 ? "導遊" : buyerType === 2 ? "廠商" : ""),
+      isSelfCredit: !!(
+        currentMember?.isSelfCredit ?? currentMember?.IsSelfCredit
+      ),
+      isGuestCredit: !!(
+        currentMember?.isGuestCredit ?? currentMember?.IsGuestCredit
+      ),
 
-  discountRate: currentMember?.discountRate ?? 1,
-  isDistributor: !!currentMember?.isDistributor,
+      discountRate: currentMember?.discountRate ?? 1,
+      isDistributor: !!currentMember?.isDistributor,
 
-  // 這個只是資訊用，不作為最終判斷依據
-  creditEligible: currentMember?.isDistributor
-    ? (isGuideSelf ? !!currentMember?.isSelfCredit : !!currentMember?.isGuestCredit)
-    : false,
+      // 這個只是資訊用，不作為最終判斷依據
+      creditEligible: currentMember?.isDistributor
+        ? isGuideSelf
+          ? !!currentMember?.isSelfCredit
+          : !!currentMember?.isGuestCredit
+        : false,
 
-  distributorId: currentMember?.distributorId ?? null,
-};
+      distributorId: currentMember?.distributorId ?? null,
+    };
 
     const items = cartItems.map((i) => ({
       id: i.id ?? i.productId,
@@ -690,19 +756,26 @@ const normalizedMember = {
     localStorage.setItem("checkoutData", JSON.stringify(payloadForCheckout));
 
     // ★ 新增：存購物車草稿與還原旗標
-  localStorage.setItem(
-    "cartDraft",
-    JSON.stringify({
-      cartItems,                 // 原本購物車（含贈品與單價）
-      cartSummary,               // 小計/折抵/總計
-      activeTab,                 // 回來時維持分頁
-      isGuideSelf,               // 導遊身份
-      selectedCategoryId,        // 產品分類時的選取
-      searchKeyword,             // 目前搜尋字
-    })
-  );
-  localStorage.setItem("restoreCartFlag", "1");
+    localStorage.setItem(
+      "cartDraft",
+      JSON.stringify({
+        cartItems, // 原本購物車（含贈品與單價）
+        cartSummary, // 小計/折抵/總計
+        activeTab, // 回來時維持分頁
+        isGuideSelf, // 導遊身份
+        selectedCategoryId, // 產品分類時的選取
+        searchKeyword, // 目前搜尋字
+      })
+    );
+    localStorage.setItem("restoreCartFlag", "1");
 
+    // 進結帳前，把身份選擇確實寫回 localStorage（避免中途被覆蓋）
+    try {
+      localStorage.setItem(
+        "checkout_payer",
+        isGuideSelf ? "guide" : "customer"
+      );
+    } catch {}
     navigate("/checkout");
   };
 

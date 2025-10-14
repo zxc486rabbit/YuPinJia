@@ -393,14 +393,16 @@ export default function Cart({
     setUsedPoints(0);
 
     // ✅ 只有導遊才跳；廠商直接短路不跳
-    if (
-      Number(normalized.buyerType) === 2 ||
-      normalized.memberType === "經銷商"
-    ) {
-      setIsGuideSelf(false);
-      localStorage.removeItem("checkout_payer");
+    const isVendor =
+      Number(normalized.buyerType) === 2 || normalized.memberType === "經銷商";
+    if (isVendor) {
+      // 廠商沒有「客人結帳」情境，固定視為本人；也把 key 穩定寫回
+      setIsGuideSelf(true);
+      try {
+        localStorage.setItem("checkout_payer", "guide");
+      } catch {}
       if (afterSelect) afterSelect();
-      return; // ←← 直接結束，不進 Swal
+      return; // 直接結束，不進 Swal
     }
     const isGuide = Number(normalized.buyerType) === 1;
 
@@ -439,9 +441,11 @@ export default function Cart({
         },
       });
     } else {
-      // ⬇️ 一般會員 / 經銷商：不跳視窗，確保導遊殘留清乾淨
+      // ⬇️ 一般會員：不跳視窗，但把選擇清楚地寫回 "customer"
       setIsGuideSelf(false);
-      localStorage.removeItem("checkout_payer");
+      try {
+        localStorage.setItem("checkout_payer", "customer");
+      } catch {}
       if (afterSelect) afterSelect();
     }
   };
@@ -665,9 +669,7 @@ export default function Cart({
           style={{ color: "#A40000" }}
         >
           <span>總價</span>
-          <span className="text-value">
-            ${finalTotal.toLocaleString()}
-          </span>
+          <span className="text-value">${finalTotal.toLocaleString()}</span>
         </div>
       </div>
 
