@@ -32,6 +32,26 @@ export default function Cart({
   const [savedOrders, setSavedOrders] = useState([]);
   const [usedPoints, setUsedPoints] = useState(0);
 
+  // ✅ 新增：登出會員
+  const handleLogoutMember = () => {
+    // 清空前台會員狀態
+    setCurrentMember(null);
+    setUsedPoints(0);                 // 點數歸零
+    setIsGuideSelf(false);            // 預設回「客人」計價
+
+    try {
+      localStorage.removeItem("currentMember");
+      localStorage.setItem("checkout_payer", "customer"); // 避免保持在 guide
+    } catch {}
+
+    Swal.fire({
+      icon: "success",
+      title: "已登出會員",
+      timer: 1000,
+      showConfirmButton: false,
+    });
+  };
+
   const discountPerPoint = 1;
 
   const totalQuantity = (items || []).reduce(
@@ -677,6 +697,7 @@ export default function Cart({
         show={showModal}
         onHide={() => setShowModal(false)}
         onSelect={handleSwitchByInput}
+        onLogout={handleLogoutMember}   // ⬅️ 傳入登出回呼
       />
       <ReservedModal
         show={showReserved}

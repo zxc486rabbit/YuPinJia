@@ -45,6 +45,9 @@ const pickPriceStoreOnly = (p) => {
 };
 
 const pickPriceForPayer = (p, currentMember, isGuideSelf) => {
+  // ✅ 未登入：一律用門市價（storePrice）→ 原價（price）
+  if (!currentMember) return pickPriceStoreOnly(p);
+
   const isGuideAccount =
     currentMember?.subType === "導遊" || currentMember?.buyerType === 1;
   if (isGuideAccount && !isGuideSelf) {
@@ -54,11 +57,9 @@ const pickPriceForPayer = (p, currentMember, isGuideSelf) => {
 };
 
 /* =========================
-   產品 URL（所有請求都要帶 memberId）
+   產品 URL（有 memberId 就帶，沒有就不帶）
 ========================= */
 const buildProductUrl = (searchType, categoryId, memberId) => {
-  if (memberId == null) return null; // 沒 memberId 不打
-
   const base = "https://yupinjia.hyjr.com.tw/api/api/t_Product";
   const params = new URLSearchParams();
 
@@ -66,9 +67,11 @@ const buildProductUrl = (searchType, categoryId, memberId) => {
   if (searchType === 3 && categoryId != null) {
     params.set("categoryId", String(categoryId));
   }
-  params.set("memberId", String(memberId));
+  // ✅ 只有有 memberId 才帶，未登入就不帶
+  if (memberId != null) params.set("memberId", String(memberId));
 
-  return `${base}?${params.toString()}`;
+  const qs = params.toString();
+  return qs ? `${base}?${qs}` : base;
 };
 
 /* =========================
@@ -77,7 +80,6 @@ const buildProductUrl = (searchType, categoryId, memberId) => {
 
 const fetchProductsBySearchType = async (searchType, categoryId, memberId) => {
   const url = buildProductUrl(searchType, categoryId, memberId);
-  if (!url) return [];
   const res = await axios.get(url);
   return res.data || [];
 };
@@ -308,21 +310,18 @@ export default function Home() {
   );
 
   const {
-    data: rawProducts = [],
-    isError,
-    error,
-  } = useQuery({
-    queryKey: ["products", searchType, selectedCategoryId, memberId],
-    queryFn: () =>
-      fetchProductsBySearchType(searchType, selectedCategoryId, memberId),
-    // 需要 memberId；產品分類還需要選 categoryId
-    enabled:
-      memberId != null &&
-      searchType !== null &&
-      (searchType !== 3 || selectedCategoryId !== null),
-    keepPreviousData: true,
-    staleTime: 1000 * 60 * 5,
-  });
+  data: rawProducts = [],
+  isError,
+  error,
+} = useQuery({
+  queryKey: ["products", searchType, selectedCategoryId, memberId],
+  queryFn: () =>
+    fetchProductsBySearchType(searchType, selectedCategoryId, memberId),
+  // ✅ 不再要求一定有 memberId；分類模式維持要選 categoryId
+  enabled: searchType !== null && (searchType !== 3 || selectedCategoryId !== null),
+  keepPreviousData: true,
+  staleTime: 1000 * 60 * 5,
+});
 
   // 注入實際用價（由 Home 統一計價）
   const allProducts = useMemo(() => {
@@ -415,10 +414,6 @@ export default function Home() {
 
   /* ========== 加入購物車（一般用 calculatedPrice；贈品額度用原價） ========== */
   const addToCart = (item) => {
-    if (!currentMember) {
-      alert("請先登入會員再加入購物車");
-      return;
-    }
 
     const isGift = item.isGift || false;
 

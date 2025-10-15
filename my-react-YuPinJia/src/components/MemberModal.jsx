@@ -46,7 +46,7 @@ function dedupeById(arr) {
   return Array.from(map.values());
 }
 
-export default function MemberModal({ show, onHide, onSelect }) {
+export default function MemberModal({ show, onHide, onSelect, onLogout  }) {
   // 查詢條件
   const [nameInput, setNameInput] = useState("");   // fullName
   const [phoneInput, setPhoneInput] = useState(""); // contactPhone
@@ -319,6 +319,23 @@ export default function MemberModal({ show, onHide, onSelect }) {
     };
   }
 
+   // ✅ 登出會員：關閉 modal、清空內部狀態、回呼 onLogout
+  const handleLogout = () => {
+    onHide?.();
+    setTimeout(() => {
+      onLogout?.();
+      // 清空內部 UI 狀態
+      setSelected(null);
+      setNameInput("");
+      setPhoneInput("");
+      setMemberType("");
+      setItems([]);
+      setHasMore(false);
+      setTotal(null);
+      setPage(0);
+    }, 150);
+  };
+
   async function handleSubmit() {
     if (!selected) {
       alert("請先選取會員");
@@ -485,13 +502,23 @@ export default function MemberModal({ show, onHide, onSelect }) {
         )}
       </Modal.Body>
 
-      <Modal.Footer>
-        <Button variant="secondary" onClick={onHide}>
-          取消
-        </Button>
-        <Button variant="primary" onClick={handleSubmit} disabled={!selected}>
-          確認
-        </Button>
+      <Modal.Footer className="d-flex w-100">
+        {/* ⬅️ 左側：登出會員 */}
+        <div className="me-auto">
+          <Button variant="outline-danger" onClick={handleLogout}>
+            登出會員
+          </Button>
+        </div>
+
+        {/* 右側：取消 / 確認 */}
+        <div>
+          <Button variant="secondary" onClick={onHide} className="me-2">
+            取消
+          </Button>
+          <Button variant="primary" onClick={handleSubmit} disabled={!selected}>
+            確認
+          </Button>
+        </div>
       </Modal.Footer>
     </Modal>
   );
