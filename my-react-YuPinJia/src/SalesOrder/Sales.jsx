@@ -8,7 +8,7 @@ import ReturnOrderForm from "./ReturnOrderModal";
 
 const API_BASE = "https://yupinjia.hyjr.com.tw/api/api";
 
-// ★ PATCH: 配送方式映射
+// ★ 配送方式映射
 const DELIVERY_LABEL = {
   0: "現場帶走",
   1: "機場提貨",
@@ -22,6 +22,10 @@ const toDeliveryLabel = (v) => {
   const n = typeof v === "number" ? v : /^\d+$/.test(String(v)) ? Number(v) : v;
   return typeof n === "number" ? (DELIVERY_LABEL[n] ?? String(n)) : String(v ?? "—");
 };
+
+// ★ 金額格式
+const formatMoney = (n) =>
+  Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 
 export default function Sales() {
   // ===== 查詢欄位 =====
@@ -109,7 +113,7 @@ export default function Sales() {
     }
   };
 
-  // ★ PATCH: 改用訂單欄位直接計算（總計=totalAmount；找零=paymentAmount-totalAmount；欠款=總計-付款）
+  // ★ 總計/找零/欠款
   const computeTotals = (o) => {
     const total = Number(o?.totalAmount ?? 0);
     const paid = Number(o?.paymentAmount ?? 0);
@@ -118,7 +122,7 @@ export default function Sales() {
     return { total, paid, due, change };
   };
 
-  // ★ PATCH: 對照 API 欄位產出列表資料（包含配送方式中文與 offsetAmount）
+  // ★ 對照 API 欄位產出列表資料
   const mapApiOrder = (order) => ({
     id: order.id,
     orderId: order.orderNumber,
@@ -268,23 +272,26 @@ export default function Sales() {
       setSelectedOrder({ ...order, productDetails: [] });
       setShowModal(true);
       const res = await axios.get(`${API_BASE}/t_SalesOrder/${order.id}`);
-      // ★ PATCH: 以 API 欄位建構：原價=unitPrice，單件新價=subtotal，行總=subtotal*quantity
+
+      // ★ 依你的規則：單價=unitPrice；紅字單價=unitPrice - (discountedAmount/quantity)（僅在 discountedAmount>0 且 quantity>0 才顯示）
+      //   折扣後總額=subtotal（直接吃 API 的每列 subtotal）
       const productDetails = (res.data.orderItems || []).map((item) => {
         const quantity = Number(item.quantity) || 0;
-        const originalUnit = Number(item.unitPrice) || 0;     // 原價/每件
-        const chosenUnit = Number(item.subtotal ?? originalUnit); // 新價/每件（API 的 subtotal）
+        const unitPrice = Number(item.unitPrice) || 0;
+        const discountedAmount = Number(item.discountedAmount || 0);
+        const subtotal = Number(item.subtotal || 0);
         return {
           productName: item.productName || "未命名商品",
           quantity,
-          unitPrice: originalUnit,
-          chosenUnit,
+          unitPrice,
+          discountedAmount,
+          subtotal,
           isGift: !!item.isGift,
         };
       });
 
       setSelectedOrder((prev) => ({
         ...prev,
-        // 帶回明細與關鍵金額
         productDetails,
         totalAmount: Number(res.data.totalAmount ?? prev.totalAmount ?? 0),
         paymentAmount: Number(res.data.paymentAmount ?? prev.paymentAmount ?? 0),
@@ -351,16 +358,18 @@ export default function Sales() {
         signatureMime: data.signatureMime || "image/jpeg",
         mobile: data.mobile || "",
         shippingAddress: data.shippingAddress || "",
-        // ★ PATCH: 單價顯示用（原價=unitPrice，新價=chosenUnit=API subtotal）
+        // ★ 與檢視一致
         productDetails: (data.orderItems || []).map((item) => {
           const quantity = Number(item.quantity) || 0;
-          const originalUnit = Number(item.unitPrice) || 0;
-          const chosenUnit = Number(item.subtotal ?? originalUnit);
+          const unitPrice = Number(item.unitPrice) || 0;
+          const discountedAmount = Number(item.discountedAmount || 0);
+          const subtotal = Number(item.subtotal || 0);
           return {
             productName: item.productName || "未命名商品",
             quantity,
-            unitPrice: originalUnit,
-            chosenUnit,
+            unitPrice,
+            discountedAmount,
+            subtotal,
             isGift: !!item.isGift,
           };
         }),
@@ -494,10 +503,11 @@ export default function Sales() {
   const getSignatureSrc = (order) => {
     const sig = order?.signature;
     if (!sig) return null;
-    if (typeof sig === "string" && sig.startsWith("data:image/")) return sig;
+    if (typeof sig === "string" && startsWithDataUri(sig)) return sig;
     const mime = order?.signatureMime || "image/jpeg";
     return `data:${mime};base64,${sig}`;
   };
+  const startsWithDataUri = (s) => typeof s === "string" && s.startsWith("data:image/");
 
   // ====== UI ======
   return (
@@ -682,9 +692,13 @@ export default function Sales() {
                   selectedOrder.productDetails.map((item, i) => {
                     const isGift = !!item.isGift;
                     const quantity = Number(item.quantity) || 0;
-                    const originalUnit = Number(item.unitPrice) || 0;      // 原價/每件
-                    const chosenUnit = isGift ? 0 : Number(item.chosenUnit ?? originalUnit); // 新價/每件
-                    const lineTotal = isGift ? 0 : Math.round(chosenUnit * quantity);
+                    const unitPrice = Number(item.unitPrice) || 0;
+                    const discountedAmount = Number(item.discountedAmount || 0);
+                    const subtotal = Number(item.subtotal || 0);
+
+                    // 紅字單價：只有 discountedAmount>0 且 quantity>0 才顯示
+                    const showDiscount = !isGift && discountedAmount > 0 && quantity > 0;
+                    const redUnit = unitPrice - (showDiscount ? discountedAmount / quantity : 0);
 
                     return (
                       <tr key={i} style={isGift ? { background: "#fff7e6" } : undefined}>
@@ -695,29 +709,29 @@ export default function Sales() {
                         <td>
                           {isGift ? (
                             <>
-                              {originalUnit > 0 && (
+                              {unitPrice > 0 && (
                                 <div style={{ textDecoration: "line-through", color: "#888" }}>
-                                  ${originalUnit.toLocaleString()}
+                                  ${formatMoney(unitPrice)}
                                 </div>
                               )}
                               <div style={{ color: "#17a2b8", fontWeight: "bold" }}>贈送</div>
                             </>
-                          ) : originalUnit !== chosenUnit ? (
+                          ) : showDiscount ? (
                             <>
                               <span style={{ textDecoration: "line-through", color: "#888", marginRight: 6 }}>
-                                ${originalUnit.toLocaleString()}
+                                ${formatMoney(unitPrice)}
                               </span>
                               <span style={{ color: "#dc3545", fontWeight: "bold" }}>
-                                ${chosenUnit.toLocaleString()}
+                                ${formatMoney(redUnit)}
                               </span>
                             </>
                           ) : (
-                            `$${originalUnit.toLocaleString()}`
+                            `$${formatMoney(unitPrice)}`
                           )}
                         </td>
                         <td>{quantity}</td>
                         <td style={{ color: isGift ? "#17a2b8" : "#28a745", fontWeight: "bold" }}>
-                          ${lineTotal.toLocaleString()}
+                          ${formatMoney(isGift ? 0 : subtotal)}
                         </td>
                       </tr>
                     );
@@ -735,18 +749,17 @@ export default function Sales() {
                 selectedOrder.productDetails.forEach((item) => {
                   const q = Number(item.quantity) || 0;
                   const orig = Number(item.unitPrice) || 0;
-                  const chosen = item.isGift ? 0 : Number(item.chosenUnit ?? orig);
-                  originalTotal += orig * q;               // 折扣前金額
-                  discountedTotal += Math.max(0, chosen) * q; // 折扣後金額 = subtotal(每件新價)*數量
+                  originalTotal += orig * q;                        // 折扣前金額
+                  discountedTotal += Number(item.subtotal || 0);     // 折扣後金額 = 每列 subtotal
                 });
                 const totalDiscount = Math.max(0, originalTotal - discountedTotal);
 
                 return (
                   <div className="mt-3 p-3 d-flex justify-content-start bg-light border rounded" style={{ fontSize: "1.1rem", gap: "2rem" }}>
                     <div>共計商品：<strong>{selectedOrder?.productDetails?.length ?? 0} 項</strong></div>
-                    <div>折扣前金額：<strong>${originalTotal.toLocaleString()}</strong> 元</div>
-                    <div>折扣後金額：<strong style={{ color: "#28a745" }}>${discountedTotal.toLocaleString()}</strong> 元</div>
-                    <div>總折扣金額：<strong style={{ color: "#dc3545" }}>-${totalDiscount.toLocaleString()}</strong> 元</div>
+                    <div>折扣前金額：<strong>${formatMoney(originalTotal)}</strong> 元</div>
+                    <div>折扣後金額：<strong style={{ color: "#28a745" }}>${formatMoney(discountedTotal)}</strong> 元</div>
+                    <div>總折扣金額：<strong style={{ color: "#dc3545" }}>-${formatMoney(totalDiscount)}</strong> 元</div>
                   </div>
                 );
               })()}
@@ -773,9 +786,12 @@ export default function Sales() {
                   selectedOrder.productDetails.map((item, i) => {
                     const isGift = !!item.isGift;
                     const quantity = Number(item.quantity) || 0;
-                    const originalUnit = Number(item.unitPrice) || 0;
-                    const chosenUnit = isGift ? 0 : Number(item.chosenUnit ?? originalUnit);
-                    const lineTotal = isGift ? 0 : Math.round(chosenUnit * quantity);
+                    const unitPrice = Number(item.unitPrice) || 0;
+                    const discountedAmount = Number(item.discountedAmount || 0);
+                    const subtotal = Number(item.subtotal || 0);
+
+                    const showDiscount = !isGift && discountedAmount > 0 && quantity > 0;
+                    const redUnit = unitPrice - (showDiscount ? discountedAmount / quantity : 0);
 
                     return (
                       <tr key={i} style={isGift ? { background: "#fff7e6" } : undefined}>
@@ -786,29 +802,29 @@ export default function Sales() {
                         <td>
                           {isGift ? (
                             <>
-                              {originalUnit > 0 && (
+                              {unitPrice > 0 && (
                                 <div style={{ textDecoration: "line-through", color: "#888" }}>
-                                  ${originalUnit.toLocaleString()}
+                                  ${formatMoney(unitPrice)}
                                 </div>
                               )}
                               <div style={{ color: "#17a2b8", fontWeight: "bold" }}>贈送</div>
                             </>
-                          ) : originalUnit !== chosenUnit ? (
+                          ) : showDiscount ? (
                             <>
                               <span style={{ textDecoration: "line-through", color: "#888", marginRight: 6 }}>
-                                ${originalUnit.toLocaleString()}
+                                ${formatMoney(unitPrice)}
                               </span>
                               <span style={{ color: "#dc3545", fontWeight: "bold" }}>
-                                ${chosenUnit.toLocaleString()}
+                                ${formatMoney(redUnit)}
                               </span>
                             </>
                           ) : (
-                            `$${originalUnit.toLocaleString()}`
+                            `$${formatMoney(unitPrice)}`
                           )}
                         </td>
                         <td>{quantity}</td>
                         <td style={{ color: isGift ? "#17a2b8" : "#28a745", fontWeight: "bold" }}>
-                          ${lineTotal.toLocaleString()}
+                          ${formatMoney(isGift ? 0 : subtotal)}
                         </td>
                       </tr>
                     );
@@ -831,7 +847,6 @@ export default function Sales() {
                     <div>共計商品：<strong>{selectedOrder?.productDetails?.length ?? 0} 項</strong></div>
                     <div className="ms-5">總計：<strong>{formatCurrency(total)} 元</strong></div>
                     <div className="ms-5">付款方式：<strong>{formatPaymentMethod(selectedOrder?.paymentMethod ?? selectedOrder?.pay)}</strong></div>
-                    {/* ★ PATCH: 顯示賒帳金額（creditAmount） */}
                     <div className="ms-5">賒帳金額：<strong style={{ color: credit > 0 ? "#dc3545" : "#6c757d" }}>${formatCurrency(credit)} 元</strong></div>
                   </div>
                   <div className="d-flex mt-1">
@@ -840,7 +855,6 @@ export default function Sales() {
                     <div className="ms-5">配送方式：<strong>{selectedOrder?.deliveryMethod || "—"}</strong></div>
                   </div>
 
-                  {/* ★ PATCH: 付款金額 / 找零 or 賒帳（由總計與付款直接比） */}
                   <div className="d-flex mt-1">
                     <div>付款金額：<strong style={{ color: "#28a745" }}>${formatCurrency(paid)} 元</strong></div>
                     {paid >= total ? (
@@ -850,7 +864,6 @@ export default function Sales() {
                     )}
                   </div>
 
-                  {/* ★ PATCH: 點數折抵 offsetAmount */}
                   <div className="d-flex mt-1">
                     <div>點數折抵：<strong style={{ color: "#0d6efd" }}>${formatCurrency(offset)} 元</strong></div>
                   </div>
