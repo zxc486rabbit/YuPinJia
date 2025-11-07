@@ -40,32 +40,18 @@ function nowLocalDatetime() {
   return `${yyyy}-${MM}-${dd}T${hh}:${mm}`;
 }
 
-// ✅ 以「折後單價」計價：unitPrice − perUnitDiscount
+// ✅ 以「折後單價」計價：unitPrice − ( discountedAmount / qty )
 function computeNetUnitPrice(item) {
   const qty = Number(item?.quantity ?? 0) || 0;
   const unitPrice = Number(item?.unitPrice ?? 0) || 0;
   const discountedAmount = Number(item?.discountedAmount ?? 0) || 0;
-
-  // 判斷折扣是「每件折扣」還是「整列折扣」
-  // - 若 discountedAmount <= unitPrice：視為每件折扣
-  // - 若 discountedAmount >  unitPrice：視為整列折扣，平均到每件
-  let perUnitDiscount = 0;
-  if (discountedAmount > 0) {
-    perUnitDiscount =
-      discountedAmount <= unitPrice
-        ? discountedAmount
-        : qty > 0
-        ? discountedAmount / qty
-        : 0;
-  }
-
-  // 折後單價不得為負
+  const perUnitDiscount = qty > 0 ? discountedAmount / qty : 0;
   return Math.max(0, unitPrice - perUnitDiscount);
 }
 
 export default function CustomerComplain() {
   // 表單狀態
-  const [category, setCategory] = useState("");
+  const [category, setCategory] = useState("1"); // 預設 產品客訴
   const [salesOrderId, setSalesOrderId] = useState(""); // 顯示在輸入框的「訂單編號(字串)」
   const [selectedOrderId, setSelectedOrderId] = useState(null); // 真正送後端用
   const [invoiceNumber, setInvoiceNumber] = useState("");
@@ -100,7 +86,9 @@ export default function CustomerComplain() {
       : ["orderNumber", "keyword", "q"];
     for (const key of candidates) {
       try {
-        const url = `${API_BASE}/t_SalesOrder?${key}=${encodeURIComponent(q)}`;
+        const url = `${API_BASE}/t_SalesOrder?${key}=${encodeURIComponent(
+          q
+        )}&status=5`;
         const res = await fetch(url, {
           headers: { Accept: "application/json" },
           signal,
@@ -114,7 +102,18 @@ export default function CustomerComplain() {
           : [];
         if (Array.isArray(list)) {
           if (!searchMode) setSearchMode(key); // 記住成功的查詢參數
-          return list;
+          // 客端再過濾一次，只留「已完成=5」
+          return list.filter((o) => {
+            // 常見欄位容錯：status / statusCode / orderStatus，或中文字「已完成」
+            const raw = o?.statusCode ?? o?.orderStatus ?? o?.status;
+            const code =
+              typeof raw === "number"
+                ? raw
+                : String(raw ?? "").includes("已完成")
+                ? 5
+                : parseInt(raw, 10);
+            return code === 5;
+          });
         }
       } catch (err) {
         if (err?.name === "AbortError") return [];
@@ -122,6 +121,69 @@ export default function CustomerComplain() {
     }
     return [];
   }
+
+  // ✅ 從 URL 參數自動帶入訂單（支援 orderNumber 或 orderId）
+  useEffect(() => {
+    const qs = new URLSearchParams(window.location.search);
+    const fromOrderNo = qs.get("orderNumber");
+    const fromOrderId = qs.get("orderId"); // 可選：若你未來想用 id 帶也可以
+
+    // ① 用 orderNumber 帶入（目前你的 Sales 是用這個）
+    if (fromOrderNo) {
+      setSalesOrderId(fromOrderNo);
+      setOrderQuery(fromOrderNo);
+      setShowSuggest(false);
+      (async () => {
+        try {
+          const list = await fetchOrdersByKeyword(
+            fromOrderNo,
+            new AbortController().signal
+          );
+          const found = (list || []).find(
+            (o) =>
+              String(o?.orderNumber ?? o?.orderNo ?? "") === String(fromOrderNo)
+          );
+          if (found) {
+            await applyOrder(found);
+          } else {
+            Swal.fire({ icon: "info", title: "查無此訂單", text: fromOrderNo });
+          }
+        } catch (e) {
+          console.warn("auto-apply order failed", e);
+        }
+      })();
+      return;
+    }
+
+    // ②（可選）用 orderId 直接抓單頭後套用
+    if (fromOrderId) {
+      (async () => {
+        try {
+          const url = `${API_BASE}/t_SalesOrder/${encodeURIComponent(
+            fromOrderId
+          )}`;
+          const res = await fetch(url, {
+            headers: { Accept: "application/json" },
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
+          // 最少需要 orderNumber/id 兩個欄位供 applyOrder 使用
+          await applyOrder({
+            id: data?.id ?? fromOrderId,
+            orderNumber: data?.orderNumber ?? "",
+            invoiceNumber: data?.invoiceNumber ?? "",
+            createdAt: data?.createdAt ?? "",
+          });
+        } catch (e) {
+          Swal.fire({
+            icon: "error",
+            title: "讀取訂單失敗",
+            text: String(e?.message || e),
+          });
+        }
+      })();
+    }
+  }, []);
 
   // 監聽輸入框文字，做 Debounce 模糊查詢
   useEffect(() => {
@@ -187,7 +249,7 @@ export default function CustomerComplain() {
 
       const normalized = (Array.isArray(arr) ? arr : []).map((it) => {
         const qty = Number(it?.quantity ?? 0) || 0;
-        const returned = Number(it?.returnQuantity ?? 0) || 0;
+        const returned = Number(it?.returnQuantity ?? 0) || 0; // 完全以後端為準
         const available = Math.max(0, qty - returned);
         const netUnit = computeNetUnitPrice(it);
         return {
@@ -203,13 +265,13 @@ export default function CustomerComplain() {
           status: it?.status ?? "",
           isGift: it?.isGift ?? null,
           staffId: it?.staffId ?? 0,
-          returnQuantity: returned || 0,
+          returnQuantity: returned, // 已退（含本頁剛退的）
           availableQty: available,
           netUnit, // 計算好的單件淨價
         };
       });
 
-      setOrderItems(normalized);
+      setOrderItems(normalized); // 只留一個，完全照後端資料顯示
     } catch (err) {
       console.error("讀取訂單明細失敗:", err);
       Swal.fire({
@@ -335,7 +397,6 @@ export default function CustomerComplain() {
       (x) => String(x.id) === String(selectedItemId)
     );
 
-    // ✅ 依你的 API 規格組裝：{ complaint: {...}, orderItemIds: [...] }
     const payload = {
       complaint: {
         category: Number(category),
@@ -344,9 +405,10 @@ export default function CustomerComplain() {
         complaintDate: toISOSeconds(complaintDate),
         ...(selectedOrderId ? { salesOrderId: Number(selectedOrderId) } : {}),
         ...(invoiceNumber ? { invoiceNumber: invoiceNumber.trim() } : {}),
-        // ⚠️ 不送 id / createdAt，讓後端自己產生
       },
       orderItemIds: selItem ? [Number(selItem.id)] : [],
+      // 依你的需求：直接帶 returnQuantity（單一明細退多少）
+      returnQuantity: selItem ? Number(returnQty) : undefined,
     };
 
     try {
@@ -631,8 +693,8 @@ export default function CustomerComplain() {
                       <option value="">請選擇商品</option>
                       {orderItems.map((it) => (
                         <option key={it.id} value={it.id}>
-                          {it.productName}（原數量 {it.quantity}，已退{" "}
-                          {it.returnQuantity}）
+                          {it.productName}（原 {it.quantity}、已退{" "}
+                          {it.returnQuantity}、可退 {it.availableQty}）
                         </option>
                       ))}
                     </>

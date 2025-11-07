@@ -38,23 +38,6 @@ export default function MemberDetailModal({ show, onHide, detailData, selectedMo
     return months;
   };
 
-  // 當月份變更時，重新發送 API 請求
-  useEffect(() => {
-    if (selectedMonth && memberId) {
-      const apiUrl = `https://yupinjia.hyjr.com.tw/api/api/t_SalesOrder/GetSalesOrderByMember?memberId=${memberId}&filterMonth=${selectedMonth}`;
-      console.log("發送的 API 請求 URL：", apiUrl);
-
-      axios
-        .get(apiUrl)
-        .then((response) => {
-          console.log("消費情形資料：", response.data);
-          // 可以根據 response 更新 filteredData
-        })
-        .catch((error) => {
-          console.error("載入消費情形失敗：", error);
-        });
-    }
-  }, [selectedMonth, memberId]); // 監聽 selectedMonth 和 memberId 變化
 
   return (
     <Modal show={show} onHide={onHide} centered size="lg">

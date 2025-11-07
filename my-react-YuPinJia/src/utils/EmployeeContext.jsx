@@ -116,7 +116,10 @@ export const EmployeeProvider = ({ children }) => {
       if (!prev?.user) return prev;
       before = Number(prev.user.monthRemainGift ?? prev.user.giftAmount ?? 0);
       after = Math.max(0, before - delta);
-      const merged = { ...prev, user: { ...prev.user, monthRemainGift: after } };
+      const merged = {
+        ...prev,
+        user: { ...prev.user, monthRemainGift: after },
+      };
       localStorage.setItem("currentUser", JSON.stringify(merged));
       return merged;
     });
@@ -144,20 +147,24 @@ export const EmployeeProvider = ({ children }) => {
   /** 啟動 15 分鐘自動刷新（更有韌性，不輕易登出） */
   const startRefreshTimer = () => {
     stopRefreshTimer();
-    refreshTimerRef.current = setInterval(async () => {
+    const { accessTokenExpiredAt } = getTokens();
+    const now = Date.now();
+    // 提前 60 秒刷新，最少 30 秒後執行（避免抖動）
+    const delay = Math.max(
+      30_000,
+      (accessTokenExpiredAt ?? now + 15 * 60 * 1000) - now - 60_000
+    );
+    refreshTimerRef.current = setTimeout(async () => {
       try {
-        const r = await resilientRefreshOnce();
-        if (!r?.accessToken) throw new Error("No accessToken after refresh");
-      } catch (err) {
-        // 不要立刻登出；交由攔截器在下一次真正 401/600 時處理
-        console.warn("[auto refresh] failed, will rely on interceptors next call", err);
-      }
-    }, 15 * 60 * 1000); // 15 分鐘
+        await resilientRefreshOnce();
+      } catch {}
+      startRefreshTimer(); // 連續排下一次
+    }, delay);
   };
 
   const stopRefreshTimer = () => {
     if (refreshTimerRef.current) {
-      clearInterval(refreshTimerRef.current);
+      clearTimeout(refreshTimerRef.current);
       refreshTimerRef.current = null;
     }
   };
@@ -178,7 +185,8 @@ export const EmployeeProvider = ({ children }) => {
         }
 
         const { accessToken, accessTokenExpiredAt } = getTokens();
-        const tokenLooksValid = !!accessToken && isTimestampValid(accessTokenExpiredAt);
+        const tokenLooksValid =
+          !!accessToken && isTimestampValid(accessTokenExpiredAt);
 
         if (tokenLooksValid || !!accessToken) {
           setAuthHeader(accessToken);
@@ -194,13 +202,21 @@ export const EmployeeProvider = ({ children }) => {
           if (ok) {
             startRefreshTimer();
           } else {
-            ["accessToken", "refreshToken", "accessTokenExpiredAt", "refreshTokenExpiredAt"]
-              .forEach((k) => localStorage.removeItem(k));
+            [
+              "accessToken",
+              "refreshToken",
+              "accessTokenExpiredAt",
+              "refreshTokenExpiredAt",
+            ].forEach((k) => localStorage.removeItem(k));
             setCurrentUser(null);
           }
         } else {
-          ["accessToken", "refreshToken", "accessTokenExpiredAt", "refreshTokenExpiredAt"]
-            .forEach((k) => localStorage.removeItem(k));
+          [
+            "accessToken",
+            "refreshToken",
+            "accessTokenExpiredAt",
+            "refreshTokenExpiredAt",
+          ].forEach((k) => localStorage.removeItem(k));
           setCurrentUser(null);
         }
       } finally {
@@ -249,8 +265,9 @@ export const EmployeeProvider = ({ children }) => {
 
   // 嚴格化登入條件：token 看起來可用 + 有 user
   const { accessToken, accessTokenExpiredAt } = getTokens();
-  const tokenLooksValid = !!accessToken && isTimestampValid(accessTokenExpiredAt);
-  const isAuthed = tokenLooksValid && !!(currentUser?.user);
+  const tokenLooksValid =
+    !!accessToken && isTimestampValid(accessTokenExpiredAt);
+  const isAuthed = tokenLooksValid && !!currentUser?.user;
 
   const ctxValue = useMemo(
     () => ({

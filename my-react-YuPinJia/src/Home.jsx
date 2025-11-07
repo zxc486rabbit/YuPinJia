@@ -80,7 +80,10 @@ const buildProductUrl = (searchType, categoryId, memberId) => {
 
 const fetchProductsBySearchType = async (searchType, categoryId, memberId) => {
   const url = buildProductUrl(searchType, categoryId, memberId);
-  const res = await axios.get(url);
+  const res = await axios.get(url, {
+    headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
+    params: { ts: Date.now() }, // 破除瀏覽器/CDN 快取
+  });
   return res.data || [];
 };
 
@@ -163,6 +166,10 @@ export default function Home() {
     usedPoints: 0,
     finalTotal: 0,
   });
+
+  // forceReload 計數器 + 點擊同一個 Tab 時也重抓
+  const [forceReload, setForceReload] = useState(0);
+  const bumpReload = () => setForceReload((v) => v + 1);
 
   const navigate = useNavigate();
 
@@ -310,18 +317,24 @@ export default function Home() {
   );
 
   const {
-  data: rawProducts = [],
-  isError,
-  error,
-} = useQuery({
-  queryKey: ["products", searchType, selectedCategoryId, memberId],
-  queryFn: () =>
-    fetchProductsBySearchType(searchType, selectedCategoryId, memberId),
-  // ✅ 不再要求一定有 memberId；分類模式維持要選 categoryId
-  enabled: searchType !== null && (searchType !== 3 || selectedCategoryId !== null),
-  keepPreviousData: true,
-  staleTime: 1000 * 60 * 5,
-});
+    data: rawProducts = [],
+    isError,
+    error,
+  } = useQuery({
+    queryKey: [
+      "products",
+      searchType,
+      selectedCategoryId,
+      memberId,
+      forceReload,
+    ],
+    queryFn: () =>
+      fetchProductsBySearchType(searchType, selectedCategoryId, memberId),
+    enabled:
+      searchType !== null && (searchType !== 3 || selectedCategoryId !== null),
+    keepPreviousData: true,
+    staleTime: 0, // 想保留快取可改回 1000*60*5
+  });
 
   // 注入實際用價（由 Home 統一計價）
   const allProducts = useMemo(() => {
@@ -412,9 +425,15 @@ export default function Home() {
 
   const handleSearch = (keyword) => setSearchKeyword(keyword);
 
+  // 「產品分類」頁籤是由 CategoryProductTable 去改 selectedCategoryId。
+  // 把傳入的 setter 包一層，切類別時一樣 bump
+  const setCategoryAndReload = (id) => {
+    setSelectedCategoryId(id);
+    bumpReload();
+  };
+
   /* ========== 加入購物車（一般用 calculatedPrice；贈品額度用原價） ========== */
   const addToCart = (item) => {
-
     const isGift = item.isGift || false;
 
     if (isGift) {
@@ -802,7 +821,8 @@ export default function Home() {
           <Navbar
             activeTab={activeTab}
             setActiveTab={(tab) => {
-              setActiveTab(tab);
+              if (tab === activeTab) return; // ← 同一頁籤重按：不做事、不發請求
+              setActiveTab(tab); // ← 換到不同頁籤才切換
               setSelectedCategoryId(null);
               setSearchKeyword("");
             }}
@@ -844,7 +864,7 @@ export default function Home() {
               currentMember={currentMember}
               isGuideSelf={isGuideSelf}
               categories={categories}
-              setSelectedCategoryId={setSelectedCategoryId}
+              setSelectedCategoryId={setCategoryAndReload}
               selectedCategoryId={selectedCategoryId}
             />
           )}

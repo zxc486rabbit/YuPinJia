@@ -240,16 +240,21 @@ export default function MemberOverview() {
       });
   };
 
-  // 月份變更時，若視窗開啟則重抓
+  // 月份變更時，只有在 Modal 開著才抓，避免循環
   useEffect(() => {
-    if (selectedDetail && memberId && selectedMonth) {
-      const apiUrl = `${API_BASE}/t_SalesOrder/GetSalesOrderByMember?memberId=${memberId}&filterMonth=${selectedMonth}`;
-      axios
-        .get(apiUrl)
-        .then((response) => setSelectedDetail(response.data))
-        .catch((error) => console.error("載入消費情形失敗：", error));
-    }
-  }, [selectedMonth, selectedDetail, memberId]);
+    if (!showModal || !memberId || !selectedMonth) return;
+    const controller = new AbortController();
+    const apiUrl = `${API_BASE}/t_SalesOrder/GetSalesOrderByMember?memberId=${memberId}&filterMonth=${selectedMonth}`;
+    axios
+      .get(apiUrl, { signal: controller.signal })
+      .then((res) => setSelectedDetail(res.data))
+      .catch((err) => {
+        if (err.name !== "CanceledError" && err.name !== "AbortError") {
+          console.error("載入消費情形失敗：", err);
+        }
+      });
+    return () => controller.abort();
+  }, [showModal, memberId, selectedMonth]);
 
   // 編輯
   const handleEditMember = (member) => {
@@ -502,7 +507,8 @@ export default function MemberOverview() {
 
         {/* 分頁器 */}
         <span className="ms-2 me-2">
-          共 <strong>{total}</strong> 筆，第 <strong>{page}</strong> / {totalPages} 頁
+          共 <strong>{total}</strong> 筆，第 <strong>{page}</strong> /{" "}
+          {totalPages} 頁
         </span>
         <Pagination className="mb-0">
           <Pagination.First disabled={page <= 1} onClick={() => goPage(1)} />
@@ -556,7 +562,10 @@ export default function MemberOverview() {
       {/* 編輯 */}
       <MemberEditModal
         show={showEditModal}
-        onHide={() => setShowEditModal(false)}
+        onHide={() => {
+          setShowEditModal(false);
+          setSelectedMember(null);
+        }}
         member={selectedMember}
         onSave={handleUpdateMember}
       />

@@ -13,8 +13,8 @@ const api = axios.create({
 export function tsToMs(ts) {
   if (ts == null) return null;
   if (typeof ts === "number") {
-    if (ts > 1e12) return ts;        // ms
-    if (ts > 1e9) return ts * 1000;  // sec → ms
+    if (ts > 1e12) return ts; // ms
+    if (ts > 1e9) return ts * 1000; // sec → ms
     return ts;
   }
   const n = Number(ts);
@@ -29,7 +29,9 @@ export function getTokens() {
     accessToken: localStorage.getItem("accessToken") || "",
     refreshToken: localStorage.getItem("refreshToken") || "",
     accessTokenExpiredAt: tsToMs(localStorage.getItem("accessTokenExpiredAt")),
-    refreshTokenExpiredAt: tsToMs(localStorage.getItem("refreshTokenExpiredAt")),
+    refreshTokenExpiredAt: tsToMs(
+      localStorage.getItem("refreshTokenExpiredAt")
+    ),
   };
 }
 
@@ -38,7 +40,12 @@ export function setAuthHeader(token) {
   else delete api.defaults.headers.common.Authorization;
 }
 
-function saveTokens({ accessToken, refreshToken, accessTokenExpiredAt, refreshTokenExpiredAt }) {
+function saveTokens({
+  accessToken,
+  refreshToken,
+  accessTokenExpiredAt,
+  refreshTokenExpiredAt,
+}) {
   if (accessToken) localStorage.setItem("accessToken", accessToken);
   if (refreshToken) localStorage.setItem("refreshToken", refreshToken);
   const atMs = tsToMs(accessTokenExpiredAt);
@@ -50,17 +57,20 @@ function saveTokens({ accessToken, refreshToken, accessTokenExpiredAt, refreshTo
 
 // ===== 主動呼叫 Refresh API（★加上 __skipAuthRefresh 避免被攔截器再攔一次）=====
 export async function refreshAccessToken() {
+  const refreshAxios = axios.create(); // 乾淨的實例
+  refreshAxios.interceptors.request.use((cfg) => {
+    // 確保不帶舊 AT
+    if (cfg.headers?.Authorization) delete cfg.headers.Authorization;
+    return cfg;
+  });
   const { accessToken, refreshToken } = getTokens();
   if (!refreshToken) throw new Error("No refreshToken to refresh.");
 
-  const res = await axios.post(
-    REFRESH_URL,
-    { accessToken, refreshToken },
-    {
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
-      __skipAuthRefresh: true, // ★ 關鍵
-    }
-  );
+  const res = await refreshAxios.post(REFRESH_URL, body, {
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    withCredentials: true, // 視後端需要
+    __skipAuthRefresh: true,
+  });
 
   const {
     accessToken: newAT,
@@ -93,7 +103,8 @@ api.interceptors.request.use((config) => {
     config.headers = config.headers || {};
     config.headers.Authorization = `Bearer ${at}`;
   }
-  if (!config.headers["Content-Type"]) config.headers["Content-Type"] = "application/json";
+  if (!config.headers["Content-Type"])
+    config.headers["Content-Type"] = "application/json";
   if (!config.headers.Accept) config.headers.Accept = "application/json";
   return config;
 });

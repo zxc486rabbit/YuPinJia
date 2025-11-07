@@ -19,63 +19,71 @@ export default function MemberEditModal({ show, onHide, member, onSave }) {
       axios
         .get(`https://yupinjia.hyjr.com.tw/api/api/t_Member/${member.id}`)
         .then(async (res) => {
-          let memberData = res.data;
+          // 正確解包
+          const api = res.data || {};
+          const m = api.member || {}; // 會員實體
+          const d = api.distributor || null; // 經銷實體（可能為 null）
 
-           console.log("取得會員詳細資料：", memberData);
-    console.log("會員類型（memberType）：", memberData.memberType); // 印出 memberType
+          // 生日 -> YYYY-MM-DD
+          const birthday = m.birthday ? String(m.birthday).split("T")[0] : "";
 
-          // 處理生日格式
-          if (memberData.birthday) {
-            memberData.birthday = memberData.birthday.split("T")[0];
-          }
+          // 經銷預設
+          const distributorInfo = d
+            ? {
+                id: d.id ?? null,
+                company: d.companyName || "",
+                phone: d.contactPhone || "",
+                contact: d.contactPerson || "",
+                taxId: d.taxID || "",
+                bankCode: "", // 你 API 沒給代碼，保留可編輯欄位
+                bankName: d.bankName || "",
+                bankAccount: d.bankAccount || "",
+                allowSMS: !!d.allowSMS,
+                smsTime: "",
+                allowCredit: !!d.isSelfCredit || !!d.isGuestCredit, // 若你有獨立欄位可再微調
+                autoUpgrade: !!d.autoUpgrade,
+                issueInvoice: !!d.issueInvoice,
+                freeShipping: !!d.freeShipping,
+                notificationDay: Number(d.notificationDay || 0),
+                repaymentDay: Number(d.repaymentDay || 0),
+                paymentMethod: d.paymentMethod || "",
+                store: d.store || "",
+              }
+            : {
+                id: null,
+                company: "",
+                phone: "",
+                contact: "",
+                taxId: "",
+                bankCode: "",
+                bankName: "",
+                bankAccount: "",
+                allowSMS: false,
+                smsTime: "",
+                allowCredit: false,
+                autoUpgrade: false,
+                issueInvoice: false,
+                freeShipping: false,
+                notificationDay: 0,
+                repaymentDay: 0,
+                paymentMethod: "",
+                store: "",
+              };
 
-          let distributorInfo = {
-            company: "",
-            phone: "",
-            contact: "",
-            taxId: "",
-            bankCode: "",
-            bankName: "",
-            bankAccount: "",
-            allowSMS: false,
-            smsTime: "",
-          };
-
-          // 如果是導遊或廠商 → 抓經銷資料
-if (memberData.memberType === 1 || memberData.memberType === 2) {
-  try {
-    const distRes = await axios.get(
-      `https://yupinjia.hyjr.com.tw/api/api/t_Distributor/${member.id}`
-    );
-    const distData = distRes.data;
-
-    distributorInfo = {
-      id: distData.id || null, // 這裡加上 ID
-      company: distData.companyName || "",
-      phone: distData.contactPhone || "",
-      contact: distData.contactPerson || "",
-      taxId: distData.taxID || "",
-      bankCode: "",
-      bankName: distData.bankName || "",
-      bankAccount: distData.bankAccount || "",
-      allowSMS: distData.allowSMS || false,
-      smsTime: "",
-      allowCredit: distData.allowCredit || false,
-      autoUpgrade: distData.autoUpgrade || false,
-      issueInvoice: distData.issueInvoice || false,
-      freeShipping: distData.freeShipping || false,
-      notificationDay: distData.notificationDay || 0,
-      repaymentDay: distData.repaymentDay || 0,
-      paymentMethod: distData.paymentMethod || "",
-      store: distData.store || ""
-    };
-  } catch (err) {
-    console.error("載入經銷資料失敗", err);
-  }
-}
-
+          // 整理成表單要的形狀
           setMemberInfo({
-            ...memberData,
+            id: m.id,
+            memberNo: m.memberNo || "",
+            fullName: m.fullName || "",
+            birthday,
+            email: m.email || "",
+            contactPhone: m.contactPhone || "",
+            carrier: m.carrier || "",
+            contactAddress: m.contactAddress || "",
+            referredBy: m.referredBy ?? "",
+            memberType: Number(m.memberType), // 1=一般 2=導遊 3=廠商
+            status: Number(m.status), // 後續存檔有轉 1/0
+            isDistributor: !!m.isDistributor,
             distributorInfo,
           });
         })
@@ -105,66 +113,79 @@ if (memberData.memberType === 1 || memberData.memberType === 2) {
 
   // 儲存資料
   const handleSave = async () => {
-  if (!memberInfo) return;
+    if (!memberInfo) return;
 
-  try {
-    // 1. 更新會員資料
-    const t_Member = {
-      id: memberInfo.id,
-      fullName: memberInfo.fullName || "",
-      birthday: memberInfo.birthday || null,
-      email: memberInfo.email || "",
-      contactPhone: memberInfo.contactPhone || "",
-      carrier: memberInfo.carrier || "",
-      contactAddress: memberInfo.contactAddress || "",
-      referredBy: memberInfo.referredBy || "",
-      memberType: memberInfo.memberType,
-      status: memberInfo.status ? 1 : 0
-    };
-
-    await axios.put(
-      `https://yupinjia.hyjr.com.tw/api/api/t_Member/${memberInfo.id}`,
-      t_Member
-    );
-
-    // 2. 如果是導遊或廠商 → 更新經銷商資料
-    if (memberInfo.memberType === 1 || memberInfo.memberType === 2) {
-      const t_Distributor = {
-        store: memberInfo.distributorInfo.store || "馬公門市",
-        buyerType: memberInfo.memberType,
-        allowCredit: memberInfo.distributorInfo.allowCredit ? 1 : 0,
-        autoUpgrade: memberInfo.distributorInfo.autoUpgrade ? 1 : 0,
-        issueInvoice: memberInfo.distributorInfo.issueInvoice ? 1 : 0,
-        freeShipping: memberInfo.distributorInfo.freeShipping ? 1 : 0,
-        notificationDay: Number(memberInfo.distributorInfo.notificationDay) || 0,
-        repaymentDay: Number(memberInfo.distributorInfo.repaymentDay) || 0,
-        allowSMS: memberInfo.distributorInfo.allowSMS ? 1 : 0,
-        paymentMethod: memberInfo.distributorInfo.paymentMethod || "現金付款",
-        companyName: memberInfo.distributorInfo.company || "",
-        contactPerson: memberInfo.distributorInfo.contact || "",
-        contactPhone: memberInfo.distributorInfo.phone || "",
-        taxID: memberInfo.distributorInfo.taxId || "",
-        bankName: memberInfo.distributorInfo.bankName || "",
-        bankAccount: memberInfo.distributorInfo.bankAccount || "",
-        status: 1
+    try {
+      // 1. 更新會員資料
+      const t_Member = {
+        id: memberInfo.id,
+        fullName: memberInfo.fullName || "",
+        birthday: memberInfo.birthday || null,
+        email: memberInfo.email || "",
+        contactPhone: memberInfo.contactPhone || "",
+        carrier: memberInfo.carrier || "",
+        contactAddress: memberInfo.contactAddress || "",
+        referredBy: memberInfo.referredBy || "",
+        memberType: memberInfo.memberType,
+        status: memberInfo.status ? 1 : 0,
       };
 
-      // 這裡用經銷商 ID 來更新
       await axios.put(
-        `https://yupinjia.hyjr.com.tw/api/api/t_Distributor/${memberInfo.distributorInfo.id}`,
-        t_Distributor
+        `https://yupinjia.hyjr.com.tw/api/api/t_Member/${memberInfo.id}`,
+        t_Member
       );
+
+      // 2. 如果是導遊或廠商 → 更新經銷商資料
+      if (memberInfo.memberType === 1 || memberInfo.memberType === 2) {
+        const t_Distributor = {
+          store: memberInfo.distributorInfo.store || "馬公門市",
+          buyerType: memberInfo.memberType,
+          allowCredit: memberInfo.distributorInfo.allowCredit ? 1 : 0,
+          autoUpgrade: memberInfo.distributorInfo.autoUpgrade ? 1 : 0,
+          issueInvoice: memberInfo.distributorInfo.issueInvoice ? 1 : 0,
+          freeShipping: memberInfo.distributorInfo.freeShipping ? 1 : 0,
+          notificationDay:
+            Number(memberInfo.distributorInfo.notificationDay) || 0,
+          repaymentDay: Number(memberInfo.distributorInfo.repaymentDay) || 0,
+          allowSMS: memberInfo.distributorInfo.allowSMS ? 1 : 0,
+          paymentMethod: memberInfo.distributorInfo.paymentMethod || "現金付款",
+          companyName: memberInfo.distributorInfo.company || "",
+          contactPerson: memberInfo.distributorInfo.contact || "",
+          contactPhone: memberInfo.distributorInfo.phone || "",
+          taxID: memberInfo.distributorInfo.taxId || "",
+          bankName: memberInfo.distributorInfo.bankName || "",
+          bankAccount: memberInfo.distributorInfo.bankAccount || "",
+          status: 1,
+        };
+
+        // 這裡用經銷商 ID 來更新
+        if (memberInfo.distributorInfo?.id) {
+          await axios.put(
+            `https://yupinjia.hyjr.com.tw/api/api/t_Distributor/${memberInfo.distributorInfo.id}`,
+            t_Distributor
+          );
+        } else {
+          // 沒有 id 的話，依你後端規格決定是否要改 POST 新增
+          // await axios.post(`https://.../t_Distributor`, { ...t_Distributor, memberId: memberInfo.id });
+        }
+      }
+
+      Swal.fire({
+        icon: "success",
+        title: "成功",
+        text: "會員資料已成功更新！",
+      });
+      onHide();
+      onSave(memberInfo);
+    } catch (err) {
+      console.error("更新會員或經銷商資料錯誤", err);
+      Swal.fire({
+        icon: "error",
+        title: "錯誤",
+        text: "更新資料時發生錯誤，請稍後再試！",
+      });
     }
-
-    Swal.fire({ icon: "success", title: "成功", text: "會員資料已成功更新！" });
-    onHide();
-    onSave(memberInfo);
-
-  } catch (err) {
-    console.error("更新會員或經銷商資料錯誤", err);
-    Swal.fire({ icon: "error", title: "錯誤", text: "更新資料時發生錯誤，請稍後再試！" });
-  }
-};
+  };
 
   return (
     <Modal show={show} onHide={onHide} centered size="lg">
@@ -183,7 +204,10 @@ if (memberData.memberType === 1 || memberData.memberType === 2) {
               <Nav.Item>
                 <Nav.Link eventKey="basic">基本資料</Nav.Link>
               </Nav.Item>
-              {(memberInfo.memberType === 1 || memberInfo.memberType === 2) && (
+              {(memberInfo.isDistributor ||
+                memberInfo.distributorInfo?.id ||
+                memberInfo.memberType === 2 ||
+                memberInfo.memberType === 3) && (
                 <Nav.Item>
                   <Nav.Link eventKey="distributor">經銷資料</Nav.Link>
                 </Nav.Item>
@@ -271,7 +295,10 @@ if (memberData.memberType === 1 || memberData.memberType === 2) {
               </Tab.Pane>
 
               {/* 經銷資料 */}
-              {(memberInfo.memberType === 1 || memberInfo.memberType === 2) && (
+              {(memberInfo.isDistributor ||
+                memberInfo.distributorInfo?.id ||
+                memberInfo.memberType === 2 ||
+                memberInfo.memberType === 3) && (
                 <Tab.Pane eventKey="distributor">
                   <Form>
                     <div className="d-flex">
@@ -336,7 +363,10 @@ if (memberData.memberType === 1 || memberData.memberType === 2) {
                             type="text"
                             value={memberInfo.distributorInfo.bankCode || ""}
                             onChange={(e) =>
-                              handleDistributorChange("bankCode", e.target.value)
+                              handleDistributorChange(
+                                "bankCode",
+                                e.target.value
+                              )
                             }
                           />
                         </Form.Group>
@@ -348,7 +378,10 @@ if (memberData.memberType === 1 || memberData.memberType === 2) {
                             type="text"
                             value={memberInfo.distributorInfo.bankName || ""}
                             onChange={(e) =>
-                              handleDistributorChange("bankName", e.target.value)
+                              handleDistributorChange(
+                                "bankName",
+                                e.target.value
+                              )
                             }
                           />
                         </Form.Group>
